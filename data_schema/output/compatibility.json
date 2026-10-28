@@ -1,0 +1,2954 @@
+[
+  {
+    "accessory_id": "acc-apple-mkr64fe",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mkr84fe",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mkdm4fe",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mkd54fe",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mk904fe",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mk8w4fe",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mkdv4fe",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mk9g4fe",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mhvt4fe",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgf24fe",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgjy4pa",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgtl4pa",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgk44pa",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgh24fe",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mh024fe",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mgjv4pa",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mhwj4fe",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mhwc4fe",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hs832zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hs852zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hru02zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hsdx2zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mw493za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-myqt3za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mgd74vn",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mgdm4vn",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mgtu4za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mdw94za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mk8p4zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mhx94zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mk8r4zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-meql4zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-meq94zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mdgc4zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mdgh4zp",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mgpg4vn",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mdv84za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hq452zm",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hr862zm",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hrqh2ll",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrwy2ll",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgx2zm",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrww2zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgs2zm",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgg2zm",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-hrgt2zm",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-md3j4za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-apple-mw2k3za",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-apple-myy63fe",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-ma6a4fe",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-apple-hq642zm",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qa186ctegww",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qs741ctegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cs741ctegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ss741cbegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-es741cbegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fff776cuctw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fff776cubtw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fff776cudtw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fff776cuatw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf776hibaw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf776hiapw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf776hicbw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf776hidsw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf776ycbbw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf971hibaw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf971hiapw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf971hicbw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf971hidsw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fff971ycatw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fff976ycatw",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf976ycbbw",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ks948scegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf971pgakw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fpf976pgakw",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-kf971sregww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-xf971sbegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ef971cvegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cf971ctegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qf971ctegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-uf971ctegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-kf976sregww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-xf976sbegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ef976cvegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cf976ctegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qf976ctegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-uf976ctegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ff776cjegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ef776cvegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cf776ctegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qf776ctegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-uf776ctegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qa276ctegww",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-p3401xuegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-p2900bbegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ra376cbegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qa376ctegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-oa376tbegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-pa376cbegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ra576cbegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qa576ctegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-oa576tbegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-pa576clegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ss948cvegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-es948coegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-rs948cbegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cs948ctegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-us948ctegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qs948ctegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ej-ps948bvegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ss947cvegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-es947cvegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-rs947cbegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cs947ctegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-us947ctegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qs947ctegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-ss942cvegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-es942cvegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-rs942cbegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-cs942ctegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-us942ctegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ef-qs942ctegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fps948pgbnw",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fps948pgajw",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fps947pgbnw",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fps947pgajw",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fps942pgbnw",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-fps942pgajw",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hialw",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026pgabw",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-gp-tou026hibjw",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t4511xwegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-eb-u2500xjegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-16"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-17"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-17e"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-18-pro"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-18-pro-max"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-air"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "apple-iphone-duo"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a07-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a07s"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a08"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a18"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a27-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a37-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-a57-5g"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-s25"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-s25-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-s26"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-s26-fe"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-s26-plus"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-s26-ultra"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-z-flip8"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-z-fold8"
+  },
+  {
+    "accessory_id": "acc-samsung-ep-t6010nbegww",
+    "phone_id": "samsung-galaxy-z-fold8-ultra"
+  }
+]

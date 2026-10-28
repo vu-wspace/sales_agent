@@ -1,0 +1,3018 @@
+[
+  {
+    "variant_id": "MYE93VN/A",
+    "product_id": "apple-iphone-16",
+    "color": "Trắng",
+    "storage": "128GB",
+    "price": 24999000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MYE73VN/A",
+    "product_id": "apple-iphone-16",
+    "color": "Đen",
+    "storage": "128GB",
+    "price": 24999000,
+    "stock": 37
+  },
+  {
+    "variant_id": "MYEA3VN/A",
+    "product_id": "apple-iphone-16",
+    "color": "Hồng",
+    "storage": "128GB",
+    "price": 24999000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MYED3VN/A",
+    "product_id": "apple-iphone-16",
+    "color": "Xanh Mòng Két",
+    "storage": "128GB",
+    "price": 24999000,
+    "stock": 43
+  },
+  {
+    "variant_id": "MYEC3VN/A",
+    "product_id": "apple-iphone-16",
+    "color": "Xanh Lưu Ly",
+    "storage": "128GB",
+    "price": 24999000,
+    "stock": 26
+  },
+  {
+    "variant_id": "MG6L4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Xanh Lam Khói",
+    "storage": "256GB",
+    "price": 28999000,
+    "stock": 20
+  },
+  {
+    "variant_id": "MG6M4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Tím Oải Hương",
+    "storage": "256GB",
+    "price": 28999000,
+    "stock": 44
+  },
+  {
+    "variant_id": "MG6J4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Đen",
+    "storage": "256GB",
+    "price": 28999000,
+    "stock": 36
+  },
+  {
+    "variant_id": "MG6K4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Trắng",
+    "storage": "256GB",
+    "price": 28999000,
+    "stock": 23
+  },
+  {
+    "variant_id": "MG6Q4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Trắng",
+    "storage": "512GB",
+    "price": 35499000,
+    "stock": 32
+  },
+  {
+    "variant_id": "MG6P4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Đen",
+    "storage": "512GB",
+    "price": 35499000,
+    "stock": 45
+  },
+  {
+    "variant_id": "MG6N4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Xanh Lá Xô Thơm",
+    "storage": "256GB",
+    "price": 28999000,
+    "stock": 35
+  },
+  {
+    "variant_id": "MG6U4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Tím Oải Hương",
+    "storage": "512GB",
+    "price": 35499000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MG6V4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Xanh Lá Xô Thơm",
+    "storage": "512GB",
+    "price": 35499000,
+    "stock": 39
+  },
+  {
+    "variant_id": "MG6T4ZP/A",
+    "product_id": "apple-iphone-17",
+    "color": "Xanh Lam Khói",
+    "storage": "512GB",
+    "price": 35499000,
+    "stock": 32
+  },
+  {
+    "variant_id": "MHRY4ZP/A",
+    "product_id": "apple-iphone-17e",
+    "color": "Đen",
+    "storage": "512GB",
+    "price": 28499000,
+    "stock": 36
+  },
+  {
+    "variant_id": "MHRW4ZP/A",
+    "product_id": "apple-iphone-17e",
+    "color": "Trắng",
+    "storage": "256GB",
+    "price": 21999000,
+    "stock": 19
+  },
+  {
+    "variant_id": "MHRX4ZP/A",
+    "product_id": "apple-iphone-17e",
+    "color": "Hồng Phai",
+    "storage": "256GB",
+    "price": 21999000,
+    "stock": 36
+  },
+  {
+    "variant_id": "MHU34ZP/A",
+    "product_id": "apple-iphone-17e",
+    "color": "Hồng Phai",
+    "storage": "512GB",
+    "price": 28499000,
+    "stock": 31
+  },
+  {
+    "variant_id": "MHRV4ZP/A",
+    "product_id": "apple-iphone-17e",
+    "color": "Đen",
+    "storage": "256GB",
+    "price": 21999000,
+    "stock": 27
+  },
+  {
+    "variant_id": "MHU04ZP/A",
+    "product_id": "apple-iphone-17e",
+    "color": "Trắng",
+    "storage": "512GB",
+    "price": 28499000,
+    "stock": 17
+  },
+  {
+    "variant_id": "MJY04X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đỏ Burgundy",
+    "storage": "1TB",
+    "price": 61499000,
+    "stock": 50
+  },
+  {
+    "variant_id": "MJY14X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Băng Thanh",
+    "storage": "1TB",
+    "price": 61499000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MJXP4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Bạc",
+    "storage": "256GB",
+    "price": 41999000,
+    "stock": 25
+  },
+  {
+    "variant_id": "MJXN4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đen",
+    "storage": "256GB",
+    "price": 41999000,
+    "stock": 19
+  },
+  {
+    "variant_id": "MJY54X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Băng Thanh",
+    "storage": "2TB",
+    "price": 80999000,
+    "stock": 27
+  },
+  {
+    "variant_id": "MJXT4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đen",
+    "storage": "512GB",
+    "price": 48499000,
+    "stock": 28
+  },
+  {
+    "variant_id": "MJY44X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đỏ Burgundy",
+    "storage": "2TB",
+    "price": 80999000,
+    "stock": 31
+  },
+  {
+    "variant_id": "MJXR4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Băng Thanh",
+    "storage": "256GB",
+    "price": 41999000,
+    "stock": 20
+  },
+  {
+    "variant_id": "MJY34X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Bạc",
+    "storage": "2TB",
+    "price": 80999000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MJXQ4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đỏ Burgundy",
+    "storage": "256GB",
+    "price": 41999000,
+    "stock": 16
+  },
+  {
+    "variant_id": "MJY24X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đen",
+    "storage": "2TB",
+    "price": 80999000,
+    "stock": 28
+  },
+  {
+    "variant_id": "MJXX4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đen",
+    "storage": "1TB",
+    "price": 61499000,
+    "stock": 13
+  },
+  {
+    "variant_id": "MJXW4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Băng Thanh",
+    "storage": "512GB",
+    "price": 48499000,
+    "stock": 46
+  },
+  {
+    "variant_id": "MJXV4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Đỏ Burgundy",
+    "storage": "512GB",
+    "price": 48499000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MJXU4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Bạc",
+    "storage": "512GB",
+    "price": 48499000,
+    "stock": 16
+  },
+  {
+    "variant_id": "MJXY4X/A",
+    "product_id": "apple-iphone-18-pro-max",
+    "color": "Bạc",
+    "storage": "1TB",
+    "price": 61499000,
+    "stock": 33
+  },
+  {
+    "variant_id": "MJRY4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đen",
+    "storage": "1TB",
+    "price": 58499000,
+    "stock": 10
+  },
+  {
+    "variant_id": "MJT24X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Băng Thanh",
+    "storage": "1TB",
+    "price": 58499000,
+    "stock": 17
+  },
+  {
+    "variant_id": "MJRP4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đen",
+    "storage": "256GB",
+    "price": 38999000,
+    "stock": 46
+  },
+  {
+    "variant_id": "MJT34X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đen",
+    "storage": "2TB",
+    "price": 77999000,
+    "stock": 44
+  },
+  {
+    "variant_id": "MJT04X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Bạc",
+    "storage": "1TB",
+    "price": 58499000,
+    "stock": 41
+  },
+  {
+    "variant_id": "MJT14X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đỏ Burgundy",
+    "storage": "1TB",
+    "price": 58499000,
+    "stock": 29
+  },
+  {
+    "variant_id": "MJT64X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Băng Thanh",
+    "storage": "2TB",
+    "price": 77999000,
+    "stock": 25
+  },
+  {
+    "variant_id": "MJRT4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Băng Thanh",
+    "storage": "256GB",
+    "price": 38999000,
+    "stock": 19
+  },
+  {
+    "variant_id": "MJRQ4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Bạc",
+    "storage": "256GB",
+    "price": 38999000,
+    "stock": 20
+  },
+  {
+    "variant_id": "MJT44X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Bạc",
+    "storage": "2TB",
+    "price": 77999000,
+    "stock": 49
+  },
+  {
+    "variant_id": "MJRR4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đỏ Burgundy",
+    "storage": "256GB",
+    "price": 38999000,
+    "stock": 36
+  },
+  {
+    "variant_id": "MJT54X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đỏ Burgundy",
+    "storage": "2TB",
+    "price": 77999000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MJRW4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đỏ Burgundy",
+    "storage": "512GB",
+    "price": 45499000,
+    "stock": 45
+  },
+  {
+    "variant_id": "MJRX4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Băng Thanh",
+    "storage": "512GB",
+    "price": 45499000,
+    "stock": 28
+  },
+  {
+    "variant_id": "MJRU4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Đen",
+    "storage": "512GB",
+    "price": 45499000,
+    "stock": 37
+  },
+  {
+    "variant_id": "MJRV4X/A",
+    "product_id": "apple-iphone-18-pro",
+    "color": "Bạc",
+    "storage": "512GB",
+    "price": 45499000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MG2U4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Vàng Nhạt",
+    "storage": "512GB",
+    "price": 41499000,
+    "stock": 50
+  },
+  {
+    "variant_id": "MG2V4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Xanh Da Trời",
+    "storage": "512GB",
+    "price": 41499000,
+    "stock": 9
+  },
+  {
+    "variant_id": "MG2T4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Trắng Mây",
+    "storage": "512GB",
+    "price": 41499000,
+    "stock": 20
+  },
+  {
+    "variant_id": "MG2Y4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Vàng Nhạt",
+    "storage": "1TB",
+    "price": 54499000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MG2W4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Đen Không Gian",
+    "storage": "1TB",
+    "price": 54499000,
+    "stock": 26
+  },
+  {
+    "variant_id": "MG2X4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Trắng Mây",
+    "storage": "1TB",
+    "price": 54499000,
+    "stock": 31
+  },
+  {
+    "variant_id": "MG2M4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Trắng Mây",
+    "storage": "256GB",
+    "price": 34999000,
+    "stock": 11
+  },
+  {
+    "variant_id": "MG2L4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Đen Không Gian",
+    "storage": "256GB",
+    "price": 34999000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MG2N4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Vàng Nhạt",
+    "storage": "256GB",
+    "price": 34999000,
+    "stock": 48
+  },
+  {
+    "variant_id": "MG2Q4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Đen Không Gian",
+    "storage": "512GB",
+    "price": 41499000,
+    "stock": 38
+  },
+  {
+    "variant_id": "MG304ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Xanh Da Trời",
+    "storage": "1TB",
+    "price": 54499000,
+    "stock": 21
+  },
+  {
+    "variant_id": "MG2P4ZP/A",
+    "product_id": "apple-iphone-air",
+    "color": "Xanh Da Trời",
+    "storage": "256GB",
+    "price": 34999000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MK2H4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trắng Ánh Sao",
+    "storage": "1TB",
+    "price": 84499000,
+    "stock": 18
+  },
+  {
+    "variant_id": "MK2J4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trời Đêm",
+    "storage": "1TB",
+    "price": 84499000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MK2F4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trắng Ánh Sao",
+    "storage": "512GB",
+    "price": 71499000,
+    "stock": 8
+  },
+  {
+    "variant_id": "MK2G4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trời Đêm",
+    "storage": "512GB",
+    "price": 71499000,
+    "stock": 6
+  },
+  {
+    "variant_id": "MK2D4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trắng Ánh Sao",
+    "storage": "256GB",
+    "price": 64999000,
+    "stock": 45
+  },
+  {
+    "variant_id": "MK2E4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trời Đêm",
+    "storage": "256GB",
+    "price": 64999000,
+    "stock": 24
+  },
+  {
+    "variant_id": "MK2K4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trắng Ánh Sao",
+    "storage": "2TB",
+    "price": 103999000,
+    "stock": 33
+  },
+  {
+    "variant_id": "MK2L4X/A",
+    "product_id": "apple-iphone-duo",
+    "color": "Trời Đêm",
+    "storage": "2TB",
+    "price": 103999000,
+    "stock": 43
+  },
+  {
+    "variant_id": "SM-A076BZKCXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Đen bóng đêm",
+    "storage": "128GB - RAM 6GB",
+    "price": 5690000,
+    "stock": 33
+  },
+  {
+    "variant_id": "SM-A076BZKBXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Đen bóng đêm",
+    "storage": "128GB - RAM 4GB",
+    "price": 5690000,
+    "stock": 7
+  },
+  {
+    "variant_id": "SM-A076BLVCXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Tím ngân hà",
+    "storage": "128GB - RAM 6GB",
+    "price": 5690000,
+    "stock": 49
+  },
+  {
+    "variant_id": "SM-A076BZKAXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Đen bóng đêm",
+    "storage": "64GB",
+    "price": 5690000,
+    "stock": 36
+  },
+  {
+    "variant_id": "SM-A076BLVBXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Tím ngân hà",
+    "storage": "128GB - RAM 4GB",
+    "price": 5690000,
+    "stock": 44
+  },
+  {
+    "variant_id": "SM-A076BLGCXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Xanh ngọc bích",
+    "storage": "128GB - RAM 6GB",
+    "price": 5690000,
+    "stock": 39
+  },
+  {
+    "variant_id": "SM-A076BLGBXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Xanh ngọc bích",
+    "storage": "128GB - RAM 4GB",
+    "price": 5690000,
+    "stock": 45
+  },
+  {
+    "variant_id": "SM-A076BLGAXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Xanh ngọc bích",
+    "storage": "64GB",
+    "price": 5690000,
+    "stock": 32
+  },
+  {
+    "variant_id": "SM-A076BLVAXXV",
+    "product_id": "samsung-galaxy-a07-5g",
+    "color": "Tím ngân hà",
+    "storage": "64GB",
+    "price": 5690000,
+    "stock": 6
+  },
+  {
+    "variant_id": "SM-A077FZGDXXV",
+    "product_id": "samsung-galaxy-a07s",
+    "color": "Xanh ngọc bích",
+    "storage": "64GB",
+    "price": 4190000,
+    "stock": 32
+  },
+  {
+    "variant_id": "SM-A077FZKGXXV",
+    "product_id": "samsung-galaxy-a07s",
+    "color": "Đen bóng đêm",
+    "storage": "128GB",
+    "price": 4190000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-A077FLVGXXV",
+    "product_id": "samsung-galaxy-a07s",
+    "color": "Tím ngân hà",
+    "storage": "128GB",
+    "price": 4190000,
+    "stock": 25
+  },
+  {
+    "variant_id": "SM-A077FLVDXXV",
+    "product_id": "samsung-galaxy-a07s",
+    "color": "Tím ngân hà",
+    "storage": "64GB",
+    "price": 4190000,
+    "stock": 41
+  },
+  {
+    "variant_id": "SM-A077FZGGXXV",
+    "product_id": "samsung-galaxy-a07s",
+    "color": "Xanh ngọc bích",
+    "storage": "128GB",
+    "price": 4190000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-A077FZKDXXV",
+    "product_id": "samsung-galaxy-a07s",
+    "color": "Đen bóng đêm",
+    "storage": "64GB",
+    "price": 4190000,
+    "stock": 21
+  },
+  {
+    "variant_id": "SM-A085FZSDXXV",
+    "product_id": "samsung-galaxy-a08",
+    "color": "Bạc Ánh Kim",
+    "storage": "64GB",
+    "price": 5590000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-A085FZGGXXV",
+    "product_id": "samsung-galaxy-a08",
+    "color": "Xanh Lục Bảo",
+    "storage": "128GB",
+    "price": 5590000,
+    "stock": 19
+  },
+  {
+    "variant_id": "SM-A085FZSGXXV",
+    "product_id": "samsung-galaxy-a08",
+    "color": "Bạc Ánh Kim",
+    "storage": "128GB",
+    "price": 5590000,
+    "stock": 10
+  },
+  {
+    "variant_id": "SM-A085FDBGXXV",
+    "product_id": "samsung-galaxy-a08",
+    "color": "Xanh Đại Dương",
+    "storage": "128GB",
+    "price": 5590000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-A085FDBDXXV",
+    "product_id": "samsung-galaxy-a08",
+    "color": "Xanh Đại Dương",
+    "storage": "64GB",
+    "price": 5590000,
+    "stock": 26
+  },
+  {
+    "variant_id": "SM-A085FZGDXXV",
+    "product_id": "samsung-galaxy-a08",
+    "color": "Xanh Lục Bảo",
+    "storage": "64GB",
+    "price": 5590000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-A185GZKMXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Đen Titan",
+    "storage": "128GB - RAM 8GB",
+    "price": 6590000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-A185GLBLXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Xanh Mây",
+    "storage": "128GB - RAM 6GB",
+    "price": 6590000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-A185GLBMXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Xanh Mây",
+    "storage": "128GB - RAM 8GB",
+    "price": 6590000,
+    "stock": 41
+  },
+  {
+    "variant_id": "SM-A185GZKKXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Đen Titan",
+    "storage": "128GB - RAM 4GB",
+    "price": 6590000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-A185GZKLXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Đen Titan",
+    "storage": "128GB - RAM 6GB",
+    "price": 6590000,
+    "stock": 34
+  },
+  {
+    "variant_id": "SM-A185GLBKXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Xanh Mây",
+    "storage": "128GB - RAM 4GB",
+    "price": 6590000,
+    "stock": 8
+  },
+  {
+    "variant_id": "SM-A185GZSLXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Xám Bạc",
+    "storage": "128GB - RAM 6GB",
+    "price": 6590000,
+    "stock": 7
+  },
+  {
+    "variant_id": "SM-A185GZSKXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Xám Bạc",
+    "storage": "128GB - RAM 4GB",
+    "price": 6590000,
+    "stock": 30
+  },
+  {
+    "variant_id": "SM-A185GZSMXXV",
+    "product_id": "samsung-galaxy-a18",
+    "color": "Xám Bạc",
+    "storage": "128GB - RAM 8GB",
+    "price": 6590000,
+    "stock": 26
+  },
+  {
+    "variant_id": "SM-A276BZBDXXV",
+    "product_id": "samsung-galaxy-a27-5g",
+    "color": "Xanh thẳm",
+    "storage": "128GB - RAM 6GB",
+    "price": 8790000,
+    "stock": 15
+  },
+  {
+    "variant_id": "SM-A276BLIGXXV",
+    "product_id": "samsung-galaxy-a27-5g",
+    "color": "Hồng phấn",
+    "storage": "128GB - RAM 8GB",
+    "price": 8790000,
+    "stock": 7
+  },
+  {
+    "variant_id": "SM-A276BZKGXXV",
+    "product_id": "samsung-galaxy-a27-5g",
+    "color": "Đen huyền",
+    "storage": "128GB - RAM 8GB",
+    "price": 8790000,
+    "stock": 50
+  },
+  {
+    "variant_id": "SM-A276BLIDXXV",
+    "product_id": "samsung-galaxy-a27-5g",
+    "color": "Hồng phấn",
+    "storage": "128GB - RAM 6GB",
+    "price": 8790000,
+    "stock": 49
+  },
+  {
+    "variant_id": "SM-A276BZKDXXV",
+    "product_id": "samsung-galaxy-a27-5g",
+    "color": "Đen huyền",
+    "storage": "128GB - RAM 6GB",
+    "price": 8790000,
+    "stock": 7
+  },
+  {
+    "variant_id": "SM-A276BZBGXXV",
+    "product_id": "samsung-galaxy-a27-5g",
+    "color": "Xanh thẳm",
+    "storage": "128GB - RAM 8GB",
+    "price": 8790000,
+    "stock": 19
+  },
+  {
+    "variant_id": "SM-A376BZAQXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Xám Than",
+    "storage": "128GB - RAM 6GB",
+    "price": 13390000,
+    "stock": 8
+  },
+  {
+    "variant_id": "SM-A376BZWQXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Trắng Thạch Anh",
+    "storage": "128GB - RAM 6GB",
+    "price": 13390000,
+    "stock": 15
+  },
+  {
+    "variant_id": "SM-A376BDGSXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Xanh Lục Bảo",
+    "storage": "128GB - RAM 8GB",
+    "price": 13390000,
+    "stock": 10
+  },
+  {
+    "variant_id": "SM-A376BLVQXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Tím Ngọc Thạch",
+    "storage": "128GB - RAM 6GB",
+    "price": 13390000,
+    "stock": 11
+  },
+  {
+    "variant_id": "SM-A376BDGQXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Xanh Lục Bảo",
+    "storage": "128GB - RAM 6GB",
+    "price": 13390000,
+    "stock": 38
+  },
+  {
+    "variant_id": "SM-A376BZASXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Xám Than",
+    "storage": "128GB - RAM 8GB",
+    "price": 13390000,
+    "stock": 46
+  },
+  {
+    "variant_id": "SM-A376BDGTXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Xanh Lục Bảo",
+    "storage": "256GB",
+    "price": 13390000,
+    "stock": 20
+  },
+  {
+    "variant_id": "SM-A376BLVTXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Tím Ngọc Thạch",
+    "storage": "256GB",
+    "price": 13390000,
+    "stock": 37
+  },
+  {
+    "variant_id": "SM-A376BZATXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Xám Than",
+    "storage": "256GB",
+    "price": 13390000,
+    "stock": 44
+  },
+  {
+    "variant_id": "SM-A376BLVSXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Tím Ngọc Thạch",
+    "storage": "128GB - RAM 8GB",
+    "price": 13390000,
+    "stock": 41
+  },
+  {
+    "variant_id": "SM-A376BZWSXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Trắng Thạch Anh",
+    "storage": "128GB - RAM 8GB",
+    "price": 13390000,
+    "stock": 29
+  },
+  {
+    "variant_id": "SM-A376BZWTXXV",
+    "product_id": "samsung-galaxy-a37-5g",
+    "color": "Trắng Thạch Anh",
+    "storage": "256GB",
+    "price": 13390000,
+    "stock": 31
+  },
+  {
+    "variant_id": "SM-A576BZAQXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xám Khói",
+    "storage": "128GB",
+    "price": 13490280,
+    "stock": 20
+  },
+  {
+    "variant_id": "SM-A576BZASXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xám Khói",
+    "storage": "256GB - RAM 8GB",
+    "price": 16490280,
+    "stock": 17
+  },
+  {
+    "variant_id": "SM-A576BZVQXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Tím Ngọc",
+    "storage": "128GB",
+    "price": 13490280,
+    "stock": 31
+  },
+  {
+    "variant_id": "SM-A576BZATXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xám Khói",
+    "storage": "256GB - RAM 12GB",
+    "price": 16490280,
+    "stock": 29
+  },
+  {
+    "variant_id": "SM-A576BLBSXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xanh Băng",
+    "storage": "256GB - RAM 8GB",
+    "price": 16490280,
+    "stock": 37
+  },
+  {
+    "variant_id": "SM-A576BZVTXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Tím Ngọc",
+    "storage": "256GB - RAM 12GB",
+    "price": 16490280,
+    "stock": 31
+  },
+  {
+    "variant_id": "SM-A576BZVSXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Tím Ngọc",
+    "storage": "256GB - RAM 8GB",
+    "price": 16490280,
+    "stock": 14
+  },
+  {
+    "variant_id": "SM-A576BLBTXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xanh Băng",
+    "storage": "256GB - RAM 12GB",
+    "price": 16490280,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-A576BDBQXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xanh Đêm",
+    "storage": "128GB",
+    "price": 13490280,
+    "stock": 15
+  },
+  {
+    "variant_id": "SM-A576BDBTXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xanh Đêm",
+    "storage": "256GB - RAM 12GB",
+    "price": 16490280,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-A576BDBSXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xanh Đêm",
+    "storage": "256GB - RAM 8GB",
+    "price": 16490280,
+    "stock": 14
+  },
+  {
+    "variant_id": "SM-A576BLBQXXV",
+    "product_id": "samsung-galaxy-a57-5g",
+    "color": "Xanh Băng",
+    "storage": "128GB",
+    "price": 12490000,
+    "stock": 6
+  },
+  {
+    "variant_id": "SM-S741BLGCXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xanh Pistachio",
+    "storage": "256GB",
+    "price": 21990000,
+    "stock": 46
+  },
+  {
+    "variant_id": "SM-S741BLGBXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xanh Pistachio",
+    "storage": "128GB",
+    "price": 18990000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-S741BZKHXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xám Graphite",
+    "storage": "512GB",
+    "price": 25990000,
+    "stock": 35
+  },
+  {
+    "variant_id": "SM-S741BZKCXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xám Graphite",
+    "storage": "256GB",
+    "price": 21990000,
+    "stock": 49
+  },
+  {
+    "variant_id": "SM-S741BZKBXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xám Graphite",
+    "storage": "128GB",
+    "price": 18990000,
+    "stock": 27
+  },
+  {
+    "variant_id": "SM-S741BZVBXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xanh Blueberry",
+    "storage": "128GB",
+    "price": 18990000,
+    "stock": 13
+  },
+  {
+    "variant_id": "SM-S741BZVCXXV",
+    "product_id": "samsung-galaxy-s26-fe",
+    "color": "Xanh Blueberry",
+    "storage": "256GB",
+    "price": 21990000,
+    "stock": 33
+  },
+  {
+    "variant_id": "SM-S938BZBBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xanh Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 42
+  },
+  {
+    "variant_id": "SM-S938BZTBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xám Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 22
+  },
+  {
+    "variant_id": "SM-S938BZKBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Đen Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 36
+  },
+  {
+    "variant_id": "SM-S938BZSBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Bạc Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 19
+  },
+  {
+    "variant_id": "SM-S938BAKBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Đen Tuyền Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 15
+  },
+  {
+    "variant_id": "SM-S938BZGBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xanh Ngọc Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 11
+  },
+  {
+    "variant_id": "SM-S938BZDBXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Vàng Hồng Titan",
+    "storage": "256GB",
+    "price": 33372000,
+    "stock": 19
+  },
+  {
+    "variant_id": "SM-S938BZBCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xanh Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 17
+  },
+  {
+    "variant_id": "SM-S938BZTCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xám Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-S938BZKCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Đen Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 43
+  },
+  {
+    "variant_id": "SM-S938BZSCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Bạc Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-S938BAKCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Đen Tuyền Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 36
+  },
+  {
+    "variant_id": "SM-S938BZGCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xanh Ngọc Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 34
+  },
+  {
+    "variant_id": "SM-S938BZDCXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Vàng Hồng Titan",
+    "storage": "512GB",
+    "price": 37372000,
+    "stock": 25
+  },
+  {
+    "variant_id": "SM-S938BZBQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xanh Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 49
+  },
+  {
+    "variant_id": "SM-S938BZTQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xám Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 13
+  },
+  {
+    "variant_id": "SM-S938BZKQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Đen Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 47
+  },
+  {
+    "variant_id": "SM-S938BZSQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Bạc Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-S938BAKQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Đen Tuyền Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 20
+  },
+  {
+    "variant_id": "SM-S938BZGQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Xanh Ngọc Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 16
+  },
+  {
+    "variant_id": "SM-S938BZDQXXV",
+    "product_id": "samsung-galaxy-s25-ultra",
+    "color": "Vàng Hồng Titan",
+    "storage": "1TB",
+    "price": 43372000,
+    "stock": 46
+  },
+  {
+    "variant_id": "SM-S931BDBCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Xanh Navy",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 45
+  },
+  {
+    "variant_id": "SM-S931BLBCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Xanh Icy",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-S931BZSCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Bạc Shadow",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 39
+  },
+  {
+    "variant_id": "SM-S931BLGCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Xanh Mint",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 45
+  },
+  {
+    "variant_id": "SM-S931BZKCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Đen Ocean",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 21
+  },
+  {
+    "variant_id": "SM-S931BZRCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Đỏ Coral",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-S931BZDCXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Vàng Rose",
+    "storage": "256GB",
+    "price": 22572000,
+    "stock": 13
+  },
+  {
+    "variant_id": "SM-S931BDBQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Xanh Navy",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-S931BLBQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Xanh Icy",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-S931BZSQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Bạc Shadow",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-S931BLGQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Xanh Mint",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 31
+  },
+  {
+    "variant_id": "SM-S931BZKQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Đen Ocean",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 27
+  },
+  {
+    "variant_id": "SM-S931BZRQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Đỏ Coral",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 30
+  },
+  {
+    "variant_id": "SM-S931BZDQXXV",
+    "product_id": "samsung-galaxy-s25",
+    "color": "Vàng Rose",
+    "storage": "512GB",
+    "price": 26572000,
+    "stock": 33
+  },
+  {
+    "variant_id": "SM-S948BZDBXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Vàng Hồng",
+    "storage": "256GB",
+    "price": 40990000,
+    "stock": 38
+  },
+  {
+    "variant_id": "SM-S948BZSBXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Bạc Shadow",
+    "storage": "256GB",
+    "price": 40990000,
+    "stock": 47
+  },
+  {
+    "variant_id": "SM-S948BZVBXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Tím Cobalt",
+    "storage": "256GB",
+    "price": 40990000,
+    "stock": 12
+  },
+  {
+    "variant_id": "SM-S948BZKBXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Đen Classic",
+    "storage": "256GB",
+    "price": 40990000,
+    "stock": 19
+  },
+  {
+    "variant_id": "SM-S948BLBBXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Xanh Sky Blue",
+    "storage": "256GB",
+    "price": 40990000,
+    "stock": 43
+  },
+  {
+    "variant_id": "SM-S948BZWBXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Trắng Classic",
+    "storage": "256GB",
+    "price": 40990000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-S948BZDCXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Vàng Hồng",
+    "storage": "512GB",
+    "price": 44990000,
+    "stock": 31
+  },
+  {
+    "variant_id": "SM-S948BZSCXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Bạc Shadow",
+    "storage": "512GB",
+    "price": 44990000,
+    "stock": 28
+  },
+  {
+    "variant_id": "SM-S948BZVCXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Tím Cobalt",
+    "storage": "512GB",
+    "price": 44990000,
+    "stock": 25
+  },
+  {
+    "variant_id": "SM-S948BZKCXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Đen Classic",
+    "storage": "512GB",
+    "price": 44990000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-S948BLBCXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Xanh Sky Blue",
+    "storage": "512GB",
+    "price": 44990000,
+    "stock": 8
+  },
+  {
+    "variant_id": "SM-S948BZWCXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Trắng Classic",
+    "storage": "512GB",
+    "price": 44990000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-S948BZDQXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Vàng Hồng",
+    "storage": "1TB",
+    "price": 50990000,
+    "stock": 43
+  },
+  {
+    "variant_id": "SM-S948BZSQXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Bạc Shadow",
+    "storage": "1TB",
+    "price": 50990000,
+    "stock": 44
+  },
+  {
+    "variant_id": "SM-S948BZVQXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Tím Cobalt",
+    "storage": "1TB",
+    "price": 50990000,
+    "stock": 50
+  },
+  {
+    "variant_id": "SM-S948BZKQXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Đen Classic",
+    "storage": "1TB",
+    "price": 50990000,
+    "stock": 6
+  },
+  {
+    "variant_id": "SM-S948BLBQXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Xanh Sky Blue",
+    "storage": "1TB",
+    "price": 50990000,
+    "stock": 27
+  },
+  {
+    "variant_id": "SM-S948BZWQXXV",
+    "product_id": "samsung-galaxy-s26-ultra",
+    "color": "Trắng Classic",
+    "storage": "1TB",
+    "price": 50990000,
+    "stock": 32
+  },
+  {
+    "variant_id": "SM-S947BZDBXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Vàng Hồng",
+    "storage": "256GB",
+    "price": 33990000,
+    "stock": 14
+  },
+  {
+    "variant_id": "SM-S947BZSBXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Bạc Shadow",
+    "storage": "256GB",
+    "price": 33990000,
+    "stock": 49
+  },
+  {
+    "variant_id": "SM-S947BZVBXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Tím Cobalt",
+    "storage": "256GB",
+    "price": 33990000,
+    "stock": 25
+  },
+  {
+    "variant_id": "SM-S947BZKBXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Đen Classic",
+    "storage": "256GB",
+    "price": 33990000,
+    "stock": 44
+  },
+  {
+    "variant_id": "SM-S947BLBBXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Xanh Sky Blue",
+    "storage": "256GB",
+    "price": 33990000,
+    "stock": 43
+  },
+  {
+    "variant_id": "SM-S947BZWBXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Trắng Classic",
+    "storage": "256GB",
+    "price": 33990000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-S947BZDCXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Vàng Hồng",
+    "storage": "512GB",
+    "price": 39990000,
+    "stock": 0
+  },
+  {
+    "variant_id": "SM-S947BZSCXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Bạc Shadow",
+    "storage": "512GB",
+    "price": 39990000,
+    "stock": 36
+  },
+  {
+    "variant_id": "SM-S947BZVCXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Tím Cobalt",
+    "storage": "512GB",
+    "price": 39990000,
+    "stock": 9
+  },
+  {
+    "variant_id": "SM-S947BZKCXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Đen Classic",
+    "storage": "512GB",
+    "price": 39990000,
+    "stock": 22
+  },
+  {
+    "variant_id": "SM-S947BLBCXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Xanh Sky Blue",
+    "storage": "512GB",
+    "price": 39990000,
+    "stock": 34
+  },
+  {
+    "variant_id": "SM-S947BZWCXXV",
+    "product_id": "samsung-galaxy-s26-plus",
+    "color": "Trắng Classic",
+    "storage": "512GB",
+    "price": 39990000,
+    "stock": 24
+  },
+  {
+    "variant_id": "SM-S942BZDCXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Vàng Hồng",
+    "storage": "256GB",
+    "price": 29990001,
+    "stock": 39
+  },
+  {
+    "variant_id": "SM-S942BZSCXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Bạc Shadow",
+    "storage": "256GB",
+    "price": 29990001,
+    "stock": 21
+  },
+  {
+    "variant_id": "SM-S942BZVCXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Tím Cobalt",
+    "storage": "256GB",
+    "price": 29990001,
+    "stock": 34
+  },
+  {
+    "variant_id": "SM-S942BZKCXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Đen Classic",
+    "storage": "256GB",
+    "price": 29990001,
+    "stock": 35
+  },
+  {
+    "variant_id": "SM-S942BLBCXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Xanh Sky Blue",
+    "storage": "256GB",
+    "price": 29990001,
+    "stock": 33
+  },
+  {
+    "variant_id": "SM-S942BZWCXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Trắng Classic",
+    "storage": "256GB",
+    "price": 29990001,
+    "stock": 47
+  },
+  {
+    "variant_id": "SM-S942BZDQXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Vàng Hồng",
+    "storage": "512GB",
+    "price": 35990000,
+    "stock": 35
+  },
+  {
+    "variant_id": "SM-S942BZSQXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Bạc Shadow",
+    "storage": "512GB",
+    "price": 35990000,
+    "stock": 32
+  },
+  {
+    "variant_id": "SM-S942BZVQXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Tím Cobalt",
+    "storage": "512GB",
+    "price": 35990000,
+    "stock": 30
+  },
+  {
+    "variant_id": "SM-S942BZKQXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Đen Classic",
+    "storage": "512GB",
+    "price": 35990000,
+    "stock": 19
+  },
+  {
+    "variant_id": "SM-S942BLBQXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Xanh Sky Blue",
+    "storage": "512GB",
+    "price": 35990000,
+    "stock": 48
+  },
+  {
+    "variant_id": "SM-S942BZWQXXV",
+    "product_id": "samsung-galaxy-s26",
+    "color": "Trắng Classic",
+    "storage": "512GB",
+    "price": 35990000,
+    "stock": 14
+  },
+  {
+    "variant_id": "SM-F776BLGAXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Xanh Mint",
+    "storage": "256GB",
+    "price": 31990000,
+    "stock": 12
+  },
+  {
+    "variant_id": "SM-F776BLIAXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Hồng Rosé",
+    "storage": "256GB",
+    "price": 31990000,
+    "stock": 16
+  },
+  {
+    "variant_id": "SM-F776BZKAXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Đen Graphite",
+    "storage": "256GB",
+    "price": 31990000,
+    "stock": 47
+  },
+  {
+    "variant_id": "SM-F776BZWAXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Trắng Cream",
+    "storage": "256GB",
+    "price": 31990000,
+    "stock": 43
+  },
+  {
+    "variant_id": "SM-F776BLGEXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Xanh Mint",
+    "storage": "512GB",
+    "price": 37990000,
+    "stock": 39
+  },
+  {
+    "variant_id": "SM-F776BLIEXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Hồng Rosé",
+    "storage": "512GB",
+    "price": 37990000,
+    "stock": 9
+  },
+  {
+    "variant_id": "SM-F776BZKEXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Đen Graphite",
+    "storage": "512GB",
+    "price": 37990000,
+    "stock": 23
+  },
+  {
+    "variant_id": "SM-F776BZWEXXV",
+    "product_id": "samsung-galaxy-z-flip8",
+    "color": "Trắng Cream",
+    "storage": "512GB",
+    "price": 37990000,
+    "stock": 31
+  },
+  {
+    "variant_id": "SM-F976BDGDXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Xanh Shadow",
+    "storage": "256GB",
+    "price": 52990000,
+    "stock": 30
+  },
+  {
+    "variant_id": "SM-F976BZVDXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Tím Shadow",
+    "storage": "256GB",
+    "price": 52990000,
+    "stock": 41
+  },
+  {
+    "variant_id": "SM-F976BZKDXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Đen Graphite",
+    "storage": "256GB",
+    "price": 52990000,
+    "stock": 16
+  },
+  {
+    "variant_id": "SM-F976BZWDXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Trắng Cream",
+    "storage": "256GB",
+    "price": 52990000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-F976BDGGXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Xanh Shadow",
+    "storage": "512GB",
+    "price": 58990000,
+    "stock": 39
+  },
+  {
+    "variant_id": "SM-F976BZVGXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Tím Shadow",
+    "storage": "512GB",
+    "price": 58990000,
+    "stock": 11
+  },
+  {
+    "variant_id": "SM-F976BZKGXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Đen Graphite",
+    "storage": "512GB",
+    "price": 58990000,
+    "stock": 16
+  },
+  {
+    "variant_id": "SM-F976BZWGXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Trắng Cream",
+    "storage": "512GB",
+    "price": 58990000,
+    "stock": 41
+  },
+  {
+    "variant_id": "SM-F976BZKHXXV",
+    "product_id": "samsung-galaxy-z-fold8-ultra",
+    "color": "Đen Graphite",
+    "storage": "1TB",
+    "price": 70989999,
+    "stock": 17
+  },
+  {
+    "variant_id": "SM-F971BZGDXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Xanh Pistachio",
+    "storage": "256GB",
+    "price": 46990000,
+    "stock": 40
+  },
+  {
+    "variant_id": "SM-F971BLVDXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Tím Lavender",
+    "storage": "256GB",
+    "price": 46990000,
+    "stock": 12
+  },
+  {
+    "variant_id": "SM-F971BZKDXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Đen Graphite",
+    "storage": "256GB",
+    "price": 46990000,
+    "stock": 14
+  },
+  {
+    "variant_id": "SM-F971BZWDXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Trắng Cream",
+    "storage": "256GB",
+    "price": 46990000,
+    "stock": 11
+  },
+  {
+    "variant_id": "SM-F971BZGGXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Xanh Pistachio",
+    "storage": "512GB",
+    "price": 52990000,
+    "stock": 30
+  },
+  {
+    "variant_id": "SM-F971BLVGXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Tím Lavender",
+    "storage": "512GB",
+    "price": 52990000,
+    "stock": 13
+  },
+  {
+    "variant_id": "SM-F971BZKGXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Đen Graphite",
+    "storage": "512GB",
+    "price": 52990000,
+    "stock": 39
+  },
+  {
+    "variant_id": "SM-F971BZWGXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Trắng Cream",
+    "storage": "512GB",
+    "price": 52990000,
+    "stock": 50
+  },
+  {
+    "variant_id": "SM-F971BZKHXXV",
+    "product_id": "samsung-galaxy-z-fold8",
+    "color": "Đen Graphite",
+    "storage": "1TB",
+    "price": 64990000,
+    "stock": 9
+  },
+  {
+    "variant_id": "MKR64FE/A",
+    "product_id": "acc-apple-mkr64fe",
+    "color": "Nâu Xám",
+    "storage": null,
+    "price": 3799000,
+    "stock": 36
+  },
+  {
+    "variant_id": "MKR84FE/A",
+    "product_id": "acc-apple-mkr84fe",
+    "color": "Xanh Navy",
+    "storage": null,
+    "price": 2299000,
+    "stock": 21
+  },
+  {
+    "variant_id": "MKDM4FE/A",
+    "product_id": "acc-apple-mkdm4fe",
+    "color": null,
+    "storage": null,
+    "price": 1649000,
+    "stock": 8
+  },
+  {
+    "variant_id": "MKD54FE/A",
+    "product_id": "acc-apple-mkd54fe",
+    "color": null,
+    "storage": null,
+    "price": 1649000,
+    "stock": 11
+  },
+  {
+    "variant_id": "MK904FE/A",
+    "product_id": "acc-apple-mk904fe",
+    "color": "Đỏ Tía",
+    "storage": null,
+    "price": 1499000,
+    "stock": 24
+  },
+  {
+    "variant_id": "MK8W4FE/A",
+    "product_id": "acc-apple-mk8w4fe",
+    "color": "Xanh Biếc",
+    "storage": null,
+    "price": 1499000,
+    "stock": 32
+  },
+  {
+    "variant_id": "MKDV4FE/A",
+    "product_id": "acc-apple-mkdv4fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 17
+  },
+  {
+    "variant_id": "MK9G4FE/A",
+    "product_id": "acc-apple-mk9g4fe",
+    "color": null,
+    "storage": null,
+    "price": 1649000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MHVT4FE/A",
+    "product_id": "acc-apple-mhvt4fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 46
+  },
+  {
+    "variant_id": "MGF24FE/A",
+    "product_id": "acc-apple-mgf24fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 12
+  },
+  {
+    "variant_id": "MGJY4PA/A",
+    "product_id": "acc-apple-mgjy4pa",
+    "color": null,
+    "storage": null,
+    "price": 2199000,
+    "stock": 36
+  },
+  {
+    "variant_id": "MGTL4PA/A",
+    "product_id": "acc-apple-mgtl4pa",
+    "color": "Xám Kem",
+    "storage": null,
+    "price": 1668000,
+    "stock": 28
+  },
+  {
+    "variant_id": "MGK44PA/A",
+    "product_id": "acc-apple-mgk44pa",
+    "color": null,
+    "storage": null,
+    "price": 1199000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MGH24FE/A",
+    "product_id": "acc-apple-mgh24fe",
+    "color": "Sương Chiều",
+    "storage": null,
+    "price": 1499000,
+    "stock": 19
+  },
+  {
+    "variant_id": "MH024FE/A",
+    "product_id": "acc-apple-mh024fe",
+    "color": "Xanh Dương Nhạt",
+    "storage": null,
+    "price": 1177000,
+    "stock": 6
+  },
+  {
+    "variant_id": "MGJV4PA/A",
+    "product_id": "acc-apple-mgjv4pa",
+    "color": null,
+    "storage": null,
+    "price": 1199000,
+    "stock": 14
+  },
+  {
+    "variant_id": "MHWJ4FE/A",
+    "product_id": "acc-apple-mhwj4fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 26
+  },
+  {
+    "variant_id": "MHWC4FE/A",
+    "product_id": "acc-apple-mhwc4fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 31
+  },
+  {
+    "variant_id": "HS832ZM/A",
+    "product_id": "acc-apple-hs832zm",
+    "color": null,
+    "storage": null,
+    "price": 1299000,
+    "stock": 8
+  },
+  {
+    "variant_id": "HS852ZM/A",
+    "product_id": "acc-apple-hs852zm",
+    "color": null,
+    "storage": null,
+    "price": 1299000,
+    "stock": 17
+  },
+  {
+    "variant_id": "HRU02ZM/A",
+    "product_id": "acc-apple-hru02zm",
+    "color": null,
+    "storage": null,
+    "price": 1177000,
+    "stock": 35
+  },
+  {
+    "variant_id": "HSDX2ZM/A",
+    "product_id": "acc-apple-hsdx2zm",
+    "color": null,
+    "storage": null,
+    "price": 1299000,
+    "stock": 45
+  },
+  {
+    "variant_id": "MW493ZA/A",
+    "product_id": "acc-apple-mw493za",
+    "color": null,
+    "storage": null,
+    "price": 539000,
+    "stock": 35
+  },
+  {
+    "variant_id": "MYQT3ZA/A",
+    "product_id": "acc-apple-myqt3za",
+    "color": null,
+    "storage": null,
+    "price": 804000,
+    "stock": 30
+  },
+  {
+    "variant_id": "MGD74VN/A",
+    "product_id": "acc-apple-mgd74vn",
+    "color": null,
+    "storage": null,
+    "price": 1177000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MGDM4VN/A",
+    "product_id": "acc-apple-mgdm4vn",
+    "color": null,
+    "storage": null,
+    "price": 1471000,
+    "stock": 15
+  },
+  {
+    "variant_id": "MGTU4ZA/A",
+    "product_id": "acc-apple-mgtu4za",
+    "color": null,
+    "storage": null,
+    "price": 999000,
+    "stock": 13
+  },
+  {
+    "variant_id": "MDW94ZA/A",
+    "product_id": "acc-apple-mdw94za",
+    "color": null,
+    "storage": null,
+    "price": 1864000,
+    "stock": 31
+  },
+  {
+    "variant_id": "MK8P4ZP/A",
+    "product_id": "acc-apple-mk8p4zp",
+    "color": null,
+    "storage": null,
+    "price": 519000,
+    "stock": 23
+  },
+  {
+    "variant_id": "MHX94ZP/A",
+    "product_id": "acc-apple-mhx94zp",
+    "color": null,
+    "storage": null,
+    "price": 804000,
+    "stock": 47
+  },
+  {
+    "variant_id": "MK8R4ZP/A",
+    "product_id": "acc-apple-mk8r4zp",
+    "color": null,
+    "storage": null,
+    "price": 519000,
+    "stock": 33
+  },
+  {
+    "variant_id": "MEQL4ZP/A",
+    "product_id": "acc-apple-meql4zp",
+    "color": null,
+    "storage": null,
+    "price": 519000,
+    "stock": 39
+  },
+  {
+    "variant_id": "MEQ94ZP/A",
+    "product_id": "acc-apple-meq94zp",
+    "color": null,
+    "storage": null,
+    "price": 519000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MDGC4ZP/A",
+    "product_id": "acc-apple-mdgc4zp",
+    "color": null,
+    "storage": null,
+    "price": 980000,
+    "stock": 5
+  },
+  {
+    "variant_id": "MDGH4ZP/A",
+    "product_id": "acc-apple-mdgh4zp",
+    "color": null,
+    "storage": null,
+    "price": 980000,
+    "stock": 17
+  },
+  {
+    "variant_id": "MGPG4VN/A",
+    "product_id": "acc-apple-mgpg4vn",
+    "color": null,
+    "storage": null,
+    "price": 2699000,
+    "stock": 37
+  },
+  {
+    "variant_id": "MDV84ZA/A",
+    "product_id": "acc-apple-mdv84za",
+    "color": null,
+    "storage": null,
+    "price": 1177000,
+    "stock": 8
+  },
+  {
+    "variant_id": "HQ452ZM/A",
+    "product_id": "acc-apple-hq452zm",
+    "color": null,
+    "storage": null,
+    "price": 804000,
+    "stock": 33
+  },
+  {
+    "variant_id": "HR862ZM/B",
+    "product_id": "acc-apple-hr862zm",
+    "color": null,
+    "storage": null,
+    "price": 1471000,
+    "stock": 13
+  },
+  {
+    "variant_id": "HRQH2LL/A",
+    "product_id": "acc-apple-hrqh2ll",
+    "color": null,
+    "storage": null,
+    "price": 2748000,
+    "stock": 15
+  },
+  {
+    "variant_id": "HRWY2LL/A",
+    "product_id": "acc-apple-hrwy2ll",
+    "color": null,
+    "storage": null,
+    "price": 1373000,
+    "stock": 13
+  },
+  {
+    "variant_id": "HRGX2ZM/A",
+    "product_id": "acc-apple-hrgx2zm",
+    "color": "Đen",
+    "storage": null,
+    "price": 882000,
+    "stock": 5
+  },
+  {
+    "variant_id": "HRWW2ZM/A",
+    "product_id": "acc-apple-hrww2zm",
+    "color": null,
+    "storage": null,
+    "price": 3729000,
+    "stock": 6
+  },
+  {
+    "variant_id": "HRGS2ZM/A",
+    "product_id": "acc-apple-hrgs2zm",
+    "color": "Đen",
+    "storage": null,
+    "price": 588000,
+    "stock": 39
+  },
+  {
+    "variant_id": "HRGG2ZM/A",
+    "product_id": "acc-apple-hrgg2zm",
+    "color": null,
+    "storage": null,
+    "price": 951000,
+    "stock": 16
+  },
+  {
+    "variant_id": "HRGT2ZM/A",
+    "product_id": "acc-apple-hrgt2zm",
+    "color": "Đen",
+    "storage": null,
+    "price": 588000,
+    "stock": 34
+  },
+  {
+    "variant_id": "MD3J4ZA/A",
+    "product_id": "acc-apple-md3j4za",
+    "color": null,
+    "storage": null,
+    "price": 539000,
+    "stock": 40
+  },
+  {
+    "variant_id": "MW2K3ZA/A",
+    "product_id": "acc-apple-mw2k3za",
+    "color": null,
+    "storage": null,
+    "price": 1471000,
+    "stock": 11
+  },
+  {
+    "variant_id": "MYY63FE/A",
+    "product_id": "acc-apple-myy63fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 30
+  },
+  {
+    "variant_id": "MA6A4FE/A",
+    "product_id": "acc-apple-ma6a4fe",
+    "color": null,
+    "storage": null,
+    "price": 1499000,
+    "stock": 23
+  },
+  {
+    "variant_id": "HQ642ZM/A",
+    "product_id": "acc-apple-hq642zm",
+    "color": null,
+    "storage": null,
+    "price": 833000,
+    "stock": 8
+  },
+  {
+    "variant_id": "EF-QA186CTEGWW",
+    "product_id": "acc-samsung-ef-qa186ctegww",
+    "color": null,
+    "storage": null,
+    "price": 290520,
+    "stock": 46
+  },
+  {
+    "variant_id": "EF-QS741CTEGWW",
+    "product_id": "acc-samsung-ef-qs741ctegww",
+    "color": null,
+    "storage": null,
+    "price": 549720,
+    "stock": 39
+  },
+  {
+    "variant_id": "EF-CS741CTEGWW",
+    "product_id": "acc-samsung-ef-cs741ctegww",
+    "color": null,
+    "storage": null,
+    "price": 849960,
+    "stock": 33
+  },
+  {
+    "variant_id": "EF-SS741CBEGWW",
+    "product_id": "acc-samsung-ef-ss741cbegww",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 49
+  },
+  {
+    "variant_id": "EF-ES741CBEGWW",
+    "product_id": "acc-samsung-ef-es741cbegww",
+    "color": null,
+    "storage": null,
+    "price": 1190160,
+    "stock": 41
+  },
+  {
+    "variant_id": "GP-FFF776CUCTW",
+    "product_id": "acc-samsung-gp-fff776cuctw",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 47
+  },
+  {
+    "variant_id": "GP-FFF776CUBTW",
+    "product_id": "acc-samsung-gp-fff776cubtw",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 32
+  },
+  {
+    "variant_id": "GP-FFF776CUDTW",
+    "product_id": "acc-samsung-gp-fff776cudtw",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 49
+  },
+  {
+    "variant_id": "GP-FFF776CUATW",
+    "product_id": "acc-samsung-gp-fff776cuatw",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 7
+  },
+  {
+    "variant_id": "GP-FPF776HIBAW",
+    "product_id": "acc-samsung-gp-fpf776hibaw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 32
+  },
+  {
+    "variant_id": "GP-FPF776HIAPW",
+    "product_id": "acc-samsung-gp-fpf776hiapw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 37
+  },
+  {
+    "variant_id": "GP-FPF776HICBW",
+    "product_id": "acc-samsung-gp-fpf776hicbw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 22
+  },
+  {
+    "variant_id": "GP-FPF776HIDSW",
+    "product_id": "acc-samsung-gp-fpf776hidsw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 49
+  },
+  {
+    "variant_id": "GP-FPF776YCBBW",
+    "product_id": "acc-samsung-gp-fpf776ycbbw",
+    "color": null,
+    "storage": null,
+    "price": 1490400,
+    "stock": 20
+  },
+  {
+    "variant_id": "GP-FPF971HIBAW",
+    "product_id": "acc-samsung-gp-fpf971hibaw",
+    "color": null,
+    "storage": null,
+    "price": 1589760,
+    "stock": 40
+  },
+  {
+    "variant_id": "GP-FPF971HIAPW",
+    "product_id": "acc-samsung-gp-fpf971hiapw",
+    "color": null,
+    "storage": null,
+    "price": 1589760,
+    "stock": 13
+  },
+  {
+    "variant_id": "GP-FPF971HICBW",
+    "product_id": "acc-samsung-gp-fpf971hicbw",
+    "color": null,
+    "storage": null,
+    "price": 1589760,
+    "stock": 50
+  },
+  {
+    "variant_id": "GP-FPF971HIDSW",
+    "product_id": "acc-samsung-gp-fpf971hidsw",
+    "color": null,
+    "storage": null,
+    "price": 1589760,
+    "stock": 28
+  },
+  {
+    "variant_id": "GP-FFF971YCATW",
+    "product_id": "acc-samsung-gp-fff971ycatw",
+    "color": null,
+    "storage": null,
+    "price": 1490400,
+    "stock": 42
+  },
+  {
+    "variant_id": "GP-FFF976YCATW",
+    "product_id": "acc-samsung-gp-fff976ycatw",
+    "color": null,
+    "storage": null,
+    "price": 1490400,
+    "stock": 43
+  },
+  {
+    "variant_id": "GP-FPF976YCBBW",
+    "product_id": "acc-samsung-gp-fpf976ycbbw",
+    "color": null,
+    "storage": null,
+    "price": 1990440,
+    "stock": 25
+  },
+  {
+    "variant_id": "EF-KS948SCEGWW",
+    "product_id": "acc-samsung-ef-ks948scegww",
+    "color": null,
+    "storage": null,
+    "price": 1990440,
+    "stock": 42
+  },
+  {
+    "variant_id": "GP-FPF971PGAKW",
+    "product_id": "acc-samsung-gp-fpf971pgakw",
+    "color": null,
+    "storage": null,
+    "price": 1589760,
+    "stock": 26
+  },
+  {
+    "variant_id": "GP-FPF976PGAKW",
+    "product_id": "acc-samsung-gp-fpf976pgakw",
+    "color": null,
+    "storage": null,
+    "price": 1589760,
+    "stock": 36
+  },
+  {
+    "variant_id": "EF-KF971SREGWW",
+    "product_id": "acc-samsung-ef-kf971sregww",
+    "color": null,
+    "storage": null,
+    "price": 2490480,
+    "stock": 39
+  },
+  {
+    "variant_id": "EF-XF971SBEGWW",
+    "product_id": "acc-samsung-ef-xf971sbegww",
+    "color": null,
+    "storage": null,
+    "price": 2490480,
+    "stock": 13
+  },
+  {
+    "variant_id": "EF-EF971CVEGWW",
+    "product_id": "acc-samsung-ef-ef971cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1990440,
+    "stock": 9
+  },
+  {
+    "variant_id": "EF-CF971CTEGWW",
+    "product_id": "acc-samsung-ef-cf971ctegww",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 15
+  },
+  {
+    "variant_id": "EF-QF971CTEGWW",
+    "product_id": "acc-samsung-ef-qf971ctegww",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 21
+  },
+  {
+    "variant_id": "EF-UF971CTEGWW",
+    "product_id": "acc-samsung-ef-uf971ctegww",
+    "color": null,
+    "storage": null,
+    "price": 589680,
+    "stock": 17
+  },
+  {
+    "variant_id": "EF-KF976SREGWW",
+    "product_id": "acc-samsung-ef-kf976sregww",
+    "color": null,
+    "storage": null,
+    "price": 2490480,
+    "stock": 16
+  },
+  {
+    "variant_id": "EF-XF976SBEGWW",
+    "product_id": "acc-samsung-ef-xf976sbegww",
+    "color": null,
+    "storage": null,
+    "price": 2490480,
+    "stock": 39
+  },
+  {
+    "variant_id": "EF-EF976CVEGWW",
+    "product_id": "acc-samsung-ef-ef976cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1990440,
+    "stock": 7
+  },
+  {
+    "variant_id": "EF-CF976CTEGWW",
+    "product_id": "acc-samsung-ef-cf976ctegww",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 45
+  },
+  {
+    "variant_id": "EF-QF976CTEGWW",
+    "product_id": "acc-samsung-ef-qf976ctegww",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 28
+  },
+  {
+    "variant_id": "EF-UF976CTEGWW",
+    "product_id": "acc-samsung-ef-uf976ctegww",
+    "color": null,
+    "storage": null,
+    "price": 589680,
+    "stock": 28
+  },
+  {
+    "variant_id": "EF-FF776CJEGWW",
+    "product_id": "acc-samsung-ef-ff776cjegww",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 47
+  },
+  {
+    "variant_id": "EF-EF776CVEGWW",
+    "product_id": "acc-samsung-ef-ef776cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1289520,
+    "stock": 30
+  },
+  {
+    "variant_id": "EF-CF776CTEGWW",
+    "product_id": "acc-samsung-ef-cf776ctegww",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 29
+  },
+  {
+    "variant_id": "EF-QF776CTEGWW",
+    "product_id": "acc-samsung-ef-qf776ctegww",
+    "color": null,
+    "storage": null,
+    "price": 789480,
+    "stock": 27
+  },
+  {
+    "variant_id": "EF-UF776CTEGWW",
+    "product_id": "acc-samsung-ef-uf776ctegww",
+    "color": null,
+    "storage": null,
+    "price": 490320,
+    "stock": 15
+  },
+  {
+    "variant_id": "EF-QA276CTEGWW",
+    "product_id": "acc-samsung-ef-qa276ctegww",
+    "color": null,
+    "storage": null,
+    "price": 290520,
+    "stock": 41
+  },
+  {
+    "variant_id": "EB-P3401XUEGWW",
+    "product_id": "acc-samsung-eb-p3401xuegww",
+    "color": null,
+    "storage": null,
+    "price": 990360,
+    "stock": 25
+  },
+  {
+    "variant_id": "EP-P2900BBEGWW",
+    "product_id": "acc-samsung-ep-p2900bbegww",
+    "color": null,
+    "storage": null,
+    "price": 990360,
+    "stock": 37
+  },
+  {
+    "variant_id": "EF-RA376CBEGWW",
+    "product_id": "acc-samsung-ef-ra376cbegww",
+    "color": null,
+    "storage": null,
+    "price": 389880,
+    "stock": 44
+  },
+  {
+    "variant_id": "EF-QA376CTEGWW",
+    "product_id": "acc-samsung-ef-qa376ctegww",
+    "color": null,
+    "storage": null,
+    "price": 389880,
+    "stock": 22
+  },
+  {
+    "variant_id": "EF-OA376TBEGWW",
+    "product_id": "acc-samsung-ef-oa376tbegww",
+    "color": null,
+    "storage": null,
+    "price": 549720,
+    "stock": 28
+  },
+  {
+    "variant_id": "EF-PA376CBEGWW",
+    "product_id": "acc-samsung-ef-pa376cbegww",
+    "color": null,
+    "storage": null,
+    "price": 549720,
+    "stock": 34
+  },
+  {
+    "variant_id": "EF-RA576CBEGWW",
+    "product_id": "acc-samsung-ef-ra576cbegww",
+    "color": null,
+    "storage": null,
+    "price": 389880,
+    "stock": 15
+  },
+  {
+    "variant_id": "EF-QA576CTEGWW",
+    "product_id": "acc-samsung-ef-qa576ctegww",
+    "color": null,
+    "storage": null,
+    "price": 389880,
+    "stock": 31
+  },
+  {
+    "variant_id": "EF-OA576TBEGWW",
+    "product_id": "acc-samsung-ef-oa576tbegww",
+    "color": null,
+    "storage": null,
+    "price": 549720,
+    "stock": 26
+  },
+  {
+    "variant_id": "EF-PA576CLEGWW",
+    "product_id": "acc-samsung-ef-pa576clegww",
+    "color": null,
+    "storage": null,
+    "price": 549720,
+    "stock": 28
+  },
+  {
+    "variant_id": "EF-SS948CVEGWW",
+    "product_id": "acc-samsung-ef-ss948cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1690200,
+    "stock": 37
+  },
+  {
+    "variant_id": "EF-ES948COEGWW",
+    "product_id": "acc-samsung-ef-es948coegww",
+    "color": null,
+    "storage": null,
+    "price": 1289520,
+    "stock": 27
+  },
+  {
+    "variant_id": "EF-RS948CBEGWW",
+    "product_id": "acc-samsung-ef-rs948cbegww",
+    "color": null,
+    "storage": null,
+    "price": 1789560,
+    "stock": 13
+  },
+  {
+    "variant_id": "EF-CS948CTEGWW",
+    "product_id": "acc-samsung-ef-cs948ctegww",
+    "color": null,
+    "storage": null,
+    "price": 990360,
+    "stock": 49
+  },
+  {
+    "variant_id": "EF-US948CTEGWW",
+    "product_id": "acc-samsung-ef-us948ctegww",
+    "color": null,
+    "storage": null,
+    "price": 589680,
+    "stock": 11
+  },
+  {
+    "variant_id": "EF-QS948CTEGWW",
+    "product_id": "acc-samsung-ef-qs948ctegww",
+    "color": null,
+    "storage": null,
+    "price": 490320,
+    "stock": 32
+  },
+  {
+    "variant_id": "EJ-PS948BVEGWW",
+    "product_id": "acc-samsung-ej-ps948bvegww",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 44
+  },
+  {
+    "variant_id": "EF-SS947CVEGWW",
+    "product_id": "acc-samsung-ef-ss947cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1690200,
+    "stock": 34
+  },
+  {
+    "variant_id": "EF-ES947CVEGWW",
+    "product_id": "acc-samsung-ef-es947cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1289520,
+    "stock": 5
+  },
+  {
+    "variant_id": "EF-RS947CBEGWW",
+    "product_id": "acc-samsung-ef-rs947cbegww",
+    "color": null,
+    "storage": null,
+    "price": 1789560,
+    "stock": 47
+  },
+  {
+    "variant_id": "EF-CS947CTEGWW",
+    "product_id": "acc-samsung-ef-cs947ctegww",
+    "color": null,
+    "storage": null,
+    "price": 990360,
+    "stock": 47
+  },
+  {
+    "variant_id": "EF-US947CTEGWW",
+    "product_id": "acc-samsung-ef-us947ctegww",
+    "color": null,
+    "storage": null,
+    "price": 589680,
+    "stock": 30
+  },
+  {
+    "variant_id": "EF-QS947CTEGWW",
+    "product_id": "acc-samsung-ef-qs947ctegww",
+    "color": null,
+    "storage": null,
+    "price": 490320,
+    "stock": 19
+  },
+  {
+    "variant_id": "EF-SS942CVEGWW",
+    "product_id": "acc-samsung-ef-ss942cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1690200,
+    "stock": 41
+  },
+  {
+    "variant_id": "EF-ES942CVEGWW",
+    "product_id": "acc-samsung-ef-es942cvegww",
+    "color": null,
+    "storage": null,
+    "price": 1289520,
+    "stock": 47
+  },
+  {
+    "variant_id": "EF-RS942CBEGWW",
+    "product_id": "acc-samsung-ef-rs942cbegww",
+    "color": null,
+    "storage": null,
+    "price": 1789560,
+    "stock": 48
+  },
+  {
+    "variant_id": "EF-CS942CTEGWW",
+    "product_id": "acc-samsung-ef-cs942ctegww",
+    "color": null,
+    "storage": null,
+    "price": 990360,
+    "stock": 16
+  },
+  {
+    "variant_id": "EF-US942CTEGWW",
+    "product_id": "acc-samsung-ef-us942ctegww",
+    "color": null,
+    "storage": null,
+    "price": 589680,
+    "stock": 49
+  },
+  {
+    "variant_id": "EF-QS942CTEGWW",
+    "product_id": "acc-samsung-ef-qs942ctegww",
+    "color": null,
+    "storage": null,
+    "price": 490320,
+    "stock": 15
+  },
+  {
+    "variant_id": "GP-FPS948PGBNW",
+    "product_id": "acc-samsung-gp-fps948pgbnw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 49
+  },
+  {
+    "variant_id": "GP-FPS948PGAJW",
+    "product_id": "acc-samsung-gp-fps948pgajw",
+    "color": null,
+    "storage": null,
+    "price": 1190160,
+    "stock": 25
+  },
+  {
+    "variant_id": "GP-FPS947PGBNW",
+    "product_id": "acc-samsung-gp-fps947pgbnw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 26
+  },
+  {
+    "variant_id": "GP-FPS947PGAJW",
+    "product_id": "acc-samsung-gp-fps947pgajw",
+    "color": null,
+    "storage": null,
+    "price": 1190160,
+    "stock": 44
+  },
+  {
+    "variant_id": "GP-FPS942PGBNW",
+    "product_id": "acc-samsung-gp-fps942pgbnw",
+    "color": null,
+    "storage": null,
+    "price": 1389960,
+    "stock": 46
+  },
+  {
+    "variant_id": "GP-FPS942PGAJW",
+    "product_id": "acc-samsung-gp-fps942pgajw",
+    "color": null,
+    "storage": null,
+    "price": 1190160,
+    "stock": 42
+  },
+  {
+    "variant_id": "GP-TOU026HIALW",
+    "product_id": "acc-samsung-gp-tou026hialw",
+    "color": null,
+    "storage": null,
+    "price": 690120,
+    "stock": 28
+  },
+  {
+    "variant_id": "GP-TOU026PGABW",
+    "product_id": "acc-samsung-gp-tou026pgabw",
+    "color": null,
+    "storage": null,
+    "price": 690120,
+    "stock": 9
+  },
+  {
+    "variant_id": "GP-TOU026HIBJW",
+    "product_id": "acc-samsung-gp-tou026hibjw",
+    "color": null,
+    "storage": null,
+    "price": 589680,
+    "stock": 39
+  },
+  {
+    "variant_id": "EP-T4511XWEGWW",
+    "product_id": "acc-samsung-ep-t4511xwegww",
+    "color": null,
+    "storage": null,
+    "price": 1168363,
+    "stock": 38
+  },
+  {
+    "variant_id": "EB-U2500XJEGWW",
+    "product_id": "acc-samsung-eb-u2500xjegww",
+    "color": null,
+    "storage": null,
+    "price": 1190160,
+    "stock": 34
+  },
+  {
+    "variant_id": "EP-T6010NBEGWW",
+    "product_id": "acc-samsung-ep-t6010nbegww",
+    "color": null,
+    "storage": null,
+    "price": 1089720,
+    "stock": 17
+  }
+]

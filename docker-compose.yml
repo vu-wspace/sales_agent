@@ -1,0 +1,69 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.20.0   # ghim phiên bản, khớp qdrant-client trong pyproject.toml
+    container_name: qdrant
+    ports:
+      - "6333:6333"   # REST API + dashboard (cũng dùng khi chạy code trên máy, không Docker)
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage   # Docker volume: dữ liệu còn khi xóa container, mất khi `down -v`
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18.6-bookworm   # khớp bản pg_dump đã tạo data_schema/phone.sql
+    container_name: phone_db
+    ports:
+      - "5433:5432"   # 5432 thường đã bị Postgres cài trên máy chiếm
+    environment:
+      POSTGRES_USER: postgres       # phone.sql gán OWNER TO postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}   # đặt trong .env; mặc định chỉ dùng cho demo
+      POSTGRES_DB: phone
+    volumes:
+      - postgres_data:/var/lib/postgresql   # postgres 18 lưu dữ liệu ở /var/lib/postgresql/18/docker
+      # Chỉ chạy khi volume rỗng (lần đầu), theo thứ tự tên file: tạo bảng rồi nạp dữ liệu.
+      # Cào lại dữ liệu thì nạp tay (xem README) hoặc `docker compose down -v` để khởi tạo lại.
+      - ./data_schema/phone.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./data_schema/output/phone_seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d phone"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # Nạp lại dữ liệu sản phẩm sau khi cào lại (TRUNCATE + INSERT, không mất volume):
+  #   docker compose run --rm db-seed
+  # Thuộc profile "tools" nên `docker compose up` không tự chạy service này.
+  db-seed:
+    image: postgres:18.6-bookworm
+    profiles: ["tools"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./data_schema/output/phone_seed.sql:/seed/phone_seed.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "postgres", "-d", "phone", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/seed/phone_seed.sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    image: phone-sales-api
+    container_name: phone_sales_api
+    ports:
+      - "8000:8000"   # Web chat + API (docs tại /docs)
+    env_file: .env    # OPENROUTER_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, TAVILY_API_KEY, LANGSMITH_*
+    environment:
+      QDRANT_URL: http://qdrant:6333   # ghi đè QDRANT_URL=localhost trong .env
+      AUTO_INGEST: "true"              # collection rỗng thì tự nạp chính sách (data_schema/policies) khi khởi động
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
+    depends_on:
+      qdrant:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  postgres_data:
