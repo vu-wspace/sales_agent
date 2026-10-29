@@ -93,6 +93,18 @@ def test_other_errors_are_not_skipped_later():
     assert primary.calls == 2 and mw.skip_until == {}
 
 
+def test_permanent_errors_are_skipped_for_an_hour():
+    # Sai tên model / sai key: câu nào cũng lỗi y hệt -> bỏ qua, không thử lại mỗi câu
+    from langchain_core.exceptions import ModelNotFoundError
+    from bank_faqs.fallback import PERMANENT_COOLDOWN_S
+    broken = FailingModel(model='gemini-sai-ten', messages=iter([]), error=ModelNotFoundError('404 NOT_FOUND'))
+    ok = FakeModel(model='groq', messages=iter([AIMessage('a'), AIMessage('b')]))
+    mw = FallbackMiddleware(ok, clock=lambda: 0.0)
+    mw.call(broken, lambda m: m.invoke('x'))
+    mw.call(broken, lambda m: m.invoke('x'))
+    assert broken.calls == 1 and mw.skip_until == {'gemini-sai-ten': PERMANENT_COOLDOWN_S}
+
+
 def test_ssl_certificate_errors_are_skipped_for_a_while():
     # Mạng có SSL inspection: lỗi chứng chỉ lặp lại ở mọi lần gọi -> bỏ qua để câu sau không phải chờ model đó lỗi
     from bank_faqs.fallback import SSL_COOLDOWN_S

@@ -16,7 +16,7 @@ Agent làm được:
 | Agent | LangGraph `StateGraph` (`graph.py`), hoặc `create_agent` (`agent.py`) |
 | LLM | OpenRouter `nemotron-3-ultra-550b-a55b:free` → Gemini 3.1 flash-lite → Gemini 3.5 flash-lite → Groq `qwen3.8-27b` |
 | Web | FastAPI + trang chat một file, chạy bằng Docker Compose |
-| Kiểm thử | 107 test (không gọi API thật), bộ eval 37 câu |
+| Kiểm thử | 110 test (không gọi API thật), bộ eval 37 câu |
 
 > Package Python vẫn tên `bank_faqs` vì dự án chuyển từ một agent CSKH ngân hàng. Đổi tên package cần sửa mọi import.
 
@@ -203,9 +203,22 @@ Thêm file chính sách mới thì phải thêm prompt vào `POLICY_PROMPTS` (te
 `FallbackMiddleware` (`fallback.py`) dùng cho cả `graph.py` lẫn `agent.py`:
 1. Thử model chính, lỗi thì thử lần lượt `FALLBACK_LLMS` tới khi có model trả lời. Tất cả lỗi thì API trả 429 (quota) hoặc 502.
 2. Model bị giới hạn quota bị **tạm bỏ qua**: hết quota ngày → 1 giờ; giới hạn theo phút → 1 phút. Nhờ vậy khi OpenRouter hết quota, các câu sau đi thẳng sang Gemini, không mất thêm một lần gọi hỏng mỗi câu.
-3. Lỗi chứng chỉ SSL (`CERTIFICATE_VERIFY_FAILED`, xem [Mạng có SSL inspection](#mạng-có-ssl-inspection)) lặp lại ở mọi lần gọi nên cũng bị bỏ qua **10 phút**. Lỗi khác (mất mạng, lỗi server) chỉ chuyển model cho lần gọi đó.
-4. Mọi model đều đang bị bỏ qua thì vẫn thử hết, còn hơn báo lỗi ngay.
-5. Ghi log mỗi lần chuyển: `docker compose logs api | grep LLM`.
+3. Lỗi lặp lại ở mọi lần gọi cũng bị tạm bỏ qua:
+   - Lỗi cấu hình (`is_permanent_error`: sai tên model, sai/hết hạn API key, không có quyền, hết credit) → **1 giờ**, log mức ERROR "kiểm tra tên model/API key".
+   - Lỗi chứng chỉ SSL (`CERTIFICATE_VERIFY_FAILED`, xem [Mạng có SSL inspection](#mạng-có-ssl-inspection)) → **10 phút**.
+   - Lỗi tạm thời (mất mạng, 5xx, quá tải) chỉ chuyển model cho lần gọi đó.
+4. **Ít thử lại trong chuỗi:** SDK của mỗi model tự thử lại khi gặp lỗi tạm thời. Model đứng trước trong chuỗi chỉ thử lại 1 lần (`RETRIES_IN_CHAIN`) rồi nhường model sau, không chờ backoff 3 lần; model cuối (Groq) thử lại 3 lần (`RETRIES_LAST`) vì sau nó không còn model nào.
+5. Mọi model đều đang bị bỏ qua thì vẫn thử hết, còn hơn báo lỗi ngay.
+6. Ghi log mỗi lần chuyển: `docker compose logs api | grep LLM` (chạy trên máy thì xem ở terminal của `uvicorn`).
+
+Đo thật ngày 29/10/2026 (OpenRouter hết quota, Gemini 3.1 được thay bằng một model không tồn tại để ép lỗi):
+
+| Lượt | Trước tối ưu | Sau tối ưu |
+|---|---|---|
+| Câu 1 | OpenRouter 1,6 s → model hỏng 0,8 s → Gemini 3.5 | Như cũ (lần đầu phải thử mới biết hỏng) |
+| Câu 2, 3 | Vẫn thử lại model hỏng mỗi câu (0,4–0,5 s) | Bỏ qua cả OpenRouter lẫn model hỏng, gọi thẳng Gemini 3.5 |
+
+Phần lớn thời gian chờ là **độ trễ của chính model dự phòng**, không phải do chuỗi: cùng một câu, Gemini 3.5 mất 15–20 s, Gemini 3.1 dao động 1–23 s, Groq dưới 2 s. Đã thử tắt hẳn thử lại (`max_retries=0`) và đổi mức "suy nghĩ" của Gemini, đều không nhanh hơn rõ rệt, nên đây là độ trễ phía dịch vụ/mạng.
 
 Eval tắt dự phòng (`fallback=False`) để điểm phản ánh đúng model chính. Thêm hoặc bớt model: sửa `FALLBACK_LLMS` (model mới phải hỗ trợ tool calling; các model `gemini-2.5-*` trả 404 với key hiện tại).
 
@@ -270,7 +283,7 @@ sales_agent/
 │   ├── vector_db.py           # Embedding + Qdrant, nạp chính sách
 │   ├── api.py                 # FastAPI: trang chat, POST /chat, /health
 │   └── static/index.html      # Giao diện chat
-├── tests/                     # 107 test
+├── tests/                     # 110 test
 ├── evals/                     # dataset.jsonl (37 câu), run_eval.py, results/ (không commit)
 ├── certs/                     # CA nội bộ (*.crt) cho mạng có SSL inspection, không commit
 ├── .env.example               # Mẫu .env
@@ -408,7 +421,7 @@ print(res['messages'][-1].text, res['stage'], res['cart'])
 ## Test
 
 ```bash
-uv run pytest                          # 107 test, dưới 1 phút
+uv run pytest                          # 110 test, dưới 1 phút
 uv run pytest tests/test_conversation.py -v
 ```
 
@@ -418,11 +431,11 @@ Test **không gọi LLM, Tavily, mạng hay database**: `conftest.py` đặt key
 |---|---|
 | `test_conversation.py` | Đọc ngân sách/hãng/nhu cầu/dung lượng; không khớp nhầm từ khóa ("không", "chip", "đặt", "tức là"); lo ngại, cảm xúc; khi nào chuyển nhân viên; chuyển bước; reducer; chỉ tính máy được nhắc trong câu trả lời; tool giỏ hàng (gộp phiên bản, tồn kho, hỏi lại phiên bản, xóa); graph giữ trạng thái qua 2 lượt |
 | `test_tools.py` | Nhận diện tên máy, sắp xếp dung lượng, loại phụ kiện tiếng Việt, định dạng giá/tồn kho; 3 tool tra cứu DB; `search_policy` (gom theo file kèm prompt, bỏ đoạn yếu, chặn câu lạc đề, mọi file có prompt); tool tự bắt lỗi |
-| `test_agent.py` | Chuỗi dự phòng: đi hết chuỗi tới model trả lời được (cả `agent.py` lẫn `graph.py`); tạm bỏ qua model hết quota (1 phút / 1 giờ) hoặc lỗi chứng chỉ SSL (10 phút), lỗi khác thì không; mọi model bị bỏ qua thì vẫn thử hết; `fallback=False` báo lỗi model chính |
+| `test_agent.py` | Chuỗi dự phòng: đi hết chuỗi tới model trả lời được (cả `agent.py` lẫn `graph.py`); tạm bỏ qua model hết quota (1 phút / 1 giờ), lỗi cấu hình (1 giờ) hoặc lỗi chứng chỉ SSL (10 phút), lỗi tạm thời thì không; mọi model bị bỏ qua thì vẫn thử hết; `fallback=False` báo lỗi model chính |
 | `test_data_prep.py` | Tách chính sách theo mục và FAQ, cắt bảng dài, 5 file đều tách được |
 | `test_api.py` | Endpoint, validate input, mã lỗi 429/502/503, nhớ theo `thread_id`, tự nạp chính sách khi rỗng hoặc đã cũ, thử lại khi Qdrant chưa sẵn sàng |
 | `test_history.py` | Cắt lịch sử đúng ranh giới lượt hỏi, rút gọn kết quả tool cũ |
-| `test_llm.py` | `timeout` đúng đơn vị; các model trong chuỗi dự phòng không trùng nhau |
+| `test_llm.py` | `timeout` đúng đơn vị; các model trong chuỗi dự phòng không trùng nhau; chỉ model cuối chuỗi thử lại nhiều lần; nhận diện lỗi cấu hình |
 | `test_eval_dataset.py` | `evals/dataset.jsonl` hợp lệ: tên trường, id không trùng, tool và file `policy` tồn tại, câu hỏi không chép nguyên văn dữ liệu |
 | `test_requirements.py` | `requirements.txt` khớp `pyproject.toml` |
 
