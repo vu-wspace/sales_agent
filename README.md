@@ -1,6 +1,6 @@
-# phone-sales-agent
+# Phone Sales Agent: trợ lý AI tư vấn bán điện thoại
 
-Agent tư vấn bán điện thoại bằng tiếng Việt cho một cửa hàng bán lẻ (demo, phục vụ học tập), xây dựng với LangChain/LangGraph.
+Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy và phụ kiện: tư vấn máy theo ngân sách, báo giá và tình trạng hàng, trả lời chính sách, và chốt đơn vào giỏ hàng. Dự án demo phục vụ học tập, xây dựng với LangChain/LangGraph.
 
 Agent có thể:
 
@@ -51,24 +51,48 @@ docker compose up -d --build  # Postgres (tự nạp dữ liệu) + Qdrant + web
 
 ## Kiến trúc
 
-```
-Trình duyệt (trang chat)                                LangGraph Studio (langgraph dev)
-        │ POST /chat/stream (hoặc /chat)                            │
-        ▼                                                           ▼
-FastAPI (api.py) ── lưu state theo thread_id ──> graph.py (mặc định) hoặc agent.py
-                                                                    │
-     LLM: OpenRouter ─lỗi/hết quota─> NVIDIA ──> Gemini 3.1 ──> Gemini 3.5 ──> Groq   (fallback.py)
-                                                                    │ gọi tool
-   ┌───────────────┬──────────────────┬────────────────┬────────────┴───┬────────────────┬───────────────┐
-   ▼               ▼                  ▼                ▼                ▼                ▼               ▼
-search_products get_product_details find_accessories add_to_cart remove_from_cart  search_policy    web_search
-   └───────────── Postgres: products, variants, compatibility ─────────────┘       Qdrant (RAG)     Tavily
+```mermaid
+flowchart TB
+    browser["Trình duyệt<br/>(trang chat)"] -- "POST /chat/stream<br/>hoặc /chat" --> api["FastAPI<br/>api.py"]
+    studio["LangGraph Studio<br/>(langgraph dev)"] --> agent
+    api -- "state theo thread_id<br/>(InMemorySaver)" --> agent["Agent<br/>graph.py (mặc định) / agent.py"]
+    agent <--> chain
+
+    subgraph chain["Chuỗi LLM dự phòng (fallback.py)"]
+        direction LR
+        openrouter["OpenRouter<br/>nemotron-3-ultra"] -. lỗi, hết quota .-> nvidia["NVIDIA<br/>nemotron-3.5-super"]
+        nvidia -.-> gemini31["Gemini 3.1<br/>flash-lite"] -.-> gemini35["Gemini 3.5<br/>flash-lite"] -.-> groq["Groq<br/>qwen3.8-27b"]
+    end
+
+    agent -- "gọi tool" --> tools
+
+    subgraph tools["Tools (tools.py)"]
+        search_products["search_products"]
+        get_details["get_product_details"]
+        find_acc["find_accessories"]
+        add_cart["add_to_cart"]
+        remove_cart["remove_from_cart"]
+        search_policy["search_policy"]
+        web_search["web_search"]
+    end
+
+    search_products & get_details & find_acc & add_cart --> postgres[("Postgres<br/>products · variants · compatibility")]
+    add_cart & remove_cart --> cart[("State<br/>cart")]
+    search_policy --> qdrant[("Qdrant<br/>66 đoạn chính sách")]
+    web_search --> tavily(["Tavily"])
 ```
 
 ### Luồng một lượt chat (`graph.py`)
 
-```
-START → track_user → model ─(có tool_call)→ tools → track_tools → model … ─(trả lời xong)→ track_reply → END
+```mermaid
+flowchart LR
+    start((START)) --> track_user["track_user<br/>đọc tin nhắn khách"]
+    track_user --> model["model<br/>gọi LLM"]
+    model -- "có tool_call" --> tool_node["tools<br/>chạy tool"]
+    tool_node --> track_tools["track_tools<br/>đọc tham số tool"]
+    track_tools --> model
+    model -- "trả lời xong" --> track_reply["track_reply<br/>ghi máy đã giới thiệu"]
+    track_reply --> finish((END))
 ```
 
 1. `api.py` nhận `message` và `thread_id`, lấy state cũ của thread từ checkpointer (`InMemorySaver`).
