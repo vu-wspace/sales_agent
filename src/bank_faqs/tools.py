@@ -17,6 +17,8 @@ from functools import lru_cache
 tavily_client = TavilyClient()
 
 MAX_LINES = 15  # số sản phẩm tối đa trả về cho model, tránh kết quả quá dài
+# Phụ kiện mỗi trang: prompt dặn tối đa 5 dòng nhưng tool trả 8-15 dòng thì model vẫn liệt kê hết (eval acc-01)
+ACCESSORIES_PER_PAGE = 5
 
 # Cách khách hay gọi tắt -> từ có trong tên sản phẩm (đã chuẩn hóa bằng _norm_text)
 ALIASES = {'ip': 'iphone', 'ss': 'samsung', 'promax': 'pro max', 'zfold': 'z fold', 'zflip': 'z flip'}
@@ -90,9 +92,10 @@ def _price(v: int) -> str:
     return f'{v:,}'.replace(',', '.') + 'đ'
 
 def _stock(n: int) -> str:
+    # Không đưa số lượng cho model: có số là model hay đọc ra cho khách ("còn 9 máy"). add_to_cart vẫn kiểm tra số lượng thật
     if n <= 0:
         return 'hết hàng'
-    return f'sắp hết (còn {n})' if n <= 5 else f'còn {n}'
+    return 'sắp hết' if n <= 5 else 'còn hàng'
 
 def _accessory_type(text: str) -> str | None:
     t = _norm_text(text)
@@ -179,10 +182,11 @@ def get_product_details(product: str, storage: str = '', color: str = '') -> str
     return '\n'.join(line for line in lines if line)
 
 @tool
-def find_accessories(phone: str, accessory_type: str = '') -> str:
+def find_accessories(phone: str, accessory_type: str = '', page: int = 1) -> str:
     """Tìm phụ kiện tương thích với 1 điện thoại: ốp lưng, miếng dán màn hình, củ sạc, cáp, sạc dự phòng,
     S Pen, ví, giá đỡ. phone: tên máy (vd 'iPhone 17', 'Galaxy S26 Ultra').
-    accessory_type: loại phụ kiện (vd 'ốp lưng', 'sạc', 'cáp', 'cường lực'), để trống để xem tất cả loại."""
+    accessory_type: loại phụ kiện (vd 'ốp lưng', 'sạc', 'cáp', 'cường lực'), để trống để xem tất cả loại.
+    Mỗi lần trả 5 phụ kiện (còn hàng trước, rẻ trước); khách muốn xem thêm thì gọi lại với page=2, 3..."""
     kind = _accessory_type(accessory_type) if accessory_type.strip() else None
     if accessory_type.strip() and not kind:
         return f"Không rõ loại phụ kiện '{accessory_type}'. Các loại có: ốp lưng, miếng dán, sạc, cáp, sạc dự phòng, S Pen, ví, giá đỡ."
@@ -204,8 +208,13 @@ def find_accessories(phone: str, accessory_type: str = '') -> str:
         return DB_ERROR.format(type(e).__name__)
     if not rows:
         return f"Chưa có phụ kiện {accessory_type or ''} tương thích với {hits[0]['name']}.".replace('  ', ' ')
-    lines = [f"- {r['name']}: {_price(r['price'])} | {_stock(r['stock'])}" for r in rows[:MAX_LINES]]
-    more = f'\n(còn {len(rows) - MAX_LINES} phụ kiện khác)' if len(rows) > MAX_LINES else ''
+    start = (max(page, 1) - 1) * ACCESSORIES_PER_PAGE
+    shown = rows[start:start + ACCESSORIES_PER_PAGE]
+    if not shown:
+        return f"Đã xem hết {len(rows)} phụ kiện tương thích với {hits[0]['name']}."
+    lines = [f"- {r['name']}: {_price(r['price'])} | {_stock(r['stock'])}" for r in shown]
+    left = len(rows) - start - len(shown)
+    more = f'\n(còn {left} phụ kiện khác, xem tiếp bằng page={page + 1})' if left > 0 else ''
     return f"Phụ kiện tương thích với {hits[0]['name']}:\n" + '\n'.join(lines) + more
 
 @tool

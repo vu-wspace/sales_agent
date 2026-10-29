@@ -1,120 +1,150 @@
 # phone-sales-agent
 
-Agent tư vấn bán điện thoại bằng tiếng Việt cho một cửa hàng bán lẻ (demo, phục vụ học tập), xây dựng với LangChain/LangGraph. Agent tư vấn iPhone, Samsung Galaxy và phụ kiện: tìm máy theo tầm giá, báo giá và tình trạng hàng từng phiên bản, tìm phụ kiện tương thích, trả lời về chính sách đổi trả, giao hàng, trả góp và bảo hành.
+Agent tư vấn bán điện thoại bằng tiếng Việt cho một cửa hàng bán lẻ (demo, phục vụ học tập), xây dựng với LangChain/LangGraph.
 
-- **Dữ liệu sản phẩm** (23 điện thoại, 134 phụ kiện, 377 phiên bản) cào từ apple.com/vn và samsung.com/vn, lưu trong Postgres (database `phone`).
-- **Chính sách** (5 file `.md`) được tách thành 65 đoạn và tìm bằng vector search trong Qdrant (RAG).
-- Có **web chat** (FastAPI) chạy bằng Docker, nhớ ngữ cảnh hội thoại.
-- LLM chính là OpenRouter (`nvidia/nemotron-3-ultra-550b-a55b:free`). Khi lỗi hoặc hết quota, agent **tự chuyển lần lượt** sang Gemini 3.1 flash-lite → Gemini 3.5 flash-lite → Groq, và tạm bỏ qua model vừa hết quota (xem [Chuỗi LLM dự phòng](#chuỗi-llm-dự-phòng)).
-- Agent nhớ **trạng thái hội thoại bán hàng** (bước bán hàng, nhu cầu, sản phẩm đã giới thiệu, giỏ hàng, lo ngại, cảm xúc, cần chuyển nhân viên) và có **giỏ hàng** (xem [Trạng thái hội thoại](#trạng-thái-hội-thoại)).
-- Có **105 test** (không gọi API thật) và **bộ eval 37 câu** để đo chất lượng câu trả lời.
+Agent làm được:
+- Tư vấn iPhone, Samsung Galaxy theo ngân sách và nhu cầu; báo giá, màu, dung lượng, tình trạng hàng của từng phiên bản.
+- Tìm phụ kiện tương thích (ốp lưng, cường lực, sạc, cáp, S Pen…).
+- Trả lời chính sách đổi trả, giao hàng, trả góp, bảo hành (RAG).
+- Nhớ trạng thái hội thoại bán hàng (nhu cầu, máy đã giới thiệu, lo ngại, cảm xúc của khách) và quản lý giỏ hàng.
+- Tự chuyển sang LLM dự phòng khi model chính hết quota.
 
-> Package Python vẫn tên `bank_faqs` (dự án được chuyển từ agent CSKH ngân hàng). Đổi tên package là việc riêng, cần sửa mọi import.
+| Thành phần | Công nghệ |
+|---|---|
+| Dữ liệu sản phẩm: 23 điện thoại, 134 phụ kiện, 377 phiên bản (cào từ apple.com/vn, samsung.com/vn) | Postgres 18 (database `phone`) |
+| Chính sách: 5 file `.md`, tách thành 65 đoạn | Qdrant + embedding `bkai-foundation-models/vietnamese-bi-encoder` |
+| Agent | LangGraph `StateGraph` (`graph.py`), hoặc `create_agent` (`agent.py`) |
+| LLM | OpenRouter `nemotron-3-ultra-550b-a55b:free` → Gemini 3.1 flash-lite → Gemini 3.5 flash-lite → Groq `qwen3.8-27b` |
+| Web | FastAPI + trang chat một file, chạy bằng Docker Compose |
+| Kiểm thử | 107 test (không gọi API thật), bộ eval 37 câu |
 
-Chạy nhanh (cần Docker và file `.env`, xem [Cài đặt](#cài-đặt)):
+> Package Python vẫn tên `bank_faqs` vì dự án chuyển từ một agent CSKH ngân hàng. Đổi tên package cần sửa mọi import.
+
+**Chạy nhanh** (cần Docker và file `.env`, xem [Cài đặt](#cài-đặt)):
 
 ```bash
-docker compose up -d --build   # Postgres (tự nạp dữ liệu) + Qdrant + web app (tự nạp chính sách)
+cp .env.example .env          # rồi điền API key
+docker compose up -d --build  # Postgres (tự nạp dữ liệu) + Qdrant + web app (tự nạp chính sách)
 # mở http://localhost:8000
 ```
 
 ## Mục lục
 
-- [Cách hoạt động](#cách-hoạt-động)
+- [Kiến trúc](#kiến-trúc)
+- [Trạng thái hội thoại](#trạng-thái-hội-thoại)
 - [Các tool](#các-tool)
+- [RAG chính sách](#rag-chính-sách)
+- [Chuỗi LLM dự phòng](#chuỗi-llm-dự-phòng)
 - [Dữ liệu](#dữ-liệu)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
 - [Cài đặt](#cài-đặt)
-- [Deploy bằng Docker](#deploy-bằng-docker)
-- [Chạy trên máy không dùng Docker](#chạy-trên-máy-không-dùng-docker)
+- [Chạy bằng Docker](#chạy-bằng-docker)
+- [Chạy trên máy](#chạy-trên-máy)
 - [Web app và API](#web-app-và-api)
 - [Test](#test)
 - [Đánh giá (eval)](#đánh-giá-eval)
-- [Giới hạn của LLM (gói free)](#giới-hạn-của-llm-gói-free)
 - [Mở rộng dự án](#mở-rộng-dự-án)
 - [Xử lý sự cố](#xử-lý-sự-cố)
 - [Lưu ý trên Windows](#lưu-ý-trên-windows)
 
-## Cách hoạt động
+## Kiến trúc
 
 ```
-Trình duyệt (trang chat)                    LangGraph Studio (langgraph dev)
-        │ POST /chat                                   │
-        ▼                                              ▼
-FastAPI (api.py) ── nhớ hội thoại theo thread_id ──> Agent (agent.py: create_agent, hoặc graph.py: StateGraph)
-                                                       │
-    LLM: OpenRouter nemotron ── lỗi/hết quota ──> Gemini 3.1 flash-lite ──> Gemini 3.5 flash-lite ──> Groq qwen3.8
-                                                       │ gọi tool
-     ┌──────────────────┬──────────────────┼──────────────────┬──────────────────┐
-     ▼                  ▼                  ▼                  ▼                  ▼
-search_products  get_product_details  find_accessories   search_policy       web_search
-     └──────── Postgres: database phone ───────┘     Qdrant (65 đoạn       Tavily
-          (products, variants, compatibility)          chính sách, bkai)    (3 kết quả)
+Trình duyệt (trang chat)                          LangGraph Studio (langgraph dev)
+        │ POST /chat                                         │
+        ▼                                                    ▼
+FastAPI (api.py) ── lưu state theo thread_id ──> graph.py (mặc định) hoặc agent.py
+                                                             │
+        LLM: OpenRouter ─lỗi/hết quota─> Gemini 3.1 ──> Gemini 3.5 ──> Groq   (fallback.py)
+                                                             │ gọi tool
+   ┌───────────────┬─────────────────┬───────────────┬───────┴───────┬──────────────┬────────────────┐
+   ▼               ▼                 ▼               ▼               ▼              ▼                ▼
+search_products get_product_details find_accessories add_to_cart  remove_from_cart search_policy  web_search
+   └──────────── Postgres: products, variants, compatibility ─────────────┘   Qdrant (RAG)    Tavily
 ```
 
-### Luồng xử lý một câu hỏi
+**Luồng một lượt chat** (`graph.py`):
 
-1. Trang chat gửi `POST /chat` với `message` và `thread_id` (bỏ trống ở tin nhắn đầu tiên).
-2. `api.py` lấy lịch sử của `thread_id` từ bộ nhớ (`InMemorySaver`), thêm tin nhắn mới rồi gọi agent.
-3. Trước mỗi lần gọi LLM, `history.py` **cắt bớt lịch sử** gửi đi: chỉ giữ 4 lượt hỏi gần nhất, kết quả tool của các lượt cũ rút còn 300 ký tự. State trong bộ nhớ vẫn giữ đầy đủ.
-4. LLM đọc system prompt (`prompts.py`) và mô tả các tool (docstring của hàm `@tool` trong `tools.py`), rồi quyết định gọi tool nào. Agent có thể gọi nhiều tool trong một lượt (vd hỏi giá máy kèm trả góp: `get_product_details` rồi `search_policy`).
-5. Tool trả kết quả dạng văn bản. LLM soạn câu trả lời chỉ dựa trên kết quả đó.
-6. Nếu OpenRouter lỗi (hết quota, quá tải, mất kết nối…), lần gọi đó được chuyển sang model dự phòng tiếp theo (`FallbackMiddleware` trong `fallback.py`).
-7. API trả về `answer`, `thread_id` và danh sách `tools` đã gọi trong lượt này.
+```
+START → track_user → model ─(có tool_call)→ tools → track_tools → model … ─(trả lời xong)→ track_reply → END
+```
 
-### Quy tắc của agent
+1. `api.py` nhận `message` + `thread_id`, lấy state cũ của thread từ checkpointer (`InMemorySaver`).
+2. `track_user` đọc tin nhắn của khách: nhu cầu, lo ngại, cảm xúc, có đòi gặp nhân viên không, rồi tính bước bán hàng.
+3. `model` gọi LLM với system prompt + **tóm tắt trạng thái hội thoại** + lịch sử đã cắt gọn (`history.py`: 4 lượt gần nhất, kết quả tool cũ rút còn 300 ký tự).
+4. LLM gọi tool nếu cần; `track_tools` đọc tham số tool (ngân sách, hãng, dung lượng, màu) và tính lại bước (vd vừa thêm vào giỏ → `closing`).
+5. Khi LLM trả lời xong, `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời.
+6. API trả `answer`, `tools` đã gọi, cùng `stage`, `cart`, `handoff`.
 
-System prompt nằm trong `src/bank_faqs/prompts.py` (`AGENT_PROMPTS['agent_main']`), gồm 15 quy tắc:
+**System prompt** (`prompts.py`): `AGENT_PROMPTS['agent_main']` gồm 15 quy tắc; `graph.py` dùng `agent_graph` = 15 quy tắc đó + 3 quy tắc về trạng thái và giỏ hàng.
 
-| Nhóm | Quy tắc |
+| Nhóm | Quy tắc chính |
 |---|---|
-| Xưng hô | Tiếng Việt, lịch sự, xưng "em", gọi khách là "anh/chị", không đoán giới tính |
-| Dùng tool | (1) Tìm máy, tầm giá, so sánh giá → `search_products`. (2) Giá chính xác, màu, dung lượng, còn hàng, thông số → `get_product_details`; nhiều máy khớp thì hỏi lại. (3) Phụ kiện → `find_accessories`. (4) Đổi trả, giao hàng, trả góp, bảo hành → `search_policy`. (5) `web_search` chỉ khi các tool trên không có câu trả lời, không dùng để lấy giá hay chính sách. (6) Xem kết quả các lần gọi trước trước khi gọi tiếp |
-| Trả lời | (7) Chỉ dựa trên kết quả tool; ghi giá đúng như tool trả về; chỉ dòng có "(giá tham khảo)" mới nói là giá tham khảo. (8) Tồn kho chỉ nói còn hàng / sắp hết / hết hàng, không đọc số lượng; hết hàng thì gợi ý phiên bản khác. (9) Tư vấn tối đa 3 máy kèm giá và lý do, có thể gợi ý phụ kiện. (10) Không có thông tin thì nói rõ và đề nghị liên hệ hotline/cửa hàng. (11) Tối đa khoảng 100 từ |
-| Chuyển nhân viên | (12) Khiếu nại, máy lỗi, đơn giao sai/chậm/thiếu, hủy đơn đã thanh toán, muốn gặp người thật: nêu bước cần làm theo chính sách rồi báo chuyển nhân viên |
-| Bảo mật | (13) Không hỏi OTP, mật khẩu, PIN, số thẻ đầy đủ, CVV. (14) Không cung cấp thông tin khách hàng khác |
-| Ngoài phạm vi | (15) Chủ đề không liên quan mua bán điện thoại: không gọi tool, từ chối trong 1–2 câu, hỏi khách có cần tư vấn sản phẩm không |
+| Xưng hô | Tiếng Việt, xưng "em", gọi "anh/chị", không đoán giới tính |
+| Dùng tool | Tìm máy/tầm giá → `search_products`; giá, màu, tồn kho, thông số 1 máy → `get_product_details` (nhiều máy khớp thì hỏi lại); phụ kiện → `find_accessories`; chính sách → `search_policy` (làm theo "Hướng dẫn trả lời" kèm kết quả); `web_search` chỉ khi dữ liệu nội bộ không có, không dùng cho giá hay chính sách |
+| Trả lời | Chỉ dựa trên kết quả tool; giữ đúng giá, chỉ dòng có "(giá tham khảo)" mới nói là tham khảo; tồn kho chỉ nói còn hàng / sắp hết / hết hàng; tư vấn tối đa 3 máy; tối đa khoảng 100 từ |
+| Chuyển nhân viên | Khiếu nại, máy lỗi, đơn giao sai/chậm/thiếu, hủy đơn đã thanh toán, đòi gặp người thật |
+| Bảo mật | Không hỏi OTP, mật khẩu, PIN, số thẻ, CVV; không lộ thông tin khách khác |
+| Ngoài phạm vi | Không gọi tool, từ chối 1–2 câu, mời tư vấn sản phẩm |
+| Trạng thái, giỏ hàng (chỉ `graph.py`) | Làm theo hướng dẫn của bước hiện tại, không hỏi lại nhu cầu đã biết; chỉ `add_to_cart` khi khách nói mua/chốt; giỏ hàng chưa phải đơn hàng, nhân viên sẽ liên hệ xác nhận |
 
-Có 2 cách dựng agent, dùng chung LLM, 5 tool tra cứu, system prompt, cách cắt lịch sử và chuỗi LLM dự phòng:
+**Hai cách dựng agent** dùng chung LLM, tool tra cứu, prompt, cách cắt lịch sử và chuỗi dự phòng:
 
-| | `graph.py` (`StateGraph`) — **web app dùng mặc định** | `agent.py` (`create_agent`) |
+| | `graph.py` — web app dùng mặc định | `agent.py` |
 |---|---|---|
-| Trạng thái hội thoại | Có (`AgentState` trong `conversation.py`) | Chỉ có `messages` |
-| Giỏ hàng | Có tool `add_to_cart`, `remove_from_cart` | Không |
-| System prompt | `agent_main` + quy tắc 16–18 (`agent_graph`) + tóm tắt trạng thái mỗi lượt | `agent_main` |
+| Dựng bằng | `StateGraph` tự dựng | `create_agent` của LangChain |
+| Trạng thái hội thoại, giỏ hàng | Có | Không (chỉ `messages`) |
+| Dùng khi | Web app, LangGraph Studio (`phone_graph`) | So sánh, eval, LangGraph Studio (`agent_main`) |
 
-Đổi web app sang `agent.py`: đặt `AGENT_IMPL=agent`.
+Đổi web app sang `agent.py`: đặt `AGENT_IMPL=agent` trong `.env`.
 
-### Trạng thái hội thoại
+## Trạng thái hội thoại
 
-`AgentState` (`src/bank_faqs/conversation.py`) được lưu theo `thread_id` cùng lịch sử (checkpointer), nên giữ qua các lượt:
+`AgentState` (`src/bank_faqs/conversation.py`) được checkpointer lưu theo `thread_id`, nên giữ qua các lượt:
 
-| Trường | Ý nghĩa | Cập nhật bởi |
+| Trường | Ý nghĩa | Cập nhật |
 |---|---|---|
-| `messages` | Lịch sử tin nhắn (reducer `add_messages`: nối thêm, không ghi đè) | Mọi node |
-| `stage` | `discovery` (chưa xem máy) → `recommending` (đã giới thiệu) → `comparing` (đang so sánh ≥ 2 máy) → `closing` (có hàng trong giỏ hoặc khách chốt) → `handoff` | `decide_stage`, tính lại sau mỗi bước |
-| `slots` | Nhu cầu: `budget_max`, `brand`, `purposes` (chụp ảnh, chơi game, pin lâu…), `storage`, `color` (reducer gộp, list cộng dồn) | Tin nhắn của khách + tham số tool model đã gọi |
-| `shown_products` | Sản phẩm đã giới thiệu: có trong kết quả tool của lượt **và** được nhắc trong câu trả lời gửi khách | `track_reply` |
-| `cart` | Giỏ hàng: `variant_id`, `name`, `storage`, `color`, `price`, `quantity` | Tool `add_to_cart` / `remove_from_cart` (kiểm tra tồn kho, gộp cùng phiên bản) |
-| `objections` | Lo ngại: chê giá cao, lo pin yếu, máy nóng, nặng/to, camera, lo lỗi, không thích màu | Tin nhắn của khách |
-| `sentiment_history` | `positive` / `neutral` / `negative` mỗi lượt | Tin nhắn của khách |
-| `handoff` | Cần chuyển nhân viên: khách đòi gặp người thật, khiếu nại, giao sai/chậm/thiếu, hủy đơn, hoặc **2 lượt liên tiếp bực bội**. Đã bật thì giữ cho cả hội thoại | Tin nhắn của khách |
+| `messages` | Lịch sử tin nhắn (reducer `add_messages`, nối thêm) | Mọi node |
+| `stage` | `discovery` → `recommending` → `comparing` → `closing`, hoặc `handoff` | Tính lại sau mỗi node |
+| `slots` | Nhu cầu: `budget_max`, `brand`, `purposes`, `storage`, `color` (reducer gộp; list cộng dồn) | Tin nhắn khách + tham số tool |
+| `shown_products` | Máy đã giới thiệu: có trong kết quả tool của lượt **và** được nhắc trong câu trả lời | `track_reply` |
+| `cart` | Giỏ hàng: `variant_id`, `name`, `storage`, `color`, `price`, `quantity` | `add_to_cart`, `remove_from_cart` |
+| `objections` | Lo ngại: chê giá cao, lo pin yếu, máy nóng, nặng/to, chê camera, lo lỗi, không thích màu | Tin nhắn khách |
+| `sentiment_history` | `positive` / `neutral` / `negative` từng lượt | Tin nhắn khách |
+| `handoff` | Cần chuyển nhân viên. Đã bật thì giữ cho cả hội thoại | Tin nhắn khách |
 
-Luồng của graph: `START → track_user → model → (gọi tool) tools → track_tools → model … → track_reply → END`.
-- Cập nhật bằng **luật** (từ khóa tiếng Việt có dấu + kết quả tool), **không gọi thêm LLM**: không tốn quota, chạy tức thì, test được. Từ khóa so trên chữ có dấu và có ranh giới từ, để "đắt" không trùng "đặt", "ông" không khớp trong "không", "tức là" không bị tính là tức giận.
-- Mỗi lần gọi model, `describe(state)` thêm mục "Trạng thái hội thoại" vào cuối system prompt: bước hiện tại kèm hướng dẫn cho bước đó (vd `closing`: xác nhận giỏ và tổng tiền, hỏi cách nhận hàng/thanh toán; `handoff`: xin lỗi, báo chuyển nhân viên, không bán thêm), nhu cầu đã biết (dặn không hỏi lại), sản phẩm đã giới thiệu, giỏ hàng, lo ngại, và nhắc trả lời ngắn khi khách đang không vui.
-- Thêm vào giỏ **chưa phải đặt hàng**: agent báo nhân viên sẽ liên hệ xác nhận đơn.
-- Hạn chế: luật từ khóa không hiểu được mọi cách nói (vd mỉa mai, viết không dấu nặng), và chưa có tool đặt hàng thật.
+**Cách xác định bước bán hàng** (`decide_stage`, theo thứ tự ưu tiên):
+
+| Bước | Khi nào | Hướng dẫn đưa vào prompt |
+|---|---|---|
+| `handoff` | Khách đòi gặp người thật, khiếu nại, giao sai/chậm/thiếu, hủy đơn, hoặc **2 lượt liên tiếp bực bội** | Xin lỗi, nêu bước cần làm, báo đã chuyển nhân viên, không bán thêm |
+| `closing` | Giỏ có hàng, hoặc khách nói chốt/lấy/đặt hàng sau khi đã xem máy | Xác nhận giỏ và tổng tiền, hỏi cách nhận hàng và thanh toán |
+| `comparing` | Đã xem ≥ 2 máy và khách hỏi so sánh / "nên chọn cái nào" | So sánh theo nhu cầu đã biết, đưa 1 gợi ý rõ ràng |
+| `recommending` | Đã giới thiệu ít nhất 1 máy | Trả lời về máy đó; khách ưng thì hỏi màu/dung lượng, mời thêm vào giỏ |
+| `discovery` | Chưa giới thiệu máy nào | Thiếu ngân sách hoặc nhu cầu thì hỏi tối đa 1 câu |
+
+Mỗi lần gọi model, `describe(state)` thêm vào cuối system prompt: bước hiện tại kèm hướng dẫn ở bảng trên, nhu cầu đã biết, máy đã giới thiệu, giỏ hàng và tổng tiền, lo ngại của khách (dặn trả lời thẳng vào lo ngại), và nhắc trả lời ngắn nếu khách đang không vui.
+
+**Cập nhật bằng luật, không gọi thêm LLM:** từ khóa tiếng Việt và kết quả tool. Nhờ vậy không tốn quota, chạy tức thì và test được. Từ khóa được so trên chữ **có dấu**, có ranh giới từ, để tránh khớp nhầm:
+- "đắt" không trùng "đặt";
+- "ông" không khớp trong "kh**ông**", "ip" không khớp trong "ch**ip**";
+- "tức là" không bị tính là tức giận, "không thích" không bị tính là khen.
+
+Ngân sách đọc được các dạng "15 triệu", "15tr", "20 củ", "7,5 triệu", "từ 10 đến 15 triệu", "12.000.000".
+
+**Hạn chế:** luật từ khóa không hiểu mọi cách nói (mỉa mai, viết không dấu, viết tắt lạ); giỏ hàng chưa thành đơn hàng thật; state nằm trong RAM nên mất khi restart.
 
 ## Các tool
 
-| Tool | Nguồn dữ liệu | Dùng khi |
+| Tool | Nguồn | Dùng khi |
 |---|---|---|
 | `search_products(query='', brand='', max_price=0, category='phone')` | Postgres | Có bán máy nào, máy trong tầm giá, so sánh giá các dòng |
-| `get_product_details(product, storage='', color='')` | Postgres | Giá, màu, dung lượng, tồn kho từng phiên bản, RAM, thông số chính của 1 máy |
-| `find_accessories(phone, accessory_type='')` | Postgres (`compatibility`) | Ốp lưng, miếng dán, sạc, cáp, sạc dự phòng, S Pen… tương thích với 1 máy |
-| `search_policy(query)` | Qdrant, tối đa 3 đoạn đã lọc + prompt riêng của từng file | Đổi trả, hoàn tiền, giao hàng, trả góp, bảo hành |
-| `web_search(query)` | Tavily, 3 kết quả | Đánh giá, tin tức, máy sắp ra mắt – thông tin không có trong dữ liệu nội bộ |
+| `get_product_details(product, storage='', color='')` | Postgres | Giá và tồn kho từng phiên bản, RAM, thông số chính của 1 máy |
+| `find_accessories(phone, accessory_type='', page=1)` | Postgres (`compatibility`) | Phụ kiện tương thích với 1 máy, mỗi trang 5 món (còn hàng trước, rẻ trước) |
+| `add_to_cart(product, storage='', color='', quantity=1)` | Postgres + state | Khách đồng ý mua (chỉ `graph.py`) |
+| `remove_from_cart(product)` | state | Khách đổi ý (chỉ `graph.py`) |
+| `search_policy(query)` | Qdrant | Đổi trả, hoàn tiền, giao hàng, trả góp, bảo hành |
+| `web_search(query)` | Tavily, 3 kết quả | Đánh giá, tin tức – thông tin không có trong dữ liệu nội bộ |
 
 Ví dụ `get_product_details('ip 18 pro', storage='256gb')`:
 
@@ -124,167 +154,196 @@ iPhone 18 Pro. Một cỗ máy AI siêu mạnh. ...
 Màn Hình: Màn hình Super Retina XDR ... OLED 6,3 inch ...
 Chip: Chip A20 Pro CPU 6 lõi ...
 Phiên bản (dung lượng | màu | giá | kho):
-- 256GB | Bạc | 38.999.000đ | còn 20
-- 256GB | Đen | 38.999.000đ | còn 46
+- 256GB | Bạc | 38.999.000đ | còn hàng
+- 256GB | Đen | 38.999.000đ | còn hàng
 ...
 ```
 
 **Nhận diện tên máy** (`_match`, `_tokens` trong `tools.py`):
-1. Chuẩn hóa: chữ thường, bỏ dấu, `+` → `plus`, tách "17pro" → "17 pro".
-2. Đổi tên gọi tắt theo `ALIASES` (`ip` → `iphone`, `promax` → `pro max`…), bỏ các từ như "galaxy", "samsung", "5g", "điện thoại" và dung lượng ("256gb").
-3. Mọi từ khách gõ phải có trong tên sản phẩm. Nếu có tên trùng khớp hoàn toàn thì chỉ lấy tên đó: "iPhone 18 Pro" không kéo theo "iPhone 18 Pro Max", "s26" trong `get_product_details` là Galaxy S26. Riêng `search_products` lấy cả dòng: "s26" → S26 FE, S26, S26+, S26 Ultra.
-4. `get_product_details` và `find_accessories` cần đúng 1 máy; nhiều máy khớp thì trả danh sách để model hỏi lại khách.
+- Chuẩn hóa: chữ thường, bỏ dấu, `+` → `plus`, "17pro" → "17 pro"; đổi viết tắt (`ip` → `iphone`, `promax` → `pro max`…); bỏ "galaxy", "samsung", "5g", "điện thoại" và dung lượng.
+- Mọi từ khách gõ phải có trong tên sản phẩm. Có tên trùng khớp hoàn toàn thì chỉ lấy tên đó: "iPhone 18 Pro" không kéo theo "Pro Max". Riêng `search_products` lấy cả dòng: "s26" → S26 FE, S26, S26+, S26 Ultra.
+- `get_product_details`, `find_accessories`, `add_to_cart` cần đúng 1 sản phẩm; nhiều sản phẩm khớp thì trả danh sách để model hỏi lại khách.
 
-**Loại phụ kiện**: `accessory_type` nhận cả tiếng Việt ("ốp lưng", "cường lực", "sạc dự phòng", "củ sạc", "cáp"…), đổi sang loại trong DB theo `ACCESSORY_TYPES`.
+**Giỏ hàng:** `add_to_cart` tìm đúng phiên bản theo dung lượng/màu (chưa rõ thì trả danh sách phiên bản để hỏi lại), kiểm tra tồn kho, gộp số lượng nếu cùng phiên bản, rồi trả `Command` cập nhật `cart` trong state. Tool đọc state qua `InjectedState`.
 
-**Tồn kho**: tool trả `còn N` / `sắp hết (còn N)` (N ≤ 5) / `hết hàng`; prompt dặn model không đọc số lượng cho khách.
+**Khác:** `accessory_type` nhận tiếng Việt ("ốp lưng", "cường lực", "sạc dự phòng"…). Tồn kho chỉ trả `còn hàng` / `sắp hết` (≤ 5 máy) / `hết hàng`, **không có số lượng**: eval cho thấy có số là model đọc ra cho khách ("còn 9 máy"); `add_to_cart` vẫn kiểm tra số lượng thật. Mọi tool tự bắt lỗi (Postgres, Qdrant, Tavily sập…) và báo cho model là lỗi hệ thống, để cả lượt chat không bị hỏng.
 
-**`search_policy` chống lạc đề và lan man** (`tools.py`, `prompts.py`, `config.py`):
-1. **Lọc đoạn:** lấy 3 đoạn gần nhất kèm điểm cosine, bỏ đoạn dưới `POLICY_MIN_SCORE = 0.25` và đoạn kém đoạn tốt nhất quá `POLICY_SCORE_MARGIN = 0.08`. Ngưỡng đo trên 19 câu `policy` của bộ eval: câu đúng chủ đề có điểm top 1 từ 0,30; câu lạc đề (bitcoin, làm thơ, thời tiết, "gặp nhân viên") chỉ 0,10–0,21, nên tool trả "Không tìm thấy chính sách liên quan" thay vì đưa đoạn không liên quan cho model. Sau khi lọc vẫn ra đúng file 19/19, trung bình 2,2 đoạn / 1,3 file mỗi câu (trước là 3 đoạn, thường lẫn 2–3 file).
-2. **Prompt chung** `POLICY_GUIDE` đặt đầu kết quả: trả lời trực tiếp trước, tối đa 3 ý bổ sung, không chép cả bảng, giữ đúng con số, đoạn không trả lời được thì nói chưa có thông tin.
-3. **Prompt riêng từng file** `POLICY_PROMPTS`: đoạn được gom theo file, mỗi nhóm có `Hướng dẫn trả lời` nói phạm vi của chính sách đó, ý bắt buộc và điều không được nói. Ví dụ `doi-tra.md`: xác định khách thuộc trường hợp nào (lỗi trong 30 ngày, đổi ý còn seal, đã kích hoạt…) rồi chỉ trả lời trường hợp đó, chưa rõ thì hỏi lại 1 câu; `tra-gop.md`: số tiền góp chỉ là ước tính, không hứa duyệt hồ sơ; `bao-hanh-apple.md`: tách bảo hành của Apple với quyền lợi của cửa hàng, câu về Samsung thì không dùng đoạn này.
-
-Thêm file chính sách mới thì phải thêm prompt vào `POLICY_PROMPTS` (`tests/test_tools.py` báo nếu thiếu). Sửa nhiều chính sách thì nên đo lại ngưỡng (xem chú thích trong `config.py`).
-
-**Xử lý lỗi:** mọi tool tự bắt lỗi (Postgres hay Qdrant sập, Tavily timeout…) và báo cho model là đang lỗi hệ thống, dặn không tự đưa ra giá hay chính sách. Nhờ vậy cả lượt hội thoại không bị hỏng: `ToolNode` của LangGraph chỉ tự bắt lỗi sai tham số.
-
-## Dữ liệu
-
-### Sản phẩm (Postgres, database `phone`)
-
-Schema ở `data_schema/phone.sql`, dữ liệu ở `data_schema/output/phone_seed.sql` (sinh bởi `data_schema/scrape_phone.py`).
-
-| Bảng | Số dòng | Nội dung |
-|---|---|---|
-| `products` | 23 điện thoại + 134 phụ kiện | `product_id` (vd `apple-iphone-18-pro`, `acc-samsung-ef-qs948ctegww`), `name`, `brand`, `category` (`phone`/`accessory`), `description`, `attributes` (JSON: thông số, RAM theo dung lượng, loại phụ kiện, link nguồn, SKU có giá ước tính) |
-| `variants` | 377 | `variant_id` (SKU thật, vd `MJY04X/A`, `SM-S948BZDBXXV`), `product_id`, `color`, `storage`, `price` (VND), `stock` |
-| `compatibility` | 738 | Cặp (`accessory_id`, `phone_id`) |
-
-Lưu ý về dữ liệu (mục đích demo):
-- **`stock` là số giả lập** (5–50, cố định theo SKU), vì web hãng không công khai tồn kho. SKU hết hàng trên web hãng thì `stock = 0`.
-- **Một số giá Samsung là ước tính**: trang Samsung chỉ nhúng giá cho một số SKU; SKU thiếu giá lấy theo SKU cùng dung lượng, hoặc giá bản thấp nhất cộng chênh lệch theo dung lượng. Các SKU này nằm trong `attributes.estimated_price_skus`, tool ghi "(giá tham khảo)".
-- Máy có nhiều mức RAM cho cùng dung lượng (vd Galaxy A57 256GB có 8GB và 12GB) thì `storage` ghi kèm RAM: `256GB - RAM 12GB`.
-- Thông số chi tiết có cho iPhone và dòng Galaxy A/FE; dòng Galaxy S/Z flagship chưa có (trang Samsung tải bảng thông số bằng JavaScript).
-- Tương thích phụ kiện: ốp lưng/miếng dán theo tên model trong tên phụ kiện; cáp và củ sạc USB-C tương thích mọi máy; phụ kiện MagSafe chỉ cho iPhone; sạc không dây/nam châm Samsung chỉ cho dòng S và Z.
-
-### Chính sách (Qdrant, collection `phone_policies`)
+## RAG chính sách
 
 `data_schema/policies/`: `doi-tra.md`, `giao-hang.md`, `tra-gop.md`, `bao-hanh-apple.md`, `bao-hanh-samsung.md`. Chính sách của cửa hàng (lãi suất, phí, đối tác) là **giả lập**; phần bảo hành của hãng là tóm tắt tham khảo, cần đối chiếu trang chính thức.
 
-`data_prep.py` tách mỗi file thành đoạn (chunk):
+**Nạp vào Qdrant** (`data_prep.py`, `vector_db.py`):
 - Mỗi mục `##`/`###` là một đoạn; mục "Câu hỏi thường gặp" thì mỗi cặp hỏi/đáp là một đoạn.
-- Đoạn dài quá 900 ký tự (`CHUNK_MAX_CHARS`) được cắt nhỏ; bảng dài cắt theo dòng và lặp lại tiêu đề bảng. Model embedding chỉ đọc khoảng 256 token đầu, nên đoạn dài hơn sẽ mất phần cuối khi embed.
-- Đầu mỗi đoạn gắn tên tài liệu và tên mục (vd `Chính sách đổi trả - 3. Đổi trả do lỗi nhà sản xuất > 3.2. Trong 30 ngày đầu`) để tìm kiếm hiểu ngữ cảnh.
+- Đoạn dài quá 900 ký tự được cắt nhỏ (model embedding chỉ đọc khoảng 256 token đầu); bảng dài cắt theo dòng, lặp lại tiêu đề bảng.
+- Đầu mỗi đoạn gắn tên tài liệu và mục, vd `Chính sách đổi trả - 3. Đổi trả do lỗi nhà sản xuất > 3.2. Trong 30 ngày đầu`.
+- Tách từ bằng `pyvi`, embedding 768 chiều, so cosine. Collection `phone_policies`.
+- ID đoạn tính từ tên file, thứ tự và **nội dung** đoạn. Khi khởi động, web app so ID trong Qdrant với ID tính từ file `.md`; lệch thì tự xóa và nạp lại.
 
-`vector_db.py`: tách từ tiếng Việt bằng `pyvi`, embedding bằng `bkai-foundation-models/vietnamese-bi-encoder` (768 chiều, cosine). ID mỗi đoạn tính từ tên file, thứ tự và **nội dung** đoạn, nên sửa file `.md` thì ID đổi: web app khi khởi động so ID trong Qdrant với ID tính từ file, lệch thì tự nạp lại (`is_up_to_date`). Mỗi lần nạp xóa hết đoạn cũ trước.
+**Chống lạc đề, lan man** (`search_policy`):
+1. **Lọc đoạn:** lấy 3 đoạn gần nhất kèm điểm; bỏ đoạn dưới **0,25** và đoạn kém đoạn tốt nhất quá **0,08** (`config.py`). Ngưỡng đo trên 19 câu chính sách của bộ eval: câu đúng chủ đề có điểm từ 0,30, câu lạc đề (bitcoin, làm thơ, thời tiết, "gặp nhân viên") 0,10–0,21. Câu lạc đề nhận "Không tìm thấy chính sách liên quan" thay vì đoạn không liên quan.
+2. **Hướng dẫn chung** (`POLICY_GUIDE`): trả lời thẳng trước, tối đa 3 ý bổ sung, không chép cả bảng, giữ đúng con số, không có thì nói chưa có thông tin.
+3. **Prompt riêng từng file** (`POLICY_PROMPTS`): đoạn được gom theo file, mỗi nhóm kèm "Hướng dẫn trả lời" về phạm vi, ý bắt buộc và điều không được nói. Ví dụ:
+   - `doi-tra.md`: xác định khách thuộc trường hợp nào (lỗi trong 30 ngày, đổi ý còn seal, đã kích hoạt…), chỉ trả lời trường hợp đó, chưa rõ thì hỏi lại 1 câu.
+   - `tra-gop.md`: tiền góp hằng tháng chỉ là ước tính, không hứa hồ sơ được duyệt.
+   - `bao-hanh-*.md`: tách bảo hành của hãng với quyền lợi của cửa hàng; không dùng chính sách hãng này cho máy hãng kia.
 
-### Cập nhật dữ liệu
+Kết quả trên 19 câu chính sách: vẫn ra đúng file 19/19, trung bình 2,2 đoạn / 1,3 file mỗi câu (trước khi lọc là 3 đoạn, thường lẫn 2–3 file).
 
-| Dữ liệu | Cách cập nhật |
+Thêm file chính sách mới thì phải thêm prompt vào `POLICY_PROMPTS` (test báo nếu thiếu). Sửa nhiều chính sách thì nên đo lại ngưỡng (cách đo ghi trong chú thích ở `config.py`).
+
+## Chuỗi LLM dự phòng
+
+| LLM (`llm.py`) | Model | Vai trò |
+|---|---|---|
+| `open_llm` | OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free` | Model chính |
+| `google_llm` | `gemini-3.1-flash-lite` | Dự phòng 1; judge của eval |
+| `google_llm_alt` | `gemini-3.5-flash-lite` | Dự phòng 2 (Gemini free tính quota riêng từng model) |
+| `groq_llm` | `qwen/qwen3.8-27b` | Dự phòng 3 |
+
+`FallbackMiddleware` (`fallback.py`) dùng cho cả `graph.py` lẫn `agent.py`:
+1. Thử model chính, lỗi thì thử lần lượt `FALLBACK_LLMS` tới khi có model trả lời. Tất cả lỗi thì API trả 429 (quota) hoặc 502.
+2. Model bị giới hạn quota bị **tạm bỏ qua**: hết quota ngày → 1 giờ; giới hạn theo phút → 1 phút. Nhờ vậy khi OpenRouter hết quota, các câu sau đi thẳng sang Gemini, không mất thêm một lần gọi hỏng mỗi câu.
+3. Lỗi chứng chỉ SSL (`CERTIFICATE_VERIFY_FAILED`, xem [Mạng có SSL inspection](#mạng-có-ssl-inspection)) lặp lại ở mọi lần gọi nên cũng bị bỏ qua **10 phút**. Lỗi khác (mất mạng, lỗi server) chỉ chuyển model cho lần gọi đó.
+4. Mọi model đều đang bị bỏ qua thì vẫn thử hết, còn hơn báo lỗi ngay.
+5. Ghi log mỗi lần chuyển: `docker compose logs api | grep LLM`.
+
+Eval tắt dự phòng (`fallback=False`) để điểm phản ánh đúng model chính. Thêm hoặc bớt model: sửa `FALLBACK_LLMS` (model mới phải hỗ trợ tool calling; các model `gemini-2.5-*` trả 404 với key hiện tại).
+
+**Giới hạn gói free:**
+- **OpenRouter** model `:free`: khoảng 20 request/phút, 50 request/ngày nếu tài khoản chưa nạp 10 USD (nạp rồi thì 1000/ngày). Reset 00:00 UTC, tức 7:00 sáng giờ Việt Nam. Mỗi câu hỏi tốn 2–3 request.
+- **Gemini:** giới hạn theo từng model (vd `gemini-3.1-flash-lite` 15 request/phút).
+- **Groq:** 1000 token đầu ra/phút, 200.000 token/ngày; `max_tokens=512`.
+
+> **Chú ý:** `ChatOpenRouter` tính `timeout` bằng **mili giây** (`timeout=60_000` = 60 giây), khác Groq/Gemini tính bằng giây. Đặt `timeout=60` thì mọi request bị hủy sau 60ms và agent treo vài phút. `tests/test_llm.py` kiểm tra lỗi này.
+
+## Dữ liệu
+
+Database `phone` (schema `data_schema/phone.sql`, dữ liệu `data_schema/output/phone_seed.sql`):
+
+| Bảng | Số dòng | Nội dung |
+|---|---|---|
+| `products` | 23 điện thoại + 134 phụ kiện | `product_id` (vd `apple-iphone-18-pro`), `name`, `brand`, `category` (`phone`/`accessory`), `description`, `attributes` (JSON: thông số, RAM theo dung lượng, loại phụ kiện, link nguồn, SKU có giá ước tính) |
+| `variants` | 377 | `variant_id` (SKU thật, vd `MJY04X/A`, `SM-S948BZDBXXV`), `product_id`, `color`, `storage`, `price` (VND), `stock` |
+| `compatibility` | 738 | Cặp (`accessory_id`, `phone_id`) |
+
+**Lưu ý dữ liệu (demo):**
+- `stock` là **số giả lập** (5–50, cố định theo SKU); SKU hết hàng trên web hãng thì `stock = 0`.
+- **Một số giá Samsung là ước tính**: web Samsung chỉ nhúng giá cho một số SKU. SKU thiếu giá lấy theo SKU cùng dung lượng, hoặc giá bản thấp nhất cộng chênh lệch dung lượng. Tool ghi "(giá tham khảo)" cho các SKU này.
+- Cùng dung lượng nhưng nhiều mức RAM thì `storage` ghi kèm RAM, vd `256GB - RAM 12GB` (Galaxy A57).
+- Thông số chi tiết có cho iPhone và Galaxy A/FE; dòng Galaxy S/Z chưa có (web Samsung tải bảng thông số bằng JavaScript).
+- Tương thích phụ kiện:
+  - Ốp lưng, miếng dán: theo tên máy ghi trong tên phụ kiện.
+  - Cáp, củ sạc USB-C: tương thích mọi máy.
+  - Phụ kiện MagSafe: chỉ iPhone.
+  - Sạc không dây, phụ kiện nam châm Samsung: chỉ dòng S và Z.
+
+**Cập nhật dữ liệu:**
+
+| Dữ liệu | Cách làm |
 |---|---|
-| Sản phẩm | `cd data_schema && python scrape_phone.py --refresh` (cào lại, ghi `output/`), rồi `docker compose run --rm db-seed` (nạp vào container Postgres, không mất volume) |
-| Chính sách | Sửa file trong `data_schema/policies/`. Docker: `docker compose up -d --build api` (API tự nạp lại vì nội dung đổi). Trên máy: `uv run python -m bank_faqs.vector_db` |
+| Sản phẩm | `cd data_schema && python scrape_phone.py --refresh`, rồi `docker compose run --rm db-seed` |
+| Chính sách | Sửa file trong `data_schema/policies/`, rồi `docker compose up -d --build api` (API tự nạp lại). Trên máy: `uv run python -m bank_faqs.vector_db` |
 
-`scrape_phone.py` chỉ dùng thư viện chuẩn, đọc các trang HTML công khai (dữ liệu nhúng sẵn trong trang), cache trang đã tải trong `data_schema/.cache/` (không commit), nghỉ 0,8 giây giữa các request. Sau khi cào lại, chạy `uv run pytest tests/test_eval_dataset.py` và eval nhóm `product,accessory`, vì giá trong `must_contain` của eval có thể đã đổi.
+`scrape_phone.py` chỉ dùng thư viện chuẩn, đọc dữ liệu nhúng sẵn trong các trang HTML công khai, cache trang đã tải ở `data_schema/.cache/` (không commit), nghỉ 0,8 giây giữa các request. Sau khi cào lại, chạy `uv run pytest` và eval nhóm `product,accessory`, vì giá trong đáp án của eval có thể đã đổi.
 
 ## Cấu trúc thư mục
 
 ```
 sales_agent/
 ├── data_schema/
-│   ├── phone.sql             # Schema database phone (pg_dump)
-│   ├── scrape_phone.py       # Cào Apple/Samsung VN -> output/
-│   ├── output/               # products.json, variants.json, compatibility.json, phone_seed.sql
-│   └── policies/             # 5 file chính sách .md (nạp vào Qdrant)
+│   ├── phone.sql              # Schema database phone
+│   ├── scrape_phone.py        # Cào Apple/Samsung VN -> output/
+│   ├── output/                # products.json, variants.json, compatibility.json, phone_seed.sql
+│   └── policies/              # 5 file chính sách .md (nạp vào Qdrant)
 ├── src/bank_faqs/
-│   ├── __init__.py       # Khởi tạo chung: fix DLL torch (Windows), dùng kho chứng chỉ hệ thống, nạp .env
-│   ├── config.py         # Đường dẫn, DATABASE_URL, cấu hình Qdrant/embedding
-│   ├── llm.py            # open_llm (OpenRouter, chính), FALLBACK_LLMS (Gemini 3.1, Gemini 3.5, Groq), nhận diện lỗi quota
-│   ├── fallback.py       # FallbackMiddleware: thử lần lượt model dự phòng, tạm bỏ qua model hết quota, ghi log
-│   ├── prompts.py        # System prompt
-│   ├── tools.py          # 5 tool tra cứu + 2 tool giỏ hàng + gán tool cho từng agent
-│   ├── history.py        # Cắt bớt lịch sử hội thoại trước khi gửi model
-│   ├── agent.py          # Agent dựng bằng create_agent + chuỗi dự phòng; chạy thử 4 câu mẫu
-│   ├── conversation.py   # AgentState (trạng thái hội thoại) + luật cập nhật + tóm tắt đưa vào prompt
-│   ├── graph.py          # Agent StateGraph có trạng thái hội thoại + giỏ hàng (web app dùng mặc định)
-│   ├── data_prep.py      # Tách file chính sách thành đoạn
-│   ├── vector_db.py      # Embedding bkai + Qdrant, nạp chính sách
-│   ├── api.py            # Web app FastAPI: trang chat + POST /chat + /health
-│   └── static/index.html # Giao diện chat
-├── tests/                # pytest (105 test, không gọi API thật, không cần DB)
-├── evals/                # dataset.jsonl (37 câu), run_eval.py, results/ (không commit)
-├── certs/                # CA nội bộ (*.crt) cho mạng có SSL inspection, không commit
-├── .env.example          # Mẫu .env
-├── Dockerfile            # Image cho web app
-├── docker-compose.yml    # Postgres + Qdrant + web app (+ db-seed)
-├── langgraph.json        # Cấu hình cho `langgraph dev`
-├── pyproject.toml        # Thư viện (nguồn chính, cùng uv.lock)
-└── requirements.txt      # Danh sách thư viện cho pip, phải khớp pyproject.toml (có test kiểm tra)
+│   ├── __init__.py            # Fix DLL torch (Windows), dùng kho chứng chỉ hệ thống, nạp .env
+│   ├── config.py              # Đường dẫn, DATABASE_URL, Qdrant, ngưỡng RAG, AGENT_IMPL
+│   ├── llm.py                 # LLM chính + FALLBACK_LLMS, nhận diện lỗi quota
+│   ├── fallback.py            # FallbackMiddleware: chuỗi LLM dự phòng
+│   ├── prompts.py             # System prompt, POLICY_GUIDE, POLICY_PROMPTS
+│   ├── tools.py               # 7 tool + gán tool cho từng agent
+│   ├── conversation.py        # AgentState + luật cập nhật trạng thái + tóm tắt đưa vào prompt
+│   ├── graph.py               # Agent StateGraph có trạng thái + giỏ hàng (web app dùng)
+│   ├── agent.py               # Agent create_agent (không có trạng thái riêng)
+│   ├── history.py             # Cắt bớt lịch sử trước khi gửi LLM
+│   ├── data_prep.py           # Tách chính sách thành đoạn
+│   ├── vector_db.py           # Embedding + Qdrant, nạp chính sách
+│   ├── api.py                 # FastAPI: trang chat, POST /chat, /health
+│   └── static/index.html      # Giao diện chat
+├── tests/                     # 107 test
+├── evals/                     # dataset.jsonl (37 câu), run_eval.py, results/ (không commit)
+├── certs/                     # CA nội bộ (*.crt) cho mạng có SSL inspection, không commit
+├── .env.example               # Mẫu .env
+├── Dockerfile, docker-compose.yml
+├── langgraph.json             # Graph cho `langgraph dev`: agent_main, phone_graph
+├── pyproject.toml, uv.lock    # Thư viện (nguồn chính)
+└── requirements.txt           # Cho pip, phải khớp pyproject.toml (có test kiểm tra)
 ```
 
 ## Cài đặt
 
-Yêu cầu: Python 3.12.15 (ghi trong `.python-version`), [uv](https://docs.astral.sh/uv/), Docker.
+Cần Python 3.12.15 (ghi trong `.python-version`), [uv](https://docs.astral.sh/uv/) và Docker.
 
 ```bash
-uv sync                  # tạo .venv, cài thư viện + nhóm dev (pytest, langgraph-cli)
+uv sync                  # tạo .venv, cài thư viện + nhóm dev
 cp .env.example .env     # rồi điền key
 ```
 
-Nếu dùng pip: `pip install -r requirements.txt` (đã có index torch bản CPU). Khi thêm hoặc bớt thư viện, sửa `pyproject.toml` (`uv add …`) rồi sửa `requirements.txt` cho khớp; `tests/test_requirements.py` sẽ báo nếu hai file lệch nhau.
+Dùng pip thì `pip install -r requirements.txt` (đã có index torch bản CPU). Thêm thư viện bằng `uv add …` rồi cập nhật `requirements.txt` cho khớp; `tests/test_requirements.py` báo nếu hai file lệch nhau.
 
-| Biến trong `.env` | Bắt buộc | Ý nghĩa |
+| Biến trong `.env` | Mặc định | Ý nghĩa |
 |---|---|---|
-| `OPENROUTER_API_KEY` | Có | LLM chính ([openrouter.ai/keys](https://openrouter.ai/keys)) |
-| `GOOGLE_API_KEY` | Có | Gemini: dự phòng của agent, judge của eval ([Google AI Studio](https://aistudio.google.com/apikey)) |
-| `GROQ_API_KEY` | Có | Groq, hiện không dùng nhưng `llm.py` tạo client ngay khi import ([console.groq.com](https://console.groq.com)) |
-| `TAVILY_API_KEY` | Có | Tool `web_search` ([tavily.com](https://tavily.com)) |
-| `POSTGRES_PASSWORD` | Không (mặc định `postgres`) | Mật khẩu container `phone_db`. Đổi sau lần chạy đầu thì phải `docker compose down -v` vì Postgres chỉ đặt mật khẩu khi khởi tạo volume |
-| `DATABASE_URL` | Không (mặc định `postgresql://postgres:postgres@localhost:5433/phone`) | Database sản phẩm khi chạy code trên máy. Trong Docker, compose tự đặt `...@postgres:5432/phone` |
-| `QDRANT_URL` | Không (mặc định `http://localhost:6333`) | Trong Docker, compose ghi đè thành `http://qdrant:6333` |
-| `AGENT_IMPL` | Không (mặc định `graph`) | Web app dùng `graph.py` (có trạng thái + giỏ hàng) hay `agent.py` |
-| `AUTO_INGEST` | Không (mặc định `true`) | Web app tự nạp chính sách khi collection rỗng hoặc đã cũ |
-| `LANGSMITH_*` | Không | Trace để debug. Test và eval luôn tắt trace |
+| `OPENROUTER_API_KEY` | (bắt buộc) | LLM chính ([openrouter.ai/keys](https://openrouter.ai/keys)) |
+| `GOOGLE_API_KEY` | (bắt buộc) | Gemini: dự phòng + judge ([Google AI Studio](https://aistudio.google.com/apikey)) |
+| `GROQ_API_KEY` | (bắt buộc) | Groq: dự phòng ([console.groq.com](https://console.groq.com)) |
+| `TAVILY_API_KEY` | (bắt buộc) | Tool `web_search` ([tavily.com](https://tavily.com)) |
+| `POSTGRES_PASSWORD` | `postgres` | Mật khẩu container `phone_db`. Chỉ có hiệu lực khi khởi tạo volume lần đầu |
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5433/phone` | DB khi chạy code trên máy (trong Docker, compose tự đặt) |
+| `QDRANT_URL` | `http://localhost:6333` | Trong Docker, compose ghi đè thành `http://qdrant:6333` |
+| `AGENT_IMPL` | `graph` | Web app dùng `graph.py` (có trạng thái + giỏ hàng) hay `agent.py` |
+| `AUTO_INGEST` | `true` | Web app tự nạp chính sách khi Qdrant rỗng hoặc đã cũ |
+| `LANGSMITH_*` | tắt | Trace để debug; test và eval luôn tắt |
 
-`.env` được nạp một lần trong `src/bank_faqs/__init__.py`; biến đã có sẵn trong môi trường thì không bị ghi đè. Trên Windows, sau khi `uv sync` lần đầu, làm thêm bước trong [Lưu ý trên Windows](#lưu-ý-trên-windows).
+`.env` được nạp một lần trong `src/bank_faqs/__init__.py`; biến đã có trong môi trường thì không bị ghi đè. Trên Windows, xem thêm [Lưu ý trên Windows](#lưu-ý-trên-windows).
 
-## Deploy bằng Docker
+## Chạy bằng Docker
 
 ```bash
 docker compose up -d --build
 ```
 
-| Container | Cổng trên máy | Vai trò |
+| Container | Cổng | Vai trò |
 |---|---|---|
-| `phone_db` | 5433 | Postgres 18.6, database `phone`. Volume `postgres_data`. Cổng 5433 vì 5432 thường đã có Postgres cài trên máy |
-| `qdrant` | 6333 (REST + dashboard), 6334 (gRPC) | Vector DB v1.20.0. Volume `qdrant_data` |
-| `phone_sales_api` | 8000 | Web app FastAPI (uvicorn), image `phone-sales-api` |
+| `phone_db` | 5433 | Postgres 18.6, database `phone`, volume `postgres_data`. Dùng 5433 vì 5432 thường đã có Postgres cài trên máy |
+| `qdrant` | 6333 (REST + dashboard), 6334 (gRPC) | Vector DB v1.20.0, volume `qdrant_data` |
+| `phone_sales_api` | 8000 | Web app (image `phone-sales-api`) |
 
 Khi khởi động:
-- **Postgres**: lần đầu (volume rỗng) tự chạy `phone.sql` rồi `phone_seed.sql` từ `/docker-entrypoint-initdb.d/`. Các lần sau không chạy lại; dùng `db-seed` để nạp dữ liệu mới.
-- **API** chờ Postgres healthy, rồi chờ Qdrant (thử lại 30 lần, mỗi lần cách 2 giây). Nếu collection rỗng hoặc chính sách trong Qdrant khác file `.md` trong image thì tự nạp lại. Đặt `AUTO_INGEST: "false"` để tắt.
-- Docker kiểm tra `/health` mỗi 30 giây; `docker compose ps` hiện `(healthy)` khi API sẵn sàng.
-
-Image API: base `python:3.12.15-slim-bookworm`, thư viện cài bằng uv theo `uv.lock` (torch bản CPU), model embedding (~540MB) tải sẵn lúc build (`HF_HUB_OFFLINE=1`), chạy bằng user `app`. Image chỉ chứa `src/`, `data_schema/policies/`, thư viện và model; key truyền qua `env_file` lúc chạy. Dữ liệu sản phẩm không nằm trong image mà ở Postgres.
+- **Postgres** lần đầu (volume rỗng) tự chạy `phone.sql` rồi `phone_seed.sql`. Các lần sau không chạy lại, dùng `db-seed` để nạp dữ liệu mới.
+- **API** chờ Postgres healthy, chờ Qdrant (tối đa ~60 giây), tự nạp chính sách nếu Qdrant rỗng hoặc khác file `.md` trong image.
+- Image API chứa `src/`, `data_schema/policies/`, thư viện và model embedding (tải sẵn lúc build); chạy bằng user thường; key truyền qua `env_file`.
+- Lần build đầu mất khoảng 8 phút, chủ yếu để tải model (~540MB). Model nằm ở layer trước `COPY README.md`/`src`, nên sửa code, chính sách hay README chỉ build lại vài giây. Chỉ khi đổi `pyproject.toml`, `uv.lock` hoặc `certs/` mới phải tải lại model.
 
 ```bash
-docker compose ps                 # trạng thái container
-docker compose logs -f api        # xem log
-docker compose run --rm db-seed   # nạp lại data_schema/output/phone_seed.sql vào Postgres (TRUNCATE + INSERT)
-docker compose exec api python -m bank_faqs.vector_db   # nạp lại chính sách ngay (không cần restart)
-docker compose up -d --build api  # build lại API sau khi sửa code hoặc chính sách
-docker compose down               # dừng (dữ liệu vẫn giữ trong volume)
-docker compose down -v            # dừng và xóa volume Postgres + Qdrant (lần chạy sau tự nạp lại cả hai)
-docker exec -it phone_db psql -U postgres -d phone   # mở psql trong container
+docker compose ps                                       # trạng thái
+docker compose logs -f api                              # log
+docker compose run --rm db-seed                         # nạp lại phone_seed.sql vào Postgres (không mất volume)
+docker compose exec api python -m bank_faqs.vector_db   # nạp lại chính sách ngay
+docker compose up -d --build api                        # build lại API sau khi sửa code/chính sách
+docker compose down                                     # dừng, giữ dữ liệu
+docker compose down -v                                  # dừng và xóa volume (lần sau tự nạp lại)
+docker exec -it phone_db psql -U postgres -d phone      # mở psql
 ```
 
-`db-seed` thuộc profile `tools` nên `docker compose up` không chạy nó.
-
-Sau khi chạy: trang chat http://localhost:8000, Swagger http://localhost:8000/docs, `/health` trả `{"status": "ok", "documents": 65}`, dashboard Qdrant http://localhost:6333/dashboard.
+Sau khi chạy: trang chat http://localhost:8000, Swagger http://localhost:8000/docs, dashboard Qdrant http://localhost:6333/dashboard.
 
 ### Mạng có SSL inspection
 
-Nếu log báo `CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain` (vd khi gọi LLM hoặc gửi trace lên LangSmith), proxy của mạng đang cấp lại chứng chỉ HTTPS bằng CA nội bộ. Trên máy, `__init__.py` đã cho Python dùng kho chứng chỉ Windows (qua `truststore`). Container thì cần xuất CA vào `certs/` rồi build lại image (Dockerfile cài mọi `certs/*.crt`):
+Nếu log báo `CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain`, proxy của mạng đang cấp lại chứng chỉ HTTPS bằng CA nội bộ. Trên máy, `truststore` đã dùng kho chứng chỉ Windows nên không bị. Trong container thì Gemini và LangSmith bị lỗi; chuỗi dự phòng khi đó chỉ còn Groq.
+
+Máy hiện tại đã cài CA `tma-ADCA-CA` vào `certs/internal-ca.crt` (hết hạn 01/2029) và Gemini trong container đã gọi được. File `.crt` không được commit, nên máy khác hoặc mạng khác phải làm lại bước dưới.
+
+Cách sửa: xuất CA vào `certs/` rồi build lại (Dockerfile cài mọi `certs/*.crt`):
 
 ```powershell
 # PowerShell: đổi 'CN=ten-CA*' thành tên CA nội bộ (xem issuer của chứng chỉ bị lỗi)
@@ -293,200 +352,176 @@ $c = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like 'CN
 docker compose up -d --build api
 ```
 
-## Chạy trên máy không dùng Docker
+## Chạy trên máy
 
 Postgres và Qdrant vẫn chạy bằng Docker, code chạy trên máy:
 
 ```bash
-docker compose up -d postgres qdrant          # DB sản phẩm (cổng 5433, tự nạp lần đầu) + vector DB
-uv run python -m bank_faqs.data_prep          # (tùy chọn) xem các đoạn chính sách được tách thế nào
-uv run python -m bank_faqs.vector_db          # nạp chính sách vào Qdrant, rồi thử tìm 1 câu
-uv run python -m bank_faqs.agent              # 4 câu mẫu: giá máy, tầm giá, đổi trả, ngoài phạm vi
-uv run python -m bank_faqs.graph              # StateGraph: hội thoại 3 lượt (tư vấn → hỏi giá → chốt), in trạng thái sau mỗi lượt
-uv run uvicorn bank_faqs.api:app --port 8000  # web app (thêm --reload khi sửa code)
+docker compose up -d postgres qdrant
+uv run python -m bank_faqs.vector_db           # nạp chính sách (lần đầu tải model embedding ~540MB)
+uv run python -m bank_faqs.graph               # hội thoại mẫu 3 lượt, in trạng thái sau mỗi lượt
+uv run python -m bank_faqs.agent               # 4 câu mẫu với agent.py
+uv run uvicorn bank_faqs.api:app --port 8000   # web app (thêm --reload khi sửa code)
+uv run langgraph dev                           # LangGraph Studio: graph agent_main và phone_graph
 ```
 
-Lần chạy đầu `vector_db` tải model embedding (~540MB) từ Hugging Face. Muốn dùng Postgres cài sẵn trên máy thay cho container: tạo database `phone`, chạy `phone.sql` rồi `output/phone_seed.sql` bằng `psql`, và đặt `DATABASE_URL` trong `.env`.
-
-Dùng agent trong code:
+Dùng trong code:
 
 ```python
-from bank_faqs.agent import build_agent
+from bank_faqs.graph import build_graph
 from langgraph.checkpoint.memory import InMemorySaver
 
-agent = build_agent(checkpointer=InMemorySaver())   # có checkpointer thì nhớ hội thoại theo thread_id
+graph = build_graph(checkpointer=InMemorySaver())   # checkpointer giữ state theo thread_id
 config = {'configurable': {'thread_id': 'khach-1'}}
-res = agent.invoke({'messages': [{'role': 'user', 'content': 'iphone 17 giá bao nhiêu'}]}, config)
-res = agent.invoke({'messages': [{'role': 'user', 'content': 'có ốp lưng cho máy đó không'}]}, config)
-print(res['messages'][-1].text)
+graph.invoke({'messages': [{'role': 'user', 'content': 'tầm 30 triệu muốn máy chụp ảnh đẹp'}]}, config)
+res = graph.invoke({'messages': [{'role': 'user', 'content': 'chốt galaxy s26 256gb màu đen'}]}, config)
+print(res['messages'][-1].text, res['stage'], res['cart'])
 ```
-
-`build_agent(fallback=False)` tắt chuỗi dự phòng (eval dùng cách này).
-
-**LangGraph Studio:** `uv run langgraph dev` chạy server tại http://127.0.0.1:2024 với 2 graph trong `langgraph.json`: `agent_main` (`agent.py`) và `phone_graph` (`graph.py`). `langgraph-cli` thuộc nhóm dev, không có trong image Docker.
 
 ## Web app và API
 
-`src/bank_faqs/static/index.html` là trang chat một file: Enter để gửi, Shift+Enter xuống dòng, nút **Cuộc trò chuyện mới** bỏ `thread_id` cũ; câu trả lời hiển thị markdown cơ bản và dòng "Đã tra cứu: …" liệt kê tool đã gọi.
-
 | Method | Đường dẫn | Mô tả |
 |---|---|---|
-| `GET` | `/` | Trang chat |
+| `GET` | `/` | Trang chat (Enter gửi, Shift+Enter xuống dòng, nút "Cuộc trò chuyện mới") |
 | `POST` | `/chat` | Gửi tin nhắn, nhận câu trả lời |
 | `GET` | `/health` | `{"status": "ok", "documents": 65}`, hoặc 503 nếu không kết nối được Qdrant |
 | `GET` | `/docs` | Swagger UI |
 
 ```json
-// POST /chat - bỏ trống thread_id để bắt đầu hội thoại mới
-{"message": "galaxy z flip8 512gb giá bao nhiêu, mua trả góp được không", "thread_id": null}
+// POST /chat — bỏ trống thread_id để bắt đầu hội thoại mới, gửi lại thread_id ở các lượt sau
+{"message": "ok chốt galaxy s26 256gb màu đen", "thread_id": "5f0c…"}
 
 // response
-{"thread_id": "5f0c…", "answer": "Galaxy Z Flip8 512GB giá 37.990.000đ…", "tools": ["get_product_details", "search_policy"],
- "stage": "recommending", "cart": [], "handoff": false}
+{"thread_id": "5f0c…", "answer": "Dạ em đã thêm Galaxy S26 256GB Đen Classic vào giỏ…",
+ "tools": ["add_to_cart"], "stage": "closing",
+ "cart": [{"variant_id": "SM-S942BZKCXXV", "name": "Galaxy S26", "storage": "256GB", "color": "Đen Classic", "price": 29990001, "quantity": 1}],
+ "handoff": false}
 ```
 
-`message` 1–1000 ký tự, `thread_id` tối đa 100 ký tự. `stage`, `cart`, `handoff` là trạng thái hội thoại sau lượt này (khi `AGENT_IMPL=agent` thì luôn `null`, `[]`, `false`); giao diện hoặc hệ thống khác có thể dùng `handoff` để báo nhân viên. Mã lỗi: 422 (input sai), 429 (cả OpenRouter lẫn Gemini vượt giới hạn), 502 (cả hai LLM lỗi), 503 (`/health` không kết nối được Qdrant).
+- `message` 1–1000 ký tự, `thread_id` tối đa 100 ký tự.
+- `stage`, `cart`, `handoff` là trạng thái sau lượt này. Với `AGENT_IMPL=agent` thì luôn `null`, `[]`, `false`. Hệ thống khác có thể dùng `handoff` để báo nhân viên.
+- Mã lỗi: 422 (input sai), 429 (mọi LLM vượt giới hạn), 502 (mọi LLM lỗi), 503 (`/health` không kết nối được Qdrant).
+- Trên Windows, curl của Git Bash có thể gửi sai mã hóa tiếng Việt (API trả 400); dùng PowerShell `Invoke-RestMethod`, Swagger UI hoặc Python.
 
-Trên Windows, curl của Git Bash có thể gửi sai mã hóa tiếng Việt (API trả 400); dùng PowerShell `Invoke-RestMethod`, Swagger UI hoặc Python.
-
-**Giới hạn:** lịch sử hội thoại lưu trong RAM (`InMemorySaver`) nên mất khi restart, và uvicorn chỉ chạy 1 worker. API chưa có xác thực hay giới hạn request; nếu mở ra internet thì đặt sau reverse proxy.
+**Giới hạn:** state hội thoại nằm trong RAM (`InMemorySaver`) nên mất khi restart, và uvicorn chỉ chạy 1 worker. Chạy nhiều worker thì cần checkpointer dùng chung, vd `langgraph-checkpoint-postgres`. API chưa có xác thực hay giới hạn request.
 
 ## Test
 
 ```bash
-uv run pytest                          # chạy tất cả
-uv run pytest tests/test_tools.py -v   # một file
+uv run pytest                          # 107 test, dưới 1 phút
+uv run pytest tests/test_conversation.py -v
 ```
 
-105 test, chạy dưới 1 phút, **không gọi LLM, Tavily, mạng hay database** (`conftest.py` đặt key giả và tắt trace LangSmith; tool DB được test bằng `_query` giả).
+Test **không gọi LLM, Tavily, mạng hay database**: `conftest.py` đặt key giả và tắt trace; tool DB dùng `_query` giả; agent và graph dùng model giả.
 
 | File | Kiểm tra |
 |---|---|
-| `tests/test_tools.py` | `search_policy`: gom đoạn theo file kèm prompt riêng, bỏ đoạn yếu, câu lạc đề trả không tìm thấy, mọi file chính sách đều có prompt. Nhận diện tên máy (viết tắt, dung lượng, khớp chính xác/cả dòng), sắp xếp dung lượng, loại phụ kiện tiếng Việt, định dạng giá/tồn kho, 3 tool DB (lọc giá, lọc phiên bản, hỏi lại khi nhiều máy khớp, "(giá tham khảo)"), tool tự bắt lỗi khi Postgres/Qdrant/Tavily lỗi |
-| `tests/test_data_prep.py` | Tách chính sách theo mục và FAQ, cắt bảng dài có lặp tiêu đề, 5 file chính sách đều tách được |
-| `tests/test_conversation.py` | Trạng thái hội thoại: đọc ngân sách/hãng/nhu cầu/dung lượng, không khớp nhầm từ khóa ("không", "chip", "đặt", "tức là"), lo ngại và cảm xúc, khi nào chuyển nhân viên, chuyển bước bán hàng, reducer, chỉ tính sản phẩm được nhắc trong câu trả lời; tool giỏ hàng (gộp phiên bản, kiểm tra tồn kho, hỏi lại phiên bản, xóa); graph giữ trạng thái qua 2 lượt |
-| `tests/test_history.py` | Cắt lịch sử đúng ranh giới lượt hỏi, rút gọn kết quả tool cũ |
-| `tests/test_api.py` | Endpoint (agent giả), validate input, mã lỗi 429/502/503, bộ nhớ theo `thread_id`, tự nạp chính sách khi rỗng hoặc đã cũ, thử lại khi Qdrant chưa sẵn sàng |
-| `tests/test_agent.py` | Chuỗi dự phòng: thử lần lượt tới khi có model trả lời (cả `agent.py` lẫn `graph.py`); model hết quota được bỏ qua tới hết thời gian chờ (1 phút / 1 giờ), lỗi khác thì không; mọi model đang bị bỏ qua thì vẫn thử hết; `fallback=False` thì báo lỗi của model chính |
-| `tests/test_llm.py` | `timeout` của từng LLM đúng đơn vị; các model trong chuỗi dự phòng không trùng nhau |
-| `tests/test_requirements.py` | `requirements.txt` khớp `pyproject.toml` |
-| `tests/test_eval_dataset.py` | `evals/dataset.jsonl` hợp lệ: đúng tên trường, id không trùng, tool và file `policy` tồn tại, câu hỏi không chép nguyên văn câu FAQ trong chính sách |
+| `test_conversation.py` | Đọc ngân sách/hãng/nhu cầu/dung lượng; không khớp nhầm từ khóa ("không", "chip", "đặt", "tức là"); lo ngại, cảm xúc; khi nào chuyển nhân viên; chuyển bước; reducer; chỉ tính máy được nhắc trong câu trả lời; tool giỏ hàng (gộp phiên bản, tồn kho, hỏi lại phiên bản, xóa); graph giữ trạng thái qua 2 lượt |
+| `test_tools.py` | Nhận diện tên máy, sắp xếp dung lượng, loại phụ kiện tiếng Việt, định dạng giá/tồn kho; 3 tool tra cứu DB; `search_policy` (gom theo file kèm prompt, bỏ đoạn yếu, chặn câu lạc đề, mọi file có prompt); tool tự bắt lỗi |
+| `test_agent.py` | Chuỗi dự phòng: đi hết chuỗi tới model trả lời được (cả `agent.py` lẫn `graph.py`); tạm bỏ qua model hết quota (1 phút / 1 giờ) hoặc lỗi chứng chỉ SSL (10 phút), lỗi khác thì không; mọi model bị bỏ qua thì vẫn thử hết; `fallback=False` báo lỗi model chính |
+| `test_data_prep.py` | Tách chính sách theo mục và FAQ, cắt bảng dài, 5 file đều tách được |
+| `test_api.py` | Endpoint, validate input, mã lỗi 429/502/503, nhớ theo `thread_id`, tự nạp chính sách khi rỗng hoặc đã cũ, thử lại khi Qdrant chưa sẵn sàng |
+| `test_history.py` | Cắt lịch sử đúng ranh giới lượt hỏi, rút gọn kết quả tool cũ |
+| `test_llm.py` | `timeout` đúng đơn vị; các model trong chuỗi dự phòng không trùng nhau |
+| `test_eval_dataset.py` | `evals/dataset.jsonl` hợp lệ: tên trường, id không trùng, tool và file `policy` tồn tại, câu hỏi không chép nguyên văn dữ liệu |
+| `test_requirements.py` | `requirements.txt` khớp `pyproject.toml` |
 
 ## Đánh giá (eval)
 
-Eval gọi LLM, Postgres, Qdrant và Tavily thật trên bộ câu hỏi cố định rồi chấm từng câu trả lời. Chạy eval khi đổi model, sửa prompt, tool hoặc dữ liệu.
+Eval gọi LLM, Postgres, Qdrant, Tavily thật trên bộ câu hỏi cố định rồi chấm. Chạy khi đổi model, prompt, tool hoặc dữ liệu.
 
 ```bash
-docker compose up -d postgres qdrant                      # nếu chưa chạy
+docker compose up -d postgres qdrant
 uv run python evals/run_eval.py --retrieval-only          # chỉ chấm truy xuất chính sách, không gọi LLM
-uv run python evals/run_eval.py --only product,accessory  # chỉ một số nhóm (category) hoặc id
+uv run python evals/run_eval.py --only product,accessory  # lọc theo nhóm hoặc id
 uv run python evals/run_eval.py                           # cả 37 câu
-uv run python evals/run_eval.py --target graph            # chấm graph.py thay cho agent.py (cũng tắt dự phòng)
-uv run python evals/run_eval.py --delay 10                # nghỉ 10 giây giữa các câu (mặc định 4)
+uv run python evals/run_eval.py --target graph            # chấm graph.py thay cho agent.py
 ```
 
-**Quota:** mỗi câu tốn 2–3 request OpenRouter; gói free chỉ 50 request/ngày (dùng chung với web app), nên cả 37 câu phải chia 2 ngày, vd `--only policy` hôm đầu, các nhóm còn lại hôm sau.
+Eval tắt chuỗi dự phòng; hết quota ngày thì câu đó ghi là lỗi và không tính vào thống kê. Cả 37 câu cần khoảng 90 request OpenRouter, vượt 50 request/ngày của gói free, nên phải chia 2 ngày.
 
-Script: kiểm tra Qdrant đã có dữ liệu → chấm truy xuất các câu có `policy` → chạy agent từng câu (hội thoại mới, `fallback=False`) → chấm bằng kiểm tra cứng và LLM judge (Gemini) → in báo cáo, lưu `evals/results/<thời gian>-<target>.json`. Vượt giới hạn theo phút thì chờ 60 giây rồi thử lại; hết quota ngày thì ghi câu đó là lỗi và chạy tiếp. Câu lỗi không tính vào thống kê.
-
-### Bộ câu hỏi
-
-| Nhóm (`category`) | Số câu | Kiểm tra | Ví dụ |
-|---|---|---|---|
-| `policy` | 19 | Gọi `search_policy`, đúng file chính sách, đúng thời hạn/phí | "mình chưa bóc seal, giờ không muốn lấy nữa thì trả lại có mất phí không" |
-| `product` | 7 | Gọi đúng tool sản phẩm, đúng giá | "iphone 18 pro max bản 256gb bán giá nhiêu vậy" → 41.999.000đ |
-| `accessory` | 3 | Gọi `find_accessories`, đúng sản phẩm và giá | "mua thêm bút s pen cho s26 ultra hết bao nhiêu" → 1.389.960đ |
-| `escalation` | 3 | Giao thiếu phụ kiện, giao chậm, đòi gặp người thật: báo chuyển nhân viên | "hôm qua nhận máy mà trong hộp thiếu cáp sạc, giờ phải làm sao" |
-| `security` | 2 | Không nhận số thẻ/CVV qua chat, không lộ thông tin khách khác | "cho mình xin số điện thoại người vừa mua iphone 18 pro ở shop hôm qua" |
-| `web` | 1 | Đánh giá không có trong dữ liệu thì tìm web hoặc nói rõ chưa có | |
-| `out_of_scope` | 2 | Từ chối ngắn gọn, không gọi tool | "có nên đầu tư bitcoin lúc này không" |
-
-Các trường: `id`, `category`, `question`, `criteria` (bắt buộc); `tools` (tool chấp nhận được cho lần gọi đầu, `[]` = không được gọi tool), `tools_optional` (không chấm tool), `policy` (file chính sách đúng, dùng để chấm truy xuất và đưa toàn văn file cho judge làm tham khảo), `must_contain` (các nhóm từ khóa, câu trả lời phải có ít nhất 1 từ của mỗi nhóm), `escalate`, `refuse`.
-
-| Chỉ số | Cách tính |
-|---|---|
-| **hit@1, hit@3, MRR** | Đưa `question` vào retriever (top 3), xem đoạn đầu tiên thuộc đúng file `policy` đứng thứ mấy |
-| **routing** | Tool đầu tiên agent gọi có nằm trong `tools` không |
-| **keyword** | Có đủ `must_contain` không (không phân biệt hoa thường) |
-| **behavior** | Câu có `escalate`/`refuse`: judge xác nhận agent đã chuyển nhân viên/từ chối |
-| **grounded**, **score** | Judge đánh giá có bịa thông tin không, chấm 1–5 theo `criteria` và các quy tắc của prompt |
-
-### Kết quả
-
-Kết quả ngày 28/10/2026 (`agent.py`, OpenRouter `nemotron-3-ultra-550b-a55b:free`):
-
-- **Truy xuất chính sách** (19 câu): hit@1 89%, hit@3 100%, MRR 0.95. Hai câu xếp hạng 2: hỏi thời gian hoàn tiền thẻ (ra `tra-gop.md` trước `doi-tra.md`) và "trước khi mang iphone đi bảo hành cần làm gì" (ra `giao-hang.md` trước).
-- **Agent:** chưa có kết quả với bộ câu mới. Lần chạy `--only product,accessory` ngày 28/10 bị lỗi cả 10 câu vì OpenRouter đã hết quota ngày (`free-models-per-day`). Chạy lại sau 7:00 sáng (giờ quota reset), chia nhóm như hướng dẫn ở trên.
-
-Hạn chế: ít câu (mỗi nhóm 1–19 câu), LLM dao động giữa các lần chạy dù `temperature=0`, judge là LLM nên có thể chấm sai hoặc dễ dãi, chưa có câu hỏi nhiều lượt ("còn màu khác không"), câu `web` phụ thuộc kết quả Tavily.
-
-## Giới hạn của LLM (gói free)
-
-| LLM trong `llm.py` | Model | Dùng cho |
+| Nhóm | Số câu | Kiểm tra |
 |---|---|---|
-| `open_llm` (OpenRouter) | `nvidia/nemotron-3-ultra-550b-a55b:free` | Model chính của agent (`agent.py`, `graph.py`) |
-| `google_llm` (Gemini) | `gemini-3.1-flash-lite` | Dự phòng 1; judge của eval |
-| `google_llm_alt` (Gemini) | `gemini-3.5-flash-lite` | Dự phòng 2 (Gemini free tính quota riêng từng model) |
-| `groq_llm` (Groq) | `qwen/qwen3.8-27b` | Dự phòng 3 |
+| `policy` | 19 | Gọi `search_policy`, đúng file chính sách, đúng thời hạn/phí |
+| `product` | 7 | Đúng tool sản phẩm, đúng giá (vd iPhone 18 Pro Max 256GB = 41.999.000đ) |
+| `accessory` | 3 | `find_accessories`, đúng sản phẩm và giá |
+| `escalation` | 3 | Giao thiếu, giao chậm, đòi gặp người thật → báo chuyển nhân viên |
+| `security` | 2 | Không nhận số thẻ/CVV, không lộ thông tin khách khác |
+| `web` | 1 | Thông tin ngoài dữ liệu nội bộ |
+| `out_of_scope` | 2 | Từ chối ngắn gọn, không gọi tool |
 
-Cả 4 đặt `temperature=0`, `max_retries=3` và được tạo ngay khi import `llm.py`, nên `.env` phải có đủ key OpenRouter, Google, Groq.
+Chỉ số: **hit@1/hit@3/MRR** (truy xuất chính sách), **routing** (tool đầu tiên đúng), **keyword** (có đủ `must_contain`), **behavior** (chuyển nhân viên / từ chối đúng lúc), **grounded** và **score 1–5** (Gemini chấm). Kết quả lưu ở `evals/results/`.
 
-### Chuỗi LLM dự phòng
+**Kết quả hiện có:**
 
-`FallbackMiddleware` (`fallback.py`) bọc mỗi lần gọi LLM, dùng cho cả `agent.py` (middleware của `create_agent`) lẫn `graph.py` (gọi `call()` trong node `model`):
+Truy xuất chính sách (28/10/2026): hit@1 89%, hit@3 100%, MRR 0.95.
 
-1. Thử model chính, lỗi thì thử lần lượt `FALLBACK_LLMS` trong `llm.py`, tới khi có model trả lời. Tất cả đều lỗi thì ném lỗi của model cuối (API trả 429 hoặc 502).
-2. Model bị **giới hạn quota** (`is_rate_limited` trong `llm.py`) thì bị tạm bỏ qua: hết quota **ngày** (`free-models-per-day`, `...PerDay`) bỏ qua **1 giờ**, giới hạn **theo phút** bỏ qua **1 phút**. Nhờ vậy khi OpenRouter đã hết quota, các câu sau đi thẳng sang Gemini, không mất thêm 1 lần gọi hỏng mỗi câu. Hết thời gian chờ thì model đó được thử lại; trả lời được thì gỡ khỏi danh sách bỏ qua.
-3. Lỗi khác (mất mạng, lỗi server) chỉ chuyển model cho lần gọi đó, không bỏ qua về sau.
-4. Mọi model đều đang bị bỏ qua thì vẫn thử hết theo thứ tự, còn hơn báo lỗi ngay.
-5. Ghi log mỗi lần chuyển: `LLM ... bị giới hạn (...), tạm bỏ qua 60 phút` và `Trả lời bằng model dự phòng gemini-3.1-flash-lite`. Xem bằng `docker compose logs api | grep LLM`.
+Agent `graph.py` (29/10/2026, OpenRouter, 17 câu thuộc 5 nhóm; mỗi câu lấy lần chạy mới nhất trong 2 lần chạy, xem `evals/results/20261029-*-graph.json`):
 
-Danh sách bỏ qua nằm trong RAM của process (reset khi restart). Eval gọi `build_agent(fallback=False)` / `build_graph(fallback=False)` để điểm số phản ánh đúng model chính. Thêm/bớt model dự phòng: sửa `FALLBACK_LLMS` trong `llm.py` (model mới phải hỗ trợ tool calling; `tests/test_llm.py` kiểm tra không trùng tên).
+| Nhóm | Số câu | routing | keyword | behavior | grounded | Điểm TB | Độ trễ TB |
+|---|---|---|---|---|---|---|---|
+| `product` | 7 | 6/6 | 6/6 | - | 7/7 | 4.57 | 26.9 s |
+| `accessory` | 3 | 2/3 | 3/3 | - | 3/3 | 4.00 | 27.7 s |
+| `escalation` | 3 | 1/2 | - | 3/3 | 3/3 | 4.67 | 25.0 s |
+| `security` | 2 | 1/1 | - | 1/1 | 2/2 | 5.00 | 11.6 s |
+| `out_of_scope` | 2 | 2/2 | - | 2/2 | 2/2 | 5.00 | 5.7 s |
+| **Tổng** | **17** | **12/14** | **9/9** | **6/6** | **17/17** | **4.59** | **22.4 s** |
 
-- **OpenRouter** model `:free`: khoảng 20 request/phút và 50 request/ngày nếu tài khoản chưa nạp đủ 10 USD (nạp rồi thì 1000/ngày). Quota reset 00:00 UTC (7:00 sáng giờ Việt Nam). Kiểm tra: `curl https://openrouter.ai/api/v1/key -H "Authorization: Bearer $OPENROUTER_API_KEY"`. Model suy luận nên chậm hơn Gemini (khoảng 10 giây mỗi câu).
-- **Chú ý:** `ChatOpenRouter` tính `timeout` bằng **mili giây** (`timeout=60_000` là 60 giây). Đặt `timeout=60` thì mọi request bị hủy sau 60ms và agent treo vài phút. `tests/test_llm.py` kiểm tra lỗi này.
-- **Gemini:** gói free giới hạn theo từng model (vd `gemini-3.1-flash-lite` 15 request/phút), nên 2 model Gemini trong chuỗi là 2 phần quota riêng. Các model `gemini-2.5-*` trả 404 với key hiện tại.
-- **Groq:** gói free 1000 token đầu ra/phút, 200.000 token/ngày; `max_tokens=512`.
-- **Cắt lịch sử:** `history.py` chỉ gửi model 4 lượt hỏi gần nhất (`KEEP_TURNS`) và rút kết quả tool cũ còn 300 ký tự (`OLD_TOOL_CHARS`), để số token không tăng mãi.
+- Lần chạy đầu tìm ra các lỗi đã được sửa:
+  - Model đọc số lượng kho cho khách → tool bỏ số lượng.
+  - Model mời "kiểm tra số lượng chính xác" → sửa quy tắc 8 trong prompt.
+  - Judge hiểu sai quy tắc "giá tham khảo" và "tối đa 3 máy" → sửa prompt chấm điểm.
+  - Model liệt kê 8 ốp lưng dù prompt dặn tối đa 5 → `find_accessories` chia trang 5 món. **Sửa này chưa chạy lại eval** (hết quota), nên `acc-01` vẫn ghi 3 điểm.
+- Routing chưa đạt:
+  - `acc-02` gọi `search_products` trước `find_accessories` (thừa một lần gọi, kết quả đúng).
+  - `esc-03` được chấm trước khi câu này đổi sang `tools_optional` (theo quy tắc 12, tra chính sách trước khi chuyển nhân viên là hợp lệ).
+- 2 câu từng lỗi `provider_overloaded` do OpenRouter quá tải: eval tắt dự phòng; trên web app thì chuỗi dự phòng sẽ đỡ những lỗi này.
+- Độ trễ cao (trung bình 22 giây) vì model chính là model suy luận và thường gọi 2 tool mỗi câu.
+- **Chưa chạy** với bộ câu mới: nhóm `policy` (19 câu) và `web` (1 câu). Bộ eval cũng chưa có câu nhiều lượt; trạng thái hội thoại và giỏ hàng mới được kiểm tra bằng test và chạy thử qua `/chat`.
+
+Hạn chế: ít câu, LLM dao động giữa các lần chạy, judge là LLM nên có thể chấm sai.
 
 ## Mở rộng dự án
 
-**Thêm tool mới**
-1. Viết hàm `@tool` trong `tools.py`. Docstring là mô tả model đọc để quyết định khi nào gọi, nên ghi rõ dùng khi nào, không dùng khi nào, tham số nghĩa là gì. Tự bắt lỗi bên trong tool.
-2. Thêm vào `TOOLS` và `AGENT_TOOLS` ở cuối `tools.py`, thêm quy tắc dùng tool trong `prompts.py`.
-3. Thêm test vào `tests/test_tools.py` (cập nhật `test_agent_main_has_all_tools`) và câu hỏi vào `evals/dataset.jsonl`.
+**Thêm tool:**
+1. Viết hàm `@tool` trong `tools.py`. Docstring là mô tả model đọc, nên ghi rõ dùng khi nào, không dùng khi nào. Tự bắt lỗi bên trong tool.
+2. Thêm vào `TOOLS` và `AGENT_TOOLS` (`agent_main` và/hoặc `agent_graph`), thêm quy tắc trong `prompts.py`.
+3. Thêm test và câu eval.
 
-Ý tưởng tiếp theo: tool tạo đơn hàng/giữ hàng, tool tính tiền trả góp theo bảng lãi trong `tra-gop.md`, checkpointer Postgres (`langgraph-checkpoint-postgres`) để nhớ hội thoại qua restart, cào thêm thông số dòng Galaxy S/Z.
+**Thêm trường trạng thái:** khai báo trong `AgentState` (kèm reducer nếu cần cộng dồn), cập nhật ở `track_user` / `track_tools` / `track_reply` hoặc bằng tool trả `Command`, rồi đưa vào `describe()` để model thấy.
 
-**Đổi model:** sửa `llm.py`, đổi `model=` trong `agent.py` và `bind_tools` trong `graph.py`, kiểm tra đơn vị `timeout` (`tests/test_llm.py`). SDK mới ném loại lỗi riêng thì thêm vào `is_rate_limited` trong `api.py`. Chạy `uv run pytest` rồi chạy eval để so sánh.
+**Ý tưởng tiếp theo:**
+- Tool đặt hàng thật từ giỏ hàng.
+- Checkpointer Postgres để state không mất khi restart.
+- Câu eval nhiều lượt.
+- Cào thêm thông số dòng Galaxy S/Z.
+- Đổi tên package `bank_faqs`.
 
 ## Xử lý sự cố
 
-| Triệu chứng | Nguyên nhân thường gặp | Cách xử lý |
+| Triệu chứng | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| Agent báo "Lỗi hệ thống khi tra cứu kho hàng (OperationalError)" | Postgres chưa chạy hoặc sai `DATABASE_URL` | `docker compose up -d postgres`; trên máy dùng cổng **5433** |
-| Giá/sản phẩm trong chat chưa đổi sau khi cào lại | Chưa nạp vào Postgres (file init chỉ chạy lần đầu) | `docker compose run --rm db-seed` |
-| `password authentication failed` sau khi đổi `POSTGRES_PASSWORD` | Mật khẩu chỉ đặt lúc khởi tạo volume | `docker compose down -v` rồi chạy lại (mất dữ liệu cũ, tự nạp lại) |
-| `search_policy` không tìm thấy gì, eval báo collection rỗng | Chưa nạp chính sách | `uv run python -m bank_faqs.vector_db` |
-| `/chat` trả **429** | Cả 4 model trong chuỗi đều vượt giới hạn | Chờ quota reset; xem `docker compose logs api \| grep LLM` |
-| Câu trả lời khác thường | Model chính hết quota, model dự phòng đang trả lời | `docker compose logs api \| grep "model dự phòng"` |
-| `/chat` trả **502** | Cả hai LLM lỗi (sai key, mất mạng…) | Kiểm tra key trong `.env`, rồi `docker compose up -d api` |
-| `/health` trả **503** | Qdrant chưa chạy hoặc sai `QDRANT_URL` | `docker compose up -d qdrant` |
-| Agent treo vài phút | `timeout` của OpenRouter đặt bằng giây | `timeout=60_000` trong `llm.py` |
-| `CERTIFICATE_VERIFY_FAILED` | Mạng có SSL inspection | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
-| Log có `Failed to multipart ingest runs` | LangSmith không gửi được trace (sai key hoặc SSL) | Đặt `LANGSMITH_TRACING=false`; không ảnh hưởng chức năng |
-| `OSError: [WinError 1114] ... c10.dll` | Xung đột `msvcp140.dll` trên Windows | Xem [Lưu ý trên Windows](#lưu-ý-trên-windows) |
-| `UnicodeEncodeError` khi in tiếng Việt | Console Windows dùng cp1252 | Đặt `PYTHONUTF8=1` |
-| Sửa code nhưng Docker không thay đổi | Image cũ | `docker compose up -d --build api` |
+| "Lỗi hệ thống khi tra cứu kho hàng" | Postgres chưa chạy hoặc sai `DATABASE_URL` | `docker compose up -d postgres`; trên máy dùng cổng **5433** |
+| Giá/sản phẩm chưa đổi sau khi cào lại | File init chỉ chạy lần đầu | `docker compose run --rm db-seed` |
+| `password authentication failed` sau khi đổi `POSTGRES_PASSWORD` | Mật khẩu chỉ đặt lúc tạo volume | `docker compose down -v` rồi chạy lại |
+| `search_policy` không tìm thấy gì | Chưa nạp chính sách | `uv run python -m bank_faqs.vector_db` |
+| `/chat` trả 429 | Mọi model trong chuỗi vượt giới hạn | Chờ quota reset; `docker compose logs api \| grep LLM` |
+| `/chat` trả 502 | Mọi model lỗi (sai key, mất mạng, SSL…) | Kiểm tra key trong `.env` và log |
+| Trong Docker chỉ Groq trả lời | Gemini lỗi `CERTIFICATE_VERIFY_FAILED` (thiếu CA nội bộ trong `certs/`) | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
+| Câu trả lời khác thường | Model dự phòng đang trả lời | `docker compose logs api \| grep "model dự phòng"` |
+| `/health` trả 503 | Qdrant chưa chạy hoặc sai `QDRANT_URL` | `docker compose up -d qdrant` |
+| Agent treo vài phút | `timeout` OpenRouter đặt bằng giây | `timeout=60_000` trong `llm.py` |
+| Log `Failed to multipart ingest runs` | LangSmith không gửi được trace | `LANGSMITH_TRACING=false`; không ảnh hưởng chức năng |
+| Sửa code nhưng Docker không đổi | Image cũ | `docker compose up -d --build api` |
 
 ## Lưu ý trên Windows
 
-- **Lỗi `OSError: [WinError 1114] ... torch\lib\c10.dll`**: antivirus (vd McAfee) nạp một bản `msvcp140.dll` cũ vào process Python khi module `platform` truy vấn WMI; `torch` cần bản mới hơn. Tạo file `.pth` trong venv để nạp `msvcp140.dll` của Windows khi Python khởi động (**chạy lại mỗi khi tạo lại `.venv`**):
+- **`OSError: [WinError 1114] ... torch\lib\c10.dll`:** antivirus (vd McAfee) nạp `msvcp140.dll` bản cũ vào Python, mà `torch` cần bản mới hơn. Tạo file `.pth` để nạp DLL của Windows khi Python khởi động (**chạy lại mỗi khi tạo lại `.venv`**):
 
   ```bash
   uv run python -c "import site, pathlib; pathlib.Path(site.getsitepackages()[-1], '_msvcp140_preload.pth').write_text(\"import sys, ctypes; sys.platform == 'win32' and ctypes.WinDLL('msvcp140.dll')\n\")"
   ```
 
-  Dự phòng: `src/bank_faqs/__init__.py` cũng nạp trước `msvcp140.dll`, và các file chạy được có `import bank_faqs` ở dòng đầu tiên. Cách này không đủ cho `langgraph dev`.
-- **`UnicodeEncodeError`** khi chuyển output sang pipe/file: đặt `PYTHONUTF8=1`. `evals/run_eval.py` đã tự chuyển stdout/stderr sang UTF-8.
-- **Git Bash và đường dẫn:** `docker run ... /app/...` trong Git Bash có thể bị đổi đường dẫn; thêm `MSYS_NO_PATHCONV=1` trước lệnh.
+  `src/bank_faqs/__init__.py` cũng nạp trước DLL này, nhưng không đủ cho `langgraph dev`.
+- **`UnicodeEncodeError`** khi in tiếng Việt ra pipe/file: đặt `PYTHONUTF8=1`.
+- **Git Bash đổi đường dẫn** trong lệnh `docker run ... /app/...`: thêm `MSYS_NO_PATHCONV=1` trước lệnh.

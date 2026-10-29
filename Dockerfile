@@ -17,8 +17,9 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 # uv chỉ mount lúc build, không nằm trong image
-# Cài thư viện trước (layer cache: chỉ cài lại khi pyproject/uv.lock đổi)
-COPY pyproject.toml uv.lock README.md ./
+# Cài thư viện trước (layer cache: chỉ cài lại khi pyproject/uv.lock đổi).
+# Không copy README.md ở đây: sửa README sẽ làm mất cache và phải tải lại model embedding bên dưới.
+COPY pyproject.toml uv.lock ./
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-install-project
@@ -29,6 +30,8 @@ ARG EMBEDDING_MODEL=bkai-foundation-models/vietnamese-bi-encoder
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
 ENV HF_HUB_OFFLINE=1
 
+# README.md cần cho bước cài package của dự án (pyproject.toml khai báo readme)
+COPY README.md ./
 COPY src ./src
 COPY data_schema/policies ./data_schema/policies
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \

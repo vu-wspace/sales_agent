@@ -93,6 +93,18 @@ def test_other_errors_are_not_skipped_later():
     assert primary.calls == 2 and mw.skip_until == {}
 
 
+def test_ssl_certificate_errors_are_skipped_for_a_while():
+    # Mạng có SSL inspection: lỗi chứng chỉ lặp lại ở mọi lần gọi -> bỏ qua để câu sau không phải chờ model đó lỗi
+    from bank_faqs.fallback import SSL_COOLDOWN_S
+    error = ConnectionError('[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate')
+    gemini = FailingModel(model='gemini-a', messages=iter([]), error=error)
+    ok = FakeModel(model='groq', messages=iter([AIMessage('a'), AIMessage('b')]))
+    mw = FallbackMiddleware(ok, clock=lambda: 0.0)
+    mw.call(gemini, lambda m: m.invoke('x'))
+    mw.call(gemini, lambda m: m.invoke('x'))
+    assert gemini.calls == 1 and mw.skip_until == {'gemini-a': SSL_COOLDOWN_S}
+
+
 def test_all_models_cooling_down_still_tries_everything():
     primary = FailingModel(model='openrouter', messages=iter([]), error=rate_limit('free-models-per-day'))
     mw = FallbackMiddleware(clock=lambda: 0.0)

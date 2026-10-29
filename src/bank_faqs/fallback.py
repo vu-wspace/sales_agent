@@ -10,6 +10,7 @@ log = logging.getLogger('uvicorn.error')
 
 MINUTE_COOLDOWN_S = 60     # vượt giới hạn theo phút: bỏ qua model 1 phút
 DAILY_COOLDOWN_S = 3600    # hết quota ngày: bỏ qua 1 giờ rồi thử lại (không biết chính xác giờ reset của từng hãng)
+SSL_COOLDOWN_S = 600       # lỗi chứng chỉ (mạng có SSL inspection) không tự hết như mất mạng: bỏ qua 10 phút
 
 class FallbackMiddleware(AgentMiddleware):
     def __init__(self, *models, clock=time.monotonic):
@@ -30,6 +31,10 @@ class FallbackMiddleware(AgentMiddleware):
             wait = DAILY_COOLDOWN_S if is_daily_limit(e) else MINUTE_COOLDOWN_S
             self.skip_until[name] = self.clock() + wait
             log.warning('LLM %s bị giới hạn (%s), tạm bỏ qua %d phút', name, type(e).__name__, wait // 60)
+        elif 'CERTIFICATE_VERIFY_FAILED' in str(e):
+            self.skip_until[name] = self.clock() + SSL_COOLDOWN_S
+            log.warning('LLM %s lỗi chứng chỉ SSL (xem README: Mạng có SSL inspection), tạm bỏ qua %d phút',
+                        name, SSL_COOLDOWN_S // 60)
         else:
             log.warning('LLM %s lỗi (%s: %s), chuyển model dự phòng', name, type(e).__name__, str(e)[:200])
 

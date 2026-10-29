@@ -51,7 +51,7 @@ def test_accessory_type(text, expected):
 
 def test_price_and_stock_format():
     assert tools._price(38999000) == '38.999.000đ'
-    assert [tools._stock(n) for n in (0, 3, 20)] == ['hết hàng', 'sắp hết (còn 3)', 'còn 20']
+    assert [tools._stock(n) for n in (0, 3, 20)] == ['hết hàng', 'sắp hết', 'còn hàng']  # không lộ số lượng
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def fake_db(monkeypatch):
 def test_search_products_filters_and_formats(fake_db):
     out = tools.search_products.invoke({'max_price': 15000000})
     assert out == ('Sản phẩm đang bán (giá đã gồm VAT):\n'
-                   '- Galaxy A57 5G (Samsung): 12.490.000đ - 16.490.280đ | 128GB, 256GB - RAM 8GB | còn 40')
+                   '- Galaxy A57 5G (Samsung): 12.490.000đ - 16.490.280đ | 128GB, 256GB - RAM 8GB | còn hàng')
 
 
 def test_search_products_no_match(fake_db):
@@ -94,7 +94,7 @@ def test_search_products_no_match(fake_db):
 def test_product_details(fake_db):
     out = tools.get_product_details.invoke({'product': 'galaxy s26'})
     assert 'RAM: 256GB: 12GB' in out and 'Chip: Snapdragon' in out
-    assert out.endswith('- 256GB | Đen | 29.990.001đ | còn 9\n- 512GB | Đen | 35.990.000đ (giá tham khảo) | hết hàng')
+    assert out.endswith('- 256GB | Đen | 29.990.001đ | còn hàng\n- 512GB | Đen | 35.990.000đ (giá tham khảo) | hết hàng')
 
 
 def test_product_details_filters_storage(fake_db):
@@ -109,8 +109,18 @@ def test_product_details_ambiguous_asks_back(fake_db):
 
 def test_find_accessories(fake_db):
     out = tools.find_accessories.invoke({'phone': 's26', 'accessory_type': 'ốp lưng'})
-    assert out == 'Phụ kiện tương thích với Galaxy S26:\n- Ốp Lưng Trong Suốt Galaxy S26: 490.320đ | còn 12'
+    assert out == 'Phụ kiện tương thích với Galaxy S26:\n- Ốp Lưng Trong Suốt Galaxy S26: 490.320đ | còn hàng'
     assert fake_db[-1][1] == ('samsung-galaxy-s26', 'case', 'case')
+
+
+def test_find_accessories_pages_of_five(monkeypatch):
+    rows = [{'name': f'Ốp {i}', 'kind': 'case', 'price': 100000 * i, 'stock': 10} for i in range(1, 9)]
+    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else PHONES)
+    page1 = tools.find_accessories.invoke({'phone': 's26'})
+    assert page1.count('\n- ') == 5 and page1.endswith('(còn 3 phụ kiện khác, xem tiếp bằng page=2)')
+    page2 = tools.find_accessories.invoke({'phone': 's26', 'page': 2})
+    assert 'Ốp 6' in page2 and 'Ốp 8' in page2 and 'xem tiếp' not in page2
+    assert tools.find_accessories.invoke({'phone': 's26', 'page': 3}).startswith('Đã xem hết 8 phụ kiện')
 
 
 def test_find_accessories_unknown_type(fake_db):

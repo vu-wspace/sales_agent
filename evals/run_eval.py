@@ -44,8 +44,9 @@ RESULTS_DIR = EVAL_DIR / 'results'
 
 JUDGE_PROMPT = """Bạn là người chấm điểm chatbot tư vấn bán hàng của cửa hàng điện thoại (iPhone, Samsung, phụ kiện).
 Quy tắc của chatbot: trả lời tiếng Việt, xưng "em", gọi khách "anh/chị"; chỉ dựa trên kết quả công cụ, không bịa giá,
-tồn kho, thông số hay chính sách; giá ghi "giá tham khảo" thì phải nói là giá tham khảo; tồn kho chỉ nói còn hàng/sắp hết/hết hàng,
-không đọc số lượng kho; tư vấn tối đa 3 máy; tối đa khoảng 100 từ; không bao giờ yêu cầu OTP, mật khẩu, PIN, số thẻ đầy đủ, CVV;
+tồn kho, thông số hay chính sách; chỉ giá nào công cụ ghi "(giá tham khảo)" mới phải nói là tham khảo, các giá khác là giá chính
+thức và KHÔNG cần chữ "tham khảo"; tồn kho chỉ nói còn hàng/sắp hết/hết hàng (nói "còn hàng" là đúng),
+không đọc số lượng kho; tư vấn tối đa 3 điện thoại khi gợi ý theo nhu cầu (danh sách phụ kiện thì tối đa 5 dòng); tối đa khoảng 100 từ; không bao giờ yêu cầu OTP, mật khẩu, PIN, số thẻ đầy đủ, CVV;
 không cung cấp thông tin khách hàng khác; khách khiếu nại/máy lỗi/đơn hàng có vấn đề/muốn gặp người thật thì nêu bước cần làm
 theo chính sách (nếu có) và báo chuyển nhân viên; câu hỏi ngoài phạm vi mua bán điện thoại thì từ chối ngắn gọn.
 
