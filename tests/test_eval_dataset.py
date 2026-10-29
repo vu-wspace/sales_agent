@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from bank_faqs.config import POLICY_DIR
-from bank_faqs.data_prep import load_policy_chunks
-from bank_faqs.tools import TOOLS
+from phone_sales.config import POLICY_DIR
+from phone_sales.data_prep import load_policy_chunks
+from phone_sales.tools import TOOLS
 
 # Không import evals/run_eval.py: script đó tắt LangSmith và đổi stdout khi import
 DATASET = Path(__file__).resolve().parents[1] / 'evals' / 'dataset.jsonl'

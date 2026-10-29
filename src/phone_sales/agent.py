@@ -1,11 +1,11 @@
-import bank_faqs  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
+import phone_sales  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
 from langchain.agents import create_agent
 from langgraph.types import Checkpointer
-from bank_faqs import llm
-from bank_faqs.fallback import FallbackMiddleware
-from bank_faqs.history import TrimHistoryMiddleware
-from bank_faqs.prompts import get_system_prompt
-from bank_faqs.tools import get_agent_tools
+from phone_sales import llm
+from phone_sales.fallback import FallbackMiddleware
+from phone_sales.history import TrimHistoryMiddleware
+from phone_sales.prompts import get_system_prompt
+from phone_sales.tools import get_agent_tools
 
 def build_agent(checkpointer: Checkpointer = None, fallback: bool = True):
     # checkpointer (vd: InMemorySaver) giúp agent nhớ hội thoại theo thread_id - api.py dùng cách này.

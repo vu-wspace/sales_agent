@@ -1,4 +1,4 @@
-import bank_faqs  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
+import phone_sales  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
 import uuid
 from functools import lru_cache
 from langchain_core.documents import Document
@@ -8,8 +8,8 @@ from pyvi import ViTokenizer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, Filter, FilterSelector, VectorParams
 from sentence_transformers import SentenceTransformer
-from bank_faqs.config import COLLECTION, EMBEDDING_MODEL, QDRANT_URL, VECTOR_SIZE
-from bank_faqs.data_prep import load_policy_chunks
+from phone_sales.config import COLLECTION, EMBEDDING_MODEL, QDRANT_URL, VECTOR_SIZE
+from phone_sales.data_prep import load_policy_chunks
 
 class BkaiEmbeddings(Embeddings):
     def __init__(self, model_name: str = EMBEDDING_MODEL):

@@ -9,6 +9,5 @@
 *.py[oc]
 tests
 evals
-bank_faqs
 data_schema/.cache
 data_schema/output

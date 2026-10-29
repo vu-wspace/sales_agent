@@ -1,5 +1,5 @@
-from bank_faqs.config import CHUNK_MAX_CHARS
-from bank_faqs.data_prep import load_policy_chunks, split_markdown
+from phone_sales.config import CHUNK_MAX_CHARS
+from phone_sales.data_prep import load_policy_chunks, split_markdown
 
 MD = """# Chính sách A
 

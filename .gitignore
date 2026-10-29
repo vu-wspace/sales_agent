@@ -20,4 +20,6 @@ evals/results/
 
 # CA nội bộ cho mạng có SSL inspection (xem README)
 certs/*.crt
+
+# Trang HTML đã tải khi cào dữ liệu (data_schema/scrape_phone.py)
 data_schema/.cache/

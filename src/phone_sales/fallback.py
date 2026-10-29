@@ -4,7 +4,7 @@ import logging
 import time
 from langchain.agents.middleware import AgentMiddleware
 from langgraph.errors import GraphBubbleUp
-from bank_faqs.llm import is_daily_limit, is_permanent_error, is_rate_limited, model_name
+from phone_sales.llm import is_daily_limit, is_permanent_error, is_rate_limited, model_name
 
 log = logging.getLogger('uvicorn.error')
 

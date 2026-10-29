@@ -12,13 +12,11 @@ Agent làm được:
 | Thành phần | Công nghệ |
 |---|---|
 | Dữ liệu sản phẩm: 23 điện thoại, 134 phụ kiện, 377 phiên bản (cào từ apple.com/vn, samsung.com/vn) | Postgres 18 (database `phone`) |
-| Chính sách: 5 file `.md`, tách thành 65 đoạn | Qdrant + embedding `bkai-foundation-models/vietnamese-bi-encoder` |
+| Chính sách: 5 file `.md`, tách thành 66 đoạn | Qdrant + embedding `bkai-foundation-models/vietnamese-bi-encoder` |
 | Agent | LangGraph `StateGraph` (`graph.py`), hoặc `create_agent` (`agent.py`) |
-| LLM | OpenRouter `nemotron-3-ultra-550b-a55b:free` → Gemini 3.1 flash-lite → Gemini 3.5 flash-lite → Groq `qwen3.8-27b` |
+| LLM | OpenRouter `nemotron-3-ultra-550b-a55b:free` → NVIDIA `nemotron-3.5-super-vl-120b-a12b` → Gemini 3.1 flash-lite → Gemini 3.5 flash-lite → Groq `qwen3.8-27b` |
 | Web | FastAPI + trang chat một file, chạy bằng Docker Compose |
-| Kiểm thử | 110 test (không gọi API thật), bộ eval 37 câu |
-
-> Package Python vẫn tên `bank_faqs` vì dự án chuyển từ một agent CSKH ngân hàng. Đổi tên package cần sửa mọi import.
+| Kiểm thử | 118 test (không gọi API thật), bộ eval 37 câu |
 
 **Chạy nhanh** (cần Docker và file `.env`, xem [Cài đặt](#cài-đặt)):
 
@@ -55,7 +53,7 @@ Trình duyệt (trang chat)                          LangGraph Studio (langgraph
         ▼                                                    ▼
 FastAPI (api.py) ── lưu state theo thread_id ──> graph.py (mặc định) hoặc agent.py
                                                              │
-        LLM: OpenRouter ─lỗi/hết quota─> Gemini 3.1 ──> Gemini 3.5 ──> Groq   (fallback.py)
+  LLM: OpenRouter ─lỗi/hết quota─> NVIDIA ──> Gemini 3.1 ──> Gemini 3.5 ──> Groq   (fallback.py)
                                                              │ gọi tool
    ┌───────────────┬─────────────────┬───────────────┬───────┴───────┬──────────────┬────────────────┐
    ▼               ▼                 ▼               ▼               ▼              ▼                ▼
@@ -74,7 +72,7 @@ START → track_user → model ─(có tool_call)→ tools → track_tools → m
 3. `model` gọi LLM với system prompt + **tóm tắt trạng thái hội thoại** + lịch sử đã cắt gọn (`history.py`: 4 lượt gần nhất, kết quả tool cũ rút còn 300 ký tự).
 4. LLM gọi tool nếu cần; `track_tools` đọc tham số tool (ngân sách, hãng, dung lượng, màu) và tính lại bước (vd vừa thêm vào giỏ → `closing`).
 5. Khi LLM trả lời xong, `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời.
-6. API trả `answer`, `tools` đã gọi, cùng `stage`, `cart`, `handoff`.
+6. API trả `answer`, `tools` đã gọi, cùng `stage`, `cart`, `handoff`. Trang chat dùng `/chat/stream`: hiện trạng thái và chữ ngay trong lúc agent đang chạy (xem [Web app và API](#web-app-và-api)).
 
 **System prompt** (`prompts.py`): `AGENT_PROMPTS['agent_main']` gồm 15 quy tắc; `graph.py` dùng `agent_graph` = 15 quy tắc đó + 3 quy tắc về trạng thái và giỏ hàng.
 
@@ -82,7 +80,7 @@ START → track_user → model ─(có tool_call)→ tools → track_tools → m
 |---|---|
 | Xưng hô | Tiếng Việt, xưng "em", gọi "anh/chị", không đoán giới tính |
 | Dùng tool | Tìm máy/tầm giá → `search_products`; giá, màu, tồn kho, thông số 1 máy → `get_product_details` (nhiều máy khớp thì hỏi lại); phụ kiện → `find_accessories`; chính sách → `search_policy` (làm theo "Hướng dẫn trả lời" kèm kết quả); `web_search` chỉ khi dữ liệu nội bộ không có, không dùng cho giá hay chính sách |
-| Trả lời | Chỉ dựa trên kết quả tool; giữ đúng giá, chỉ dòng có "(giá tham khảo)" mới nói là tham khảo; tồn kho chỉ nói còn hàng / sắp hết / hết hàng; tư vấn tối đa 3 máy; tối đa khoảng 100 từ |
+| Trả lời | Chỉ dựa trên kết quả tool; **không bao giờ nói không có hàng / chưa có thông tin khi chưa gọi tool trong lượt đó** (quy tắc 10); giữ đúng giá, chỉ dòng có "(giá tham khảo)" mới nói là tham khảo; tồn kho chỉ nói còn hàng / sắp hết / hết hàng; tư vấn tối đa 3 máy; tối đa khoảng 100 từ |
 | Chuyển nhân viên | Khiếu nại, máy lỗi, đơn giao sai/chậm/thiếu, hủy đơn đã thanh toán, đòi gặp người thật |
 | Bảo mật | Không hỏi OTP, mật khẩu, PIN, số thẻ, CVV; không lộ thông tin khách khác |
 | Ngoài phạm vi | Không gọi tool, từ chối 1–2 câu, mời tư vấn sản phẩm |
@@ -100,7 +98,7 @@ START → track_user → model ─(có tool_call)→ tools → track_tools → m
 
 ## Trạng thái hội thoại
 
-`AgentState` (`src/bank_faqs/conversation.py`) được checkpointer lưu theo `thread_id`, nên giữ qua các lượt:
+`AgentState` (`src/phone_sales/conversation.py`) được checkpointer lưu theo `thread_id`, nên giữ qua các lượt:
 
 | Trường | Ý nghĩa | Cập nhật |
 |---|---|---|
@@ -196,9 +194,29 @@ Thêm file chính sách mới thì phải thêm prompt vào `POLICY_PROMPTS` (te
 | LLM (`llm.py`) | Model | Vai trò |
 |---|---|---|
 | `open_llm` | OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free` | Model chính |
-| `google_llm` | `gemini-3.1-flash-lite` | Dự phòng 1; judge của eval |
-| `google_llm_alt` | `gemini-3.5-flash-lite` | Dự phòng 2 (Gemini free tính quota riêng từng model) |
-| `groq_llm` | `qwen/qwen3.8-27b` | Dự phòng 3 |
+| `nvidia_llm` | NVIDIA API `nvidia/nemotron-3.5-super-vl-120b-a12b` (bật thinking) | Dự phòng 1: nhanh nhất trong các model dự phòng |
+| `google_llm` | `gemini-3.1-flash-lite` | Dự phòng 2; judge của eval |
+| `google_llm_alt` | `gemini-3.5-flash-lite` | Dự phòng 3 (Gemini free tính quota riêng từng model) |
+| `groq_llm` | `qwen/qwen3.8-27b` | Dự phòng 4: nhanh nhưng quota token/phút nhỏ nên để cuối |
+
+Thứ tự dự phòng xếp theo tốc độ đo ngày 29/10/2026 (cùng một câu có gọi tool): NVIDIA 0,9–2,3 s, Gemini 3.1 dao động 1–23 s, Gemini 3.5 15–20 s, Groq dưới 2 s.
+
+**NVIDIA** (`ChatNVIDIA`) có vài điểm khác các SDK còn lại:
+- Phần "thinking" được trả riêng trong `additional_kwargs['reasoning_content']`, không lẫn vào câu trả lời gửi khách.
+- Không có `max_retries` (SDK không tự thử lại) và tự đặt timeout 60 s.
+- **Giữ thinking bật, `max_completion_tokens=4096`** (đo 29/10/2026 trên 24 câu eval có đáp án, NVIDIA làm model chính):
+
+  | Cấu hình | Đúng tool | Đủ ý | Trung vị | Trung bình | Chậm nhất |
+  |---|---|---|---|---|---|
+  | Thinking bật, 8192 | 24/24 | 23/24 | 5,9 s | 13,1 s | 59 s |
+  | **Thinking bật, 4096 (đang dùng)** | 24/24 | 23/24 | 6,0 s | 9,1 s | 46 s |
+  | Thinking bật, 2048 (2 lần) | 24/24, 23/23 | 22/24, 22/23 | 5,1–7,6 s | 8,7–8,8 s | 30–42 s |
+  | Thinking tắt + quy tắc 10 | 23/23 | 21/23 | 3,1 s | 4,5 s | 19 s |
+
+  - Tắt thinking nhanh gấp đôi nhưng trả lời sai kiểu làm mất khách: tool đã trả về danh sách máy mà model vẫn nói "cửa hàng không có Samsung nào dưới 7 triệu". Quy tắc 10 giúp model luôn gọi tool (trước khi có quy tắc: 21/23 đúng tool, 19/23 đủ ý) nhưng không sửa được lỗi đọc sai kết quả.
+  - Giảm token cắt bớt các lần suy nghĩ quá dài (trung bình 13,1 → 9,1 s) mà không giảm độ đúng; 2048 không nhanh hơn 4096 rõ rệt nên chọn 4096 để không bị cắt cụt khi cần suy nghĩ dài.
+  - `policy-10` ("trả góp 0% cần điều kiện gì") thiếu ý ở mọi cấu hình trong các lần đo này. Nguyên nhân là **truy xuất**, không phải model: điều kiện "trả trước ≥ 30%" chỉ nằm trong 1 ô bảng ở mục 3 của `tra-gop.md` nên không vào top 6 đoạn. Đã sửa bằng mục mới "Điều kiện để được trả góp lãi 0%" trong `tra-gop.md` (gom điều kiện của cả thẻ tín dụng và công ty tài chính) + prompt `tra-gop.md` dặn nêu đủ 2 hình thức. Sau khi sửa: 5/5 cách hỏi khác nhau đều lấy được đoạn có "30%", 3/3 câu trả lời của agent nêu đúng điều kiện; eval truy xuất 19 câu không đổi.
+- Lỗi là `Exception` chung dạng `[429] Too Many Requests…`; `nvidia_status()` đọc mã HTTP ở đầu thông báo: 429 tính là hết quota, 401/402/403/404 là lỗi cấu hình.
 
 `FallbackMiddleware` (`fallback.py`) dùng cho cả `graph.py` lẫn `agent.py`:
 1. Thử model chính, lỗi thì thử lần lượt `FALLBACK_LLMS` tới khi có model trả lời. Tất cả lỗi thì API trả 429 (quota) hoặc 502.
@@ -218,7 +236,7 @@ Thêm file chính sách mới thì phải thêm prompt vào `POLICY_PROMPTS` (te
 | Câu 1 | OpenRouter 1,6 s → model hỏng 0,8 s → Gemini 3.5 | Như cũ (lần đầu phải thử mới biết hỏng) |
 | Câu 2, 3 | Vẫn thử lại model hỏng mỗi câu (0,4–0,5 s) | Bỏ qua cả OpenRouter lẫn model hỏng, gọi thẳng Gemini 3.5 |
 
-Phần lớn thời gian chờ là **độ trễ của chính model dự phòng**, không phải do chuỗi: cùng một câu, Gemini 3.5 mất 15–20 s, Gemini 3.1 dao động 1–23 s, Groq dưới 2 s. Đã thử tắt hẳn thử lại (`max_retries=0`) và đổi mức "suy nghĩ" của Gemini, đều không nhanh hơn rõ rệt, nên đây là độ trễ phía dịch vụ/mạng.
+Phần lớn thời gian chờ là **độ trễ của chính model dự phòng**, không phải do chuỗi: cùng một câu, Gemini 3.5 mất 15–20 s, Gemini 3.1 dao động 1–23 s, Groq dưới 2 s (đo trước khi thêm NVIDIA; giờ NVIDIA đứng trước Gemini nên thường không phải chờ Gemini). Đã thử tắt hẳn thử lại (`max_retries=0`) và đổi mức "suy nghĩ" của Gemini, đều không nhanh hơn rõ rệt, nên đây là độ trễ phía dịch vụ/mạng.
 
 Eval tắt dự phòng (`fallback=False`) để điểm phản ánh đúng model chính. Thêm hoặc bớt model: sửa `FALLBACK_LLMS` (model mới phải hỗ trợ tool calling; các model `gemini-2.5-*` trả 404 với key hiện tại).
 
@@ -255,7 +273,7 @@ Database `phone` (schema `data_schema/phone.sql`, dữ liệu `data_schema/outpu
 | Dữ liệu | Cách làm |
 |---|---|
 | Sản phẩm | `cd data_schema && python scrape_phone.py --refresh`, rồi `docker compose run --rm db-seed` |
-| Chính sách | Sửa file trong `data_schema/policies/`, rồi `docker compose up -d --build api` (API tự nạp lại). Trên máy: `uv run python -m bank_faqs.vector_db` |
+| Chính sách | Sửa file trong `data_schema/policies/`, rồi `docker compose up -d --build api` (API tự nạp lại). Trên máy: `uv run python -m phone_sales.vector_db` |
 
 `scrape_phone.py` chỉ dùng thư viện chuẩn, đọc dữ liệu nhúng sẵn trong các trang HTML công khai, cache trang đã tải ở `data_schema/.cache/` (không commit), nghỉ 0,8 giây giữa các request. Sau khi cào lại, chạy `uv run pytest` và eval nhóm `product,accessory`, vì giá trong đáp án của eval có thể đã đổi.
 
@@ -268,7 +286,7 @@ sales_agent/
 │   ├── scrape_phone.py        # Cào Apple/Samsung VN -> output/
 │   ├── output/                # products.json, variants.json, compatibility.json, phone_seed.sql
 │   └── policies/              # 5 file chính sách .md (nạp vào Qdrant)
-├── src/bank_faqs/
+├── src/phone_sales/
 │   ├── __init__.py            # Fix DLL torch (Windows), dùng kho chứng chỉ hệ thống, nạp .env
 │   ├── config.py              # Đường dẫn, DATABASE_URL, Qdrant, ngưỡng RAG, AGENT_IMPL
 │   ├── llm.py                 # LLM chính + FALLBACK_LLMS, nhận diện lỗi quota
@@ -283,7 +301,7 @@ sales_agent/
 │   ├── vector_db.py           # Embedding + Qdrant, nạp chính sách
 │   ├── api.py                 # FastAPI: trang chat, POST /chat, /health
 │   └── static/index.html      # Giao diện chat
-├── tests/                     # 110 test
+├── tests/                     # 118 test
 ├── evals/                     # dataset.jsonl (37 câu), run_eval.py, results/ (không commit)
 ├── certs/                     # CA nội bộ (*.crt) cho mạng có SSL inspection, không commit
 ├── .env.example               # Mẫu .env
@@ -307,6 +325,7 @@ Dùng pip thì `pip install -r requirements.txt` (đã có index torch bản CPU
 | Biến trong `.env` | Mặc định | Ý nghĩa |
 |---|---|---|
 | `OPENROUTER_API_KEY` | (bắt buộc) | LLM chính ([openrouter.ai/keys](https://openrouter.ai/keys)) |
+| `NVIDIA_API_KEY` | (bắt buộc) | Dự phòng 1 ([build.nvidia.com](https://build.nvidia.com)) |
 | `GOOGLE_API_KEY` | (bắt buộc) | Gemini: dự phòng + judge ([Google AI Studio](https://aistudio.google.com/apikey)) |
 | `GROQ_API_KEY` | (bắt buộc) | Groq: dự phòng ([console.groq.com](https://console.groq.com)) |
 | `TAVILY_API_KEY` | (bắt buộc) | Tool `web_search` ([tavily.com](https://tavily.com)) |
@@ -317,7 +336,7 @@ Dùng pip thì `pip install -r requirements.txt` (đã có index torch bản CPU
 | `AUTO_INGEST` | `true` | Web app tự nạp chính sách khi Qdrant rỗng hoặc đã cũ |
 | `LANGSMITH_*` | tắt | Trace để debug; test và eval luôn tắt |
 
-`.env` được nạp một lần trong `src/bank_faqs/__init__.py`; biến đã có trong môi trường thì không bị ghi đè. Trên Windows, xem thêm [Lưu ý trên Windows](#lưu-ý-trên-windows).
+`.env` được nạp một lần trong `src/phone_sales/__init__.py`; biến đã có trong môi trường thì không bị ghi đè. Trên Windows, xem thêm [Lưu ý trên Windows](#lưu-ý-trên-windows).
 
 ## Chạy bằng Docker
 
@@ -341,7 +360,7 @@ Khi khởi động:
 docker compose ps                                       # trạng thái
 docker compose logs -f api                              # log
 docker compose run --rm db-seed                         # nạp lại phone_seed.sql vào Postgres (không mất volume)
-docker compose exec api python -m bank_faqs.vector_db   # nạp lại chính sách ngay
+docker compose exec api python -m phone_sales.vector_db   # nạp lại chính sách ngay
 docker compose up -d --build api                        # build lại API sau khi sửa code/chính sách
 docker compose down                                     # dừng, giữ dữ liệu
 docker compose down -v                                  # dừng và xóa volume (lần sau tự nạp lại)
@@ -371,17 +390,17 @@ Postgres và Qdrant vẫn chạy bằng Docker, code chạy trên máy:
 
 ```bash
 docker compose up -d postgres qdrant
-uv run python -m bank_faqs.vector_db           # nạp chính sách (lần đầu tải model embedding ~540MB)
-uv run python -m bank_faqs.graph               # hội thoại mẫu 3 lượt, in trạng thái sau mỗi lượt
-uv run python -m bank_faqs.agent               # 4 câu mẫu với agent.py
-uv run uvicorn bank_faqs.api:app --port 8000   # web app (thêm --reload khi sửa code)
+uv run python -m phone_sales.vector_db           # nạp chính sách (lần đầu tải model embedding ~540MB)
+uv run python -m phone_sales.graph               # hội thoại mẫu 3 lượt, in trạng thái sau mỗi lượt
+uv run python -m phone_sales.agent               # 4 câu mẫu với agent.py
+uv run uvicorn phone_sales.api:app --port 8000   # web app (thêm --reload khi sửa code)
 uv run langgraph dev                           # LangGraph Studio: graph agent_main và phone_graph
 ```
 
 Dùng trong code:
 
 ```python
-from bank_faqs.graph import build_graph
+from phone_sales.graph import build_graph
 from langgraph.checkpoint.memory import InMemorySaver
 
 graph = build_graph(checkpointer=InMemorySaver())   # checkpointer giữ state theo thread_id
@@ -396,8 +415,9 @@ print(res['messages'][-1].text, res['stage'], res['cart'])
 | Method | Đường dẫn | Mô tả |
 |---|---|---|
 | `GET` | `/` | Trang chat (Enter gửi, Shift+Enter xuống dòng, nút "Cuộc trò chuyện mới") |
-| `POST` | `/chat` | Gửi tin nhắn, nhận câu trả lời |
-| `GET` | `/health` | `{"status": "ok", "documents": 65}`, hoặc 503 nếu không kết nối được Qdrant |
+| `POST` | `/chat` | Gửi tin nhắn, nhận câu trả lời đầy đủ (JSON) |
+| `POST` | `/chat/stream` | Như `/chat` nhưng trả Server-Sent Events: trạng thái và chữ hiện dần (trang chat dùng endpoint này) |
+| `GET` | `/health` | `{"status": "ok", "documents": 66}`, hoặc 503 nếu không kết nối được Qdrant |
 | `GET` | `/docs` | Swagger UI |
 
 ```json
@@ -416,12 +436,35 @@ print(res['messages'][-1].text, res['stage'], res['cart'])
 - Mã lỗi: 422 (input sai), 429 (mọi LLM vượt giới hạn), 502 (mọi LLM lỗi), 503 (`/health` không kết nối được Qdrant).
 - Trên Windows, curl của Git Bash có thể gửi sai mã hóa tiếng Việt (API trả 400); dùng PowerShell `Invoke-RestMethod`, Swagger UI hoặc Python.
 
+**`/chat/stream`**: cùng request với `/chat`; response là `text/event-stream`, mỗi sự kiện là 1 dòng `data: {json}`:
+
+| `type` | Khi nào | Giao diện làm gì |
+|---|---|---|
+| `start` | Ngay khi nhận request, kèm `thread_id` | Lưu `thread_id` |
+| `status` | Model bắt đầu suy nghĩ (`Em đang cân nhắc…`) hoặc gọi tool (vd `Đang xem giá và tồn kho…`) | Đổi dòng trạng thái cạnh 3 chấm nhảy |
+| `token` | Từng đoạn chữ LLM viết | Nối vào bong bóng (chữ thô) |
+| `reset` | Model quyết định gọi tool sau khi đã viết vài chữ dẫn | Xóa phần chữ tạm |
+| `done` | Xong lượt, nội dung giống response của `/chat` | Hiển thị lại câu trả lời có định dạng + "Đã tra cứu" |
+| `error` | Lỗi, kèm `status` (429/502/500) và `detail` | Hiện lỗi trong bong bóng |
+
+- Chỉ chữ do LLM viết ở node `model` được gửi đi; kết quả tool và **nội dung suy nghĩ** của model (NVIDIA thinking) không bao giờ được gửi cho khách, chỉ báo trạng thái "Em đang cân nhắc…".
+- Đo ngày 29/10/2026 (NVIDIA trả lời, thinking bật, hội thoại 3 lượt):
+
+  | Câu | Trạng thái đầu tiên | Chữ đầu tiên | Xong |
+  |---|---|---|---|
+  | "tầm 15 triệu có máy samsung nào pin trâu" | 2,4 s (cân nhắc) → 3,2 s (tìm sản phẩm) | 16,6 s | 17,4 s |
+  | "chào em" | 1,0 s | 1,8 s | 2,2 s |
+  | "ok chốt a57 128gb xanh đêm" | 0,9 s → 3,4 s (cập nhật giỏ) | 5,0 s | 5,6 s |
+
+  Khách thấy phản hồi trong khoảng 1–3 s. Chữ thường tới gần cuối vì model suy nghĩ xong mới viết (và viết nhanh), nên tổng thời gian không đổi; lợi ích chính là khách biết hệ thống đang làm gì thay vì màn hình đứng yên.
+- Header `X-Accel-Buffering: no` để chữ không bị gom lại nếu đặt API sau nginx.
+
 **Giới hạn:** state hội thoại nằm trong RAM (`InMemorySaver`) nên mất khi restart, và uvicorn chỉ chạy 1 worker. Chạy nhiều worker thì cần checkpointer dùng chung, vd `langgraph-checkpoint-postgres`. API chưa có xác thực hay giới hạn request.
 
 ## Test
 
 ```bash
-uv run pytest                          # 110 test, dưới 1 phút
+uv run pytest                          # 118 test, dưới 1 phút
 uv run pytest tests/test_conversation.py -v
 ```
 
@@ -433,9 +476,9 @@ Test **không gọi LLM, Tavily, mạng hay database**: `conftest.py` đặt key
 | `test_tools.py` | Nhận diện tên máy, sắp xếp dung lượng, loại phụ kiện tiếng Việt, định dạng giá/tồn kho; 3 tool tra cứu DB; `search_policy` (gom theo file kèm prompt, bỏ đoạn yếu, chặn câu lạc đề, mọi file có prompt); tool tự bắt lỗi |
 | `test_agent.py` | Chuỗi dự phòng: đi hết chuỗi tới model trả lời được (cả `agent.py` lẫn `graph.py`); tạm bỏ qua model hết quota (1 phút / 1 giờ), lỗi cấu hình (1 giờ) hoặc lỗi chứng chỉ SSL (10 phút), lỗi tạm thời thì không; mọi model bị bỏ qua thì vẫn thử hết; `fallback=False` báo lỗi model chính |
 | `test_data_prep.py` | Tách chính sách theo mục và FAQ, cắt bảng dài, 5 file đều tách được |
-| `test_api.py` | Endpoint, validate input, mã lỗi 429/502/503, nhớ theo `thread_id`, tự nạp chính sách khi rỗng hoặc đã cũ, thử lại khi Qdrant chưa sẵn sàng |
+| `test_api.py` | Endpoint, validate input, mã lỗi 429/502/503; `/chat/stream` (thứ tự sự kiện, `reset` bỏ chữ dẫn trước tool, không stream kết quả tool hay nội dung thinking, lỗi giữa chừng thành sự kiện `error`); nhớ theo `thread_id`, tự nạp chính sách khi rỗng hoặc đã cũ, thử lại khi Qdrant chưa sẵn sàng |
 | `test_history.py` | Cắt lịch sử đúng ranh giới lượt hỏi, rút gọn kết quả tool cũ |
-| `test_llm.py` | `timeout` đúng đơn vị; các model trong chuỗi dự phòng không trùng nhau; chỉ model cuối chuỗi thử lại nhiều lần; nhận diện lỗi cấu hình |
+| `test_llm.py` | `timeout` đúng đơn vị; 5 model trong chuỗi không trùng nhau, NVIDIA đứng đầu dự phòng; chỉ model cuối chuỗi thử lại nhiều lần; nhận diện lỗi cấu hình; đọc mã lỗi của NVIDIA (429, 401…) |
 | `test_eval_dataset.py` | `evals/dataset.jsonl` hợp lệ: tên trường, id không trùng, tool và file `policy` tồn tại, câu hỏi không chép nguyên văn dữ liệu |
 | `test_requirements.py` | `requirements.txt` khớp `pyproject.toml` |
 
@@ -508,7 +551,6 @@ Hạn chế: ít câu, LLM dao động giữa các lần chạy, judge là LLM n
 - Checkpointer Postgres để state không mất khi restart.
 - Câu eval nhiều lượt.
 - Cào thêm thông số dòng Galaxy S/Z.
-- Đổi tên package `bank_faqs`.
 
 ## Xử lý sự cố
 
@@ -517,7 +559,7 @@ Hạn chế: ít câu, LLM dao động giữa các lần chạy, judge là LLM n
 | "Lỗi hệ thống khi tra cứu kho hàng" | Postgres chưa chạy hoặc sai `DATABASE_URL` | `docker compose up -d postgres`; trên máy dùng cổng **5433** |
 | Giá/sản phẩm chưa đổi sau khi cào lại | File init chỉ chạy lần đầu | `docker compose run --rm db-seed` |
 | `password authentication failed` sau khi đổi `POSTGRES_PASSWORD` | Mật khẩu chỉ đặt lúc tạo volume | `docker compose down -v` rồi chạy lại |
-| `search_policy` không tìm thấy gì | Chưa nạp chính sách | `uv run python -m bank_faqs.vector_db` |
+| `search_policy` không tìm thấy gì | Chưa nạp chính sách | `uv run python -m phone_sales.vector_db` |
 | `/chat` trả 429 | Mọi model trong chuỗi vượt giới hạn | Chờ quota reset; `docker compose logs api \| grep LLM` |
 | `/chat` trả 502 | Mọi model lỗi (sai key, mất mạng, SSL…) | Kiểm tra key trong `.env` và log |
 | Trong Docker chỉ Groq trả lời | Gemini lỗi `CERTIFICATE_VERIFY_FAILED` (thiếu CA nội bộ trong `certs/`) | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
@@ -536,6 +578,6 @@ Hạn chế: ít câu, LLM dao động giữa các lần chạy, judge là LLM n
   uv run python -c "import site, pathlib; pathlib.Path(site.getsitepackages()[-1], '_msvcp140_preload.pth').write_text(\"import sys, ctypes; sys.platform == 'win32' and ctypes.WinDLL('msvcp140.dll')\n\")"
   ```
 
-  `src/bank_faqs/__init__.py` cũng nạp trước DLL này, nhưng không đủ cho `langgraph dev`.
+  `src/phone_sales/__init__.py` cũng nạp trước DLL này, nhưng không đủ cho `langgraph dev`.
 - **`UnicodeEncodeError`** khi in tiếng Việt ra pipe/file: đặt `PYTHONUTF8=1`.
 - **Git Bash đổi đường dẫn** trong lệnh `docker run ... /app/...`: thêm `MSYS_NO_PATHCONV=1` trước lệnh.

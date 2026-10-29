@@ -8,9 +8,9 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
-from bank_faqs.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
-from bank_faqs.prompts import POLICY_GUIDE, POLICY_PROMPTS
-from bank_faqs.vector_db import get_vector_store
+from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
+from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
+from phone_sales.vector_db import get_vector_store
 from tavily import TavilyClient
 from functools import lru_cache
 

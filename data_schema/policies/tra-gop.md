@@ -10,6 +10,15 @@
 | **Trả góp qua công ty tài chính** | Công dân Việt Nam 18–60 tuổi | CCCD gắn chip (một số trường hợp thêm bằng lái/hóa đơn điện nước) | 15–30 phút |
 | **Mua trước trả sau (BNPL) qua ví điện tử** | Có tài khoản ví đã định danh | Theo ví | Tức thì |
 
+### Điều kiện để được trả góp lãi 0%
+
+Lãi 0% chỉ áp dụng khi đáp ứng đủ điều kiện của hình thức tương ứng:
+
+- **Qua thẻ tín dụng:** đơn hàng từ **3.000.000đ**, kỳ hạn **3, 6, 9 hoặc 12 tháng** (tùy ngân hàng), hạn mức thẻ còn đủ giá trị đơn hàng. **Không cần trả trước.**
+- **Qua công ty tài chính:** đơn hàng từ **3.000.000đ**, **trả trước tối thiểu 30%**, kỳ hạn **tối đa 12 tháng**, và đủ điều kiện khách hàng ở mục 4 (18–60 tuổi, CCCD gắn chip, không nợ xấu nhóm 3 trở lên).
+- Không đạt các điều kiện trên vẫn trả góp được nhưng **có lãi hoặc phí**: công ty tài chính 1,5% – 2,9%/tháng; thẻ tín dụng kỳ hạn 18–24 tháng có phí chuyển đổi 2–4%.
+- Gói 0% không tính lãi nhưng có thể có phí hồ sơ hoặc bảo hiểm khoản vay (công ty tài chính), được thông báo trước khi ký.
+
 ## 2. Trả góp 0% qua thẻ tín dụng
 
 - Lãi suất **0%**, phí chuyển đổi trả góp **0%** cho kỳ hạn 3, 6, 9, 12 tháng (tùy ngân hàng).

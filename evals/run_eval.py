@@ -17,10 +17,10 @@ TAVILY_API_KEY (câu web).
 """
 import os
 
-# Tắt trace LangSmith khi eval (phải đặt trước khi import bank_faqs vì load_dotenv không ghi đè biến đã có)
+# Tắt trace LangSmith khi eval (phải đặt trước khi import phone_sales vì load_dotenv không ghi đè biến đã có)
 os.environ['LANGSMITH_TRACING'] = 'false'
 
-import bank_faqs  # noqa: E402,F401 - phải import đầu tiên (xem __init__.py)
+import phone_sales  # noqa: E402,F401 - phải import đầu tiên (xem __init__.py)
 import argparse  # noqa: E402
 import json  # noqa: E402
 import sys  # noqa: E402
@@ -30,9 +30,9 @@ from pathlib import Path  # noqa: E402
 import pandas as pd  # noqa: E402
 from langchain_core.messages import ToolMessage  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
-from bank_faqs.config import COLLECTION, POLICY_DIR  # noqa: E402
-from bank_faqs.llm import google_llm  # noqa: E402
-from bank_faqs.vector_db import count_documents, get_client, get_retriever  # noqa: E402
+from phone_sales.config import COLLECTION, POLICY_DIR  # noqa: E402
+from phone_sales.llm import google_llm  # noqa: E402
+from phone_sales.vector_db import count_documents, get_client, get_retriever  # noqa: E402
 
 # Console Windows mặc định cp1252, in tiếng Việt bị lỗi (stderr: thông báo của sys.exit)
 sys.stdout.reconfigure(encoding='utf-8')
@@ -109,9 +109,9 @@ def eval_retrieval(cases: list[dict], k: int = 3) -> dict:
 
 def build_target(name: str):
     if name == 'graph':
-        from bank_faqs.graph import build_graph
+        from phone_sales.graph import build_graph
         return build_graph(fallback=False)
-    from bank_faqs.agent import build_agent
+    from phone_sales.agent import build_agent
     return build_agent(fallback=False)  # không để Gemini trả lời thay khi model chính lỗi
 
 
@@ -252,7 +252,7 @@ def main():
     except Exception as e:
         sys.exit(f'Không kết nối được Qdrant ({type(e).__name__}). Chạy: docker compose up -d qdrant')
     if not n_docs:
-        sys.exit('Collection Qdrant chưa có dữ liệu. Chạy: uv run python -m bank_faqs.vector_db')
+        sys.exit('Collection Qdrant chưa có dữ liệu. Chạy: uv run python -m phone_sales.vector_db')
 
     retrieval = eval_retrieval(cases)
     rows = []

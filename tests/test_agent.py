@@ -4,9 +4,9 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-from bank_faqs import agent as agent_module
-from bank_faqs import llm
-from bank_faqs.fallback import DAILY_COOLDOWN_S, MINUTE_COOLDOWN_S, FallbackMiddleware
+from phone_sales import agent as agent_module
+from phone_sales import llm
+from phone_sales.fallback import DAILY_COOLDOWN_S, MINUTE_COOLDOWN_S, FallbackMiddleware
 
 
 class FakeModel(GenericFakeChatModel):
@@ -96,7 +96,7 @@ def test_other_errors_are_not_skipped_later():
 def test_permanent_errors_are_skipped_for_an_hour():
     # Sai tên model / sai key: câu nào cũng lỗi y hệt -> bỏ qua, không thử lại mỗi câu
     from langchain_core.exceptions import ModelNotFoundError
-    from bank_faqs.fallback import PERMANENT_COOLDOWN_S
+    from phone_sales.fallback import PERMANENT_COOLDOWN_S
     broken = FailingModel(model='gemini-sai-ten', messages=iter([]), error=ModelNotFoundError('404 NOT_FOUND'))
     ok = FakeModel(model='groq', messages=iter([AIMessage('a'), AIMessage('b')]))
     mw = FallbackMiddleware(ok, clock=lambda: 0.0)
@@ -107,7 +107,7 @@ def test_permanent_errors_are_skipped_for_an_hour():
 
 def test_ssl_certificate_errors_are_skipped_for_a_while():
     # Mạng có SSL inspection: lỗi chứng chỉ lặp lại ở mọi lần gọi -> bỏ qua để câu sau không phải chờ model đó lỗi
-    from bank_faqs.fallback import SSL_COOLDOWN_S
+    from phone_sales.fallback import SSL_COOLDOWN_S
     error = ConnectionError('[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate')
     gemini = FailingModel(model='gemini-a', messages=iter([]), error=error)
     ok = FakeModel(model='groq', messages=iter([AIMessage('a'), AIMessage('b')]))
@@ -127,6 +127,6 @@ def test_all_models_cooling_down_still_tries_everything():
 
 
 def test_graph_uses_same_chain(chain):
-    from bank_faqs.graph import build_graph
+    from phone_sales.graph import build_graph
     res = build_graph().invoke({'messages': [{'role': 'user', 'content': 'chào'}]})
     assert res['messages'][-1].text == 'Dạ, em là model dự phòng cuối ạ.'

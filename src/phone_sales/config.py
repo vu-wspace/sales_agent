@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-# Đường dẫn dữ liệu (dự án cài dạng editable nên tính từ vị trí file này: src/bank_faqs/config.py)
+# Đường dẫn dữ liệu (dự án cài dạng editable nên tính từ vị trí file này: src/phone_sales/config.py)
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_DIR = ROOT / 'data_schema' / 'policies'   # chính sách đổi trả, giao hàng, trả góp, bảo hành (.md) -> nạp vào Qdrant
 CHUNK_MAX_CHARS = 900                            # model bkai cắt ở 256 token, chunk dài hơn sẽ mất phần cuối khi embed

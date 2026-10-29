@@ -1,5 +1,5 @@
 [project]
-name = "bank-faqs"
+name = "phone-sales"
 version = "0.1.0"
 description = "Agent tư vấn bán điện thoại tiếng Việt (LangChain/LangGraph + Postgres + Qdrant + FastAPI)"
 readme = "README.md"
@@ -26,6 +26,7 @@ dependencies = [
     "uvicorn[standard]>=0.38.0",
     "langchain-openrouter>=0.2.9",
     "psycopg[binary]>=3.2",
+    "langchain-nvidia-ai-endpoints>=1.5.0",
 ]
 
 [build-system]

@@ -3,8 +3,8 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from bank_faqs import conversation as conv
-from bank_faqs import llm, tools
+from phone_sales import conversation as conv
+from phone_sales import llm, tools
 
 
 @pytest.mark.parametrize('text, expected', [
@@ -176,7 +176,7 @@ def test_graph_keeps_state_across_turns(monkeypatch, fake_catalog):
         AIMessage('Dạ em đã thêm Galaxy S26 vào giỏ ạ.'),                            # lượt 2 sau khi gọi tool
     ])
     monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=script))
-    from bank_faqs.graph import build_graph
+    from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     cfg = {'configurable': {'thread_id': 't'}}
 

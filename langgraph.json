@@ -3,8 +3,8 @@
   "python_version": "3.12",
   "dependencies": ["."],
   "graphs": {
-    "agent_main": "./src/bank_faqs/agent.py:agent",
-    "phone_graph": "./src/bank_faqs/graph.py:graph"
+    "agent_main": "./src/phone_sales/agent.py:agent",
+    "phone_graph": "./src/phone_sales/graph.py:graph"
   },
   "env": ".env"
 }

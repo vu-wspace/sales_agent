@@ -32,12 +32,21 @@
              border: 1px solid var(--line); background: var(--card); color: var(--text); }
   #send { background: var(--accent); color: #fff; border: 0; padding: 0 18px; }
   #send:disabled { opacity: .6; cursor: wait; }
+  /* Bong bóng đang chờ: dòng trạng thái + 3 chấm nhảy, rồi chữ hiện dần khi LLM viết */
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .dots span { display: inline-block; width: 5px; height: 5px; margin: 0 1px; border-radius: 50%;
+               background: var(--muted); animation: blink 1.2s infinite both; }
+  .dots span:nth-child(2) { animation-delay: .2s; }
+  .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
+  .draft:not(:empty) { margin-top: 6px; }
+  @media (prefers-reduced-motion: reduce) { .dots span { animation: none; opacity: .6; } }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Trợ lý chăm sóc khách hàng</h1>
+    <h1>Tư vấn điện thoại</h1>
     <button id="reset" type="button">Cuộc trò chuyện mới</button>
   </header>
   <div id="log" aria-live="polite"></div>
@@ -86,10 +95,11 @@
     });
   }
 
-  function add(text, cls, tools) {
-    const div = document.createElement('div');
+  // Điền nội dung cho 1 bong bóng: tin của khách và lỗi giữ nguyên chữ, câu trả lời hiển thị markdown
+  function fill(div, text, cls, tools) {
     div.className = 'msg ' + (cls || '');
-    if (cls) div.textContent = text;  // tin của khách và lỗi: giữ nguyên chữ
+    div.replaceChildren();
+    if (cls) div.textContent = text;
     else renderMarkdown(div, text);
     if (tools && tools.length) {
       const t = document.createElement('span');
@@ -97,8 +107,52 @@
       t.textContent = 'Đã tra cứu: ' + tools.join(', ');
       div.appendChild(t);
     }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function add(text, cls, tools) {
+    const div = document.createElement('div');
+    log.appendChild(div);
+    fill(div, text, cls, tools);
+    return div;
+  }
+
+  // Bong bóng chờ: hiện ngay khi gửi, đổi dòng trạng thái khi agent chạy tool, chữ hiện dần ở .draft
+  function addPending() {
+    const div = document.createElement('div');
+    div.className = 'msg';
+    const status = document.createElement('div');
+    status.className = 'status';
+    const dots = document.createElement('span');
+    dots.className = 'dots';
+    dots.append(...[0, 1, 2].map(() => document.createElement('span')));
+    const label = document.createElement('span');
+    label.textContent = 'Em đang trả lời…';
+    status.append(dots, label);
+    const draft = document.createElement('div');
+    draft.className = 'draft';
+    div.append(status, draft);
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
+    return { div, label, draft };
+  }
+
+  // Đọc Server-Sent Events từ /chat/stream: mỗi sự kiện là 1 dòng "data: {json}", cách nhau bằng dòng trống
+  async function* readEvents(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      buf += decoder.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (raw.startsWith('data: ')) yield JSON.parse(raw.slice(6));
+      }
+    }
   }
 
   function greet() {
@@ -114,18 +168,36 @@
     add(message, 'me');
     input.value = '';
     send.disabled = true;
+    const pending = addPending();
+    let draft = '';
     try {
-      const r = await fetch('/chat', {
+      const r = await fetch('/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, thread_id: threadId }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Có lỗi xảy ra.');
-      threadId = data.thread_id;
-      add(data.answer, '', data.tools);
+      if (!r.ok) {  // lỗi trước khi stream bắt đầu (vd 422 tin nhắn quá dài)
+        const data = await r.json().catch(() => ({}));
+        throw new Error(typeof data.detail === 'string' ? data.detail : 'Có lỗi xảy ra.');
+      }
+      let finished = false;
+      for await (const ev of readEvents(r)) {
+        if (ev.type === 'start') threadId = ev.thread_id;
+        else if (ev.type === 'status') pending.label.textContent = ev.text;
+        else if (ev.type === 'reset') { draft = ''; pending.draft.textContent = ''; }
+        else if (ev.type === 'token') {
+          draft += ev.text;
+          pending.draft.textContent = draft;  // chữ thô trong lúc viết; xong mới hiển thị markdown
+          log.scrollTop = log.scrollHeight;
+        } else if (ev.type === 'done') {
+          threadId = ev.thread_id;
+          fill(pending.div, ev.answer, '', ev.tools);
+          finished = true;
+        } else if (ev.type === 'error') throw new Error(ev.detail || 'Có lỗi xảy ra.');
+      }
+      if (!finished) throw new Error('Mất kết nối giữa chừng, anh/chị vui lòng gửi lại.');
     } catch (err) {
-      add(err.message || 'Không kết nối được máy chủ.', 'err');
+      fill(pending.div, err.message || 'Không kết nối được máy chủ.', 'err');
     } finally {
       send.disabled = false;
       input.focus();

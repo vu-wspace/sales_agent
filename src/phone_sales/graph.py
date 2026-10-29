@@ -1,15 +1,15 @@
-import bank_faqs  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
+import phone_sales  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Checkpointer
-from bank_faqs import llm
-from bank_faqs.conversation import (AgentState, append_unique, decide_stage, describe, needs_handoff,
+from phone_sales import llm
+from phone_sales.conversation import (AgentState, append_unique, decide_stage, describe, needs_handoff,
                                     products_mentioned, track_tool_results, track_user_message)
-from bank_faqs.fallback import FallbackMiddleware
-from bank_faqs.history import trim_history
-from bank_faqs.prompts import get_system_prompt
-from bank_faqs.tools import get_agent_tools
+from phone_sales.fallback import FallbackMiddleware
+from phone_sales.history import trim_history
+from phone_sales.prompts import get_system_prompt
+from phone_sales.tools import get_agent_tools
 
 # Agent tự dựng bằng StateGraph, có trạng thái hội thoại bán hàng (conversation.py) và giỏ hàng:
 #   START -> track_user -> model -> (có tool_call) tools -> track_tools -> model ... -> track_reply -> END
