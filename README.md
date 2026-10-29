@@ -512,6 +512,7 @@ Hạn chế: ít câu, LLM dao động giữa các lần chạy, judge là LLM n
 | `/health` trả 503 | Qdrant chưa chạy hoặc sai `QDRANT_URL` | `docker compose up -d qdrant` |
 | Agent treo vài phút | `timeout` OpenRouter đặt bằng giây | `timeout=60_000` trong `llm.py` |
 | Log `Failed to multipart ingest runs` | LangSmith không gửi được trace | `LANGSMITH_TRACING=false`; không ảnh hưởng chức năng |
+| `uvicorn` báo `[Errno 10048] ... ('127.0.0.1', 8000)` | Container `phone_sales_api` đang giữ cổng 8000 | Dùng luôn web app trong Docker; hoặc `docker compose stop api` rồi chạy `uvicorn`; hoặc chạy `uvicorn ... --port 8001` |
 | Sửa code nhưng Docker không đổi | Image cũ | `docker compose up -d --build api` |
 
 ## Lưu ý trên Windows
