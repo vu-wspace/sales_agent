@@ -23,7 +23,7 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 
 ## Bắt đầu nhanh
 
-Yêu cầu: Docker. Khi phát triển trên máy cần thêm Python 3.12 và [uv](https://docs.astral.sh/uv/).
+Yêu cầu: Docker và các API key trong [Cấu hình](#cấu-hình). Khi phát triển trên máy cần thêm Python 3.12.15 và [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cp .env.example .env            # điền API key
@@ -111,7 +111,7 @@ Trong Docker, compose tự đặt `DATABASE_URL` và `QDRANT_URL` trỏ tới c�
 
 ### `POST /chat`
 
-```json
+```jsonc
 // request: bỏ trống thread_id để bắt đầu hội thoại mới
 {"message": "ok chốt galaxy s26 256gb màu đen", "thread_id": "5f0c…"}
 
@@ -221,7 +221,7 @@ Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `c
 
 `FallbackMiddleware` thử lần lượt các model tới khi có model trả lời. Model gặp lỗi lặp lại sẽ tạm bị bỏ qua: hết quota ngày hoặc lỗi cấu hình (sai key, sai tên model) 1 giờ, giới hạn theo phút 1 phút, lỗi chứng chỉ SSL 10 phút. Lỗi tạm thời (mất mạng, 5xx) chỉ chuyển model cho lần gọi đó. Mỗi lần chuyển model đều ghi log (`docker compose logs api | grep LLM`).
 
-Gói free của OpenRouter giới hạn khoảng 50 request/ngày (reset lúc 7:00 sáng giờ Việt Nam); mỗi câu hỏi tốn 2–3 request.
+Model `:free` của OpenRouter giới hạn 50 request/ngày (1000 request/ngày nếu tài khoản đã nạp từ 10 USD), reset lúc 7:00 sáng giờ Việt Nam; mỗi câu hỏi tốn 2–3 request.
 
 ## Dữ liệu
 
@@ -297,7 +297,7 @@ uv run python evals/run_eval.py --only product,acc-01       # lọc theo nhóm h
 
 Cả bộ cần khoảng 90 request, vượt quota ngày của OpenRouter gói free, nên cần chia làm nhiều lần.
 
-Kết quả gần nhất (`graph.py`, 30/10/2026). Truy xuất chính sách: hit@1 89%, hit@3 100%, MRR 0,95.
+Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu lấy lần chạy mới nhất). Truy xuất chính sách: hit@1 89%, hit@3 100%, MRR 0,95.
 
 | Nhóm | Số câu | Gọi đúng tool | Đủ ý | Hành vi | Dựa trên dữ liệu | Điểm TB (1–5) |
 |---|---|---|---|---|---|---|
