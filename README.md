@@ -109,7 +109,7 @@ flowchart LR
 | Nhóm | Quy tắc chính |
 |---|---|
 | Xưng hô | Tiếng Việt, xưng "em", gọi "anh/chị", không đoán giới tính |
-| Dùng tool | Tìm máy, tầm giá → `search_products`; giá, màu, tồn kho, thông số 1 máy → `get_product_details` (nhiều máy khớp thì hỏi lại); phụ kiện → `find_accessories`; chính sách → `search_policy` (làm theo "Hướng dẫn trả lời" đi kèm kết quả); `web_search` chỉ khi dữ liệu nội bộ không có, không dùng cho giá hay chính sách |
+| Dùng tool | Tìm máy, tầm giá → `search_products`; giá, màu, tồn kho, thông số 1 máy → `get_product_details` (nhiều máy khớp thì hỏi lại); phụ kiện → `find_accessories`; chính sách, lỗi máy, bảo hành → `search_policy` (làm theo "Hướng dẫn trả lời" đi kèm kết quả); `web_search` chỉ khi dữ liệu nội bộ không có, không dùng cho giá hay chính sách |
 | Trả lời | Chỉ dựa trên kết quả tool; **không bao giờ nói không có hàng/chưa có thông tin khi chưa gọi tool trong lượt đó** (quy tắc 10); giữ đúng giá, chỉ dòng có "(giá tham khảo)" mới nói là tham khảo; tồn kho chỉ nói còn hàng / sắp hết / hết hàng; tư vấn tối đa 3 máy; liệt kê tối đa 5 dòng; tối đa khoảng 100 từ |
 | Chuyển nhân viên | Khiếu nại, máy lỗi, đơn giao sai/chậm/thiếu, hủy đơn đã thanh toán, đòi gặp người thật |
 | Bảo mật | Không hỏi OTP, mật khẩu, PIN, số thẻ, CVV; không tiết lộ thông tin khách khác |
@@ -542,9 +542,32 @@ Kết quả chi tiết lưu ở `evals/results/`.
 
 ### Kết quả hiện có
 
-**Truy xuất chính sách** (19 câu, 29/10/2026): hit@1 89%, hit@3 100%, MRR 0,95.
+**Truy xuất chính sách** (19 câu, 30/10/2026): hit@1 89%, hit@3 100%, MRR 0,95. Hai câu có file đúng ở vị trí 2: `policy-04` (hoàn tiền khi trả bằng thẻ tín dụng, lấy `tra-gop.md` trước) và `policy-13` (bảo hành iPhone bao lâu, lấy `giao-hang.md` trước).
 
-**Agent `graph.py`** (29/10/2026, OpenRouter, 17 câu thuộc 5 nhóm; mỗi câu lấy lần chạy mới nhất trong 2 lần, xem `evals/results/20261029-*-graph.json`):
+**Agent `graph.py`** (OpenRouter, đủ 37 câu chia 2 ngày):
+
+| Nhóm | Số câu | routing | keyword | behavior | grounded | Điểm TB | Độ trễ TB |
+|---|---|---|---|---|---|---|---|
+| `policy` | 19 | 19/19 | 15/15 | – | 19/19 | 4,89 | 9,0 s |
+| `product` | 7 | 6/6 | 6/6 | – | 7/7 | 4,57 | 26,9 s |
+| `accessory` | 3 | 2/3 | 3/3 | – | 3/3 | 4,67 | 25,9 s |
+| `escalation` | 3 | 1/2 | – | 3/3 | 3/3 | 4,67 | 25,0 s |
+| `security` | 2 | 1/1 | – | 1/1 | 2/2 | 5,00 | 11,6 s |
+| `web` | 1 | – | – | – | 1/1 | 5,00 | 18,8 s |
+| `out_of_scope` | 2 | 2/2 | – | 2/2 | 2/2 | 5,00 | 14,4 s |
+| **Tổng** | **37** | **31/33** | **24/24** | **6/6** | **37/37** | **4,81** | **15,8 s** |
+
+Mỗi câu lấy lần chạy mới nhất: `policy`, `web`, `acc-01` chạy ngày 30/10 (`evals/results/20261030-151900-graph.json`); `policy-19` và `out_of_scope` chạy lại sau khi sửa prompt (`20261030-152815-graph.json`); các câu còn lại chạy ngày 29/10 (`20261029-*-graph.json`).
+
+Lần chạy 30/10 phát hiện 1 lỗi, đã sửa:
+
+| Lỗi | Cách sửa |
+|---|---|
+| `policy-19` ("màn hình Z Fold có vết gấp có phải lỗi không"): model trả lời theo hiểu biết riêng, không gọi `search_policy`, thiếu lưu ý không tự gỡ lớp bảo vệ màn hình | Quy tắc 4 và 10: hỏi lỗi máy, hiện tượng lạ, bảo hành cũng phải gọi `search_policy`. Chạy lại: gọi đúng tool, 5 điểm; 2 câu `out_of_scope` vẫn không gọi tool |
+
+9/21 câu trong lần chạy 30/10 dài hơn 80 từ (prompt giới hạn khoảng 100 từ).
+
+Bảng chi tiết lần chạy 29/10 (17 câu thuộc 5 nhóm; mỗi câu lấy lần chạy mới nhất trong 2 lần):
 
 | Nhóm | Số câu | routing | keyword | behavior | grounded | Điểm TB | Độ trễ TB |
 |---|---|---|---|---|---|---|---|
@@ -561,7 +584,7 @@ Lần chạy đầu phát hiện 4 lỗi, đều đã sửa:
 |---|---|
 | Model đọc số lượng kho cho khách | Tool không còn trả số lượng |
 | Model mời khách "kiểm tra số lượng chính xác" | Sửa quy tắc 8 trong prompt |
-| Model liệt kê 8 ốp lưng | `find_accessories` chia trang 5 món (chưa chạy lại eval, nên `acc-01` vẫn ghi 3 điểm) |
+| Model liệt kê 8 ốp lưng | `find_accessories` chia trang 5 món (chạy lại 30/10: `acc-01` từ 3 lên 5 điểm) |
 | Judge hiểu sai quy tắc "giá tham khảo" và "tối đa 3 máy" | Sửa prompt chấm điểm |
 
 Ghi chú:
@@ -641,8 +664,8 @@ Trên 19 câu chính sách: câu đúng chủ đề có điểm từ 0,30 trở 
 
 **Việc còn mở:**
 
-- Chạy eval cho nhóm `policy` (19 câu), `web` (1 câu) và chạy lại `acc-01`, sau khi OpenRouter reset quota (7:00 sáng):
-  `uv run python evals/run_eval.py --target graph --only policy,web,acc-01`
+- Truy xuất chính sách: `policy-04` và `policy-13` lấy đúng file ở vị trí 2 chứ chưa ở vị trí 1.
+- Gần một nửa câu trả lời chính sách dài hơn 80 từ.
 
 ## Mở rộng dự án
 
