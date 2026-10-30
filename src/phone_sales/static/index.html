@@ -29,7 +29,6 @@
   .me { align-self: flex-end; background: var(--me); border-color: transparent; }
   .err { color: var(--err); }
   .msg a { color: var(--accent); overflow-wrap: anywhere; }
-  .tools { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
   form { display: flex; gap: 8px; }
   textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border-radius: 8px;
              border: 1px solid var(--line); background: var(--card); color: var(--text); }
@@ -99,24 +98,18 @@
   }
 
   // Điền nội dung cho 1 bong bóng: tin của khách và lỗi giữ nguyên chữ, câu trả lời hiển thị markdown
-  function fill(div, text, cls, tools) {
+  function fill(div, text, cls) {
     div.className = 'msg ' + (cls || '');
     div.replaceChildren();
     if (cls) div.textContent = text;
     else renderMarkdown(div, text);
-    if (tools && tools.length) {
-      const t = document.createElement('span');
-      t.className = 'tools';
-      t.textContent = 'Đã tra cứu: ' + tools.join(', ');
-      div.appendChild(t);
-    }
     log.scrollTop = log.scrollHeight;
   }
 
-  function add(text, cls, tools) {
+  function add(text, cls) {
     const div = document.createElement('div');
     log.appendChild(div);
-    fill(div, text, cls, tools);
+    fill(div, text, cls);
     return div;
   }
 
@@ -194,7 +187,7 @@
           log.scrollTop = log.scrollHeight;
         } else if (ev.type === 'done') {
           threadId = ev.thread_id;
-          fill(pending.div, ev.answer, '', ev.tools);
+          fill(pending.div, ev.answer, '');
           finished = true;
         } else if (ev.type === 'error') throw new Error(ev.detail || 'Có lỗi xảy ra.');
       }
