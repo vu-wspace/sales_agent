@@ -1373,7 +1373,7 @@
     "category": "accessory",
     "description": "Bộ Chuyển Đổi Sạc + Dữ Liệu Belkin Connect USB-C",
     "attributes": {
-      "accessory_type": "charger",
+      "accessory_type": "other",
       "sku": "HR862ZM/B",
       "source_url": "https://www.apple.com/vn/shop/product/hr862zm/b/b%E1%BB%99-chuy%E1%BB%83n-%C4%91%E1%BB%95i-s%E1%BA%A1c-d%E1%BB%AF-li%E1%BB%87u-belkin-connect-usb-c"
     }

@@ -28,3 +28,8 @@ AGENT_IMPL = os.getenv('AGENT_IMPL', 'graph').lower()
 
 # Web app: collection rỗng thì tự nạp dữ liệu khi khởi động
 AUTO_INGEST = os.getenv('AUTO_INGEST', 'true').lower() == 'true'
+
+# Khóa mã hóa số điện thoại, email của khách trong database (Fernet, base64 32 byte). Tạo khóa:
+#   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Mất khóa là không đọc lại được thông tin khách đã lưu
+PII_KEY = os.getenv('PII_KEY', '')

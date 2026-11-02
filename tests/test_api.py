@@ -292,7 +292,7 @@ class CartAgent(FakeAgent):
 @pytest.fixture
 def fake_orders(monkeypatch):
     saved = []
-    def create_order(cart, *args, thread_id=None, email=None):
+    def create_order(cart, *args, thread_id=None, email=None, promo_code=None):
         if not cart:
             raise api.orders.OrderError('Giỏ hàng đang trống')
         saved.append((cart, args, thread_id) + ((email,) if email else ()))
@@ -352,7 +352,7 @@ def test_order_database_error_returns_503(monkeypatch):
     monkeypatch.setattr(api.orders, 'create_order', boom)
     api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
-    assert r.status_code == 503 and 'Chưa lưu được đơn hàng' in r.json()['detail']
+    assert r.status_code == 503 and 'chưa lưu được đơn hàng' in r.json()['detail']
 
 
 def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
@@ -360,7 +360,7 @@ def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
     r = TestClient(api.app).post('/order/cancel', json={'thread_id': 't1'})
     assert r.status_code == 200
     assert r.json() == {'thread_id': 't1', 'answer': api.orders.CANCEL_MESSAGE}
-    assert r.json()['answer'].startswith('Thật tiếc') and 'hỗ trợ hay tư vấn gì thêm' in r.json()['answer']
+    assert r.json()['answer'].startswith('Dạ, thật tiếc') and 'hỗ trợ hay tư vấn gì thêm' in r.json()['answer']
     assert fake_orders == []                                              # không tạo đơn
     thread, values, node = agent.updates[0]
     assert thread == 't1' and node == 'track_reply' and values['cart'] == [] and values['order_form'] is False and values['cross_sell'] is None
@@ -370,3 +370,18 @@ def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
 def test_order_cancel_needs_thread(fake_orders):
     api.app.state.agent = CartAgent(CART)
     assert TestClient(api.app).post('/order/cancel', json={}).status_code == 422
+
+
+def test_chat_redacts_phone_and_email_before_agent(client):
+    # FakeAgent trả lời lại đúng tin nhận được: agent (LLM, lịch sử) chỉ thấy bản đã che
+    r = client.post('/chat', json={'message': 'sđt mình 0912 345 678, mail a.b@gmail.com'})
+    assert r.json()['answer'] == 'Trả lời: sđt mình [SỐ ĐIỆN THOẠI], mail [EMAIL]'
+
+
+def test_order_without_pii_key_returns_503(monkeypatch):
+    def no_key(*a, **k):
+        raise api.pii.PiiKeyError('Chưa đặt PII_KEY')
+    monkeypatch.setattr(api.orders, 'create_order', no_key)
+    api.app.state.agent = CartAgent(CART)
+    r = TestClient(api.app).post('/order', json=ORDER_FORM)
+    assert r.status_code == 503 and 'chưa lưu được đơn hàng' in r.json()['detail']

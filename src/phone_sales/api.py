@@ -19,9 +19,9 @@ from langgraph.errors import GraphRecursionError
 from openrouter import errors as openrouter_errors
 from pydantic import BaseModel, Field, field_validator
 
-from phone_sales import orders
+from phone_sales import orders, pii, promotions
 from phone_sales.agent import build_agent
-from phone_sales.config import AGENT_IMPL, AUTO_INGEST
+from phone_sales.config import AGENT_IMPL, AUTO_INGEST, PII_KEY
 from phone_sales.graph import build_graph
 from phone_sales.llm import is_rate_limited
 from phone_sales.textnorm import normalize_user_text
@@ -33,7 +33,7 @@ STATIC = Path(__file__).parent / 'static'
 # Lỗi của LLM/agent được trả cho khách thành 429 (quá tải) hoặc 502; lỗi khác là lỗi code -> 500
 LLM_ERRORS = (groq.APIError, openrouter_errors.OpenRouterError, openrouter_errors.NoResponseError,
               ModelError, GraphRecursionError)
-RATE_LIMIT_DETAIL = 'Hệ thống đang quá tải, anh/chị vui lòng thử lại sau ít phút.'
+RATE_LIMIT_DETAIL = 'Dạ, hệ thống đang quá tải, anh/chị thử lại sau ít phút giúp em nha.'
 
 # Dòng trạng thái hiện trên giao diện khi agent đang chạy tool (/chat/stream)
 TOOL_STATUS = {
@@ -45,6 +45,8 @@ TOOL_STATUS = {
     'add_to_cart': 'Đang cập nhật giỏ hàng…',
     'remove_from_cart': 'Đang cập nhật giỏ hàng…',
     'show_order_form': 'Đang mở form đặt hàng…',
+    'find_cheaper_alternatives': 'Đang tìm máy giá mềm hơn…',
+    'get_promotions': 'Đang xem khuyến mãi…',
 }
 THINKING_STATUS = 'Em đang cân nhắc…'
 
@@ -56,8 +58,9 @@ class ChatRequest(BaseModel):
     @classmethod
     def normalize(cls, v):
         # NFC, dấu kiểu cũ, viết tắt ("ko", "dc", "20tr"...): luật từ khóa, model và lịch sử cùng đọc 1 dạng.
-        # Chạy sau kiểm tra độ dài trên chuỗi gốc ("x" * 1001 rút gọn ký tự lặp sẽ thành "x")
-        v = normalize_user_text(v)
+        # Chạy sau kiểm tra độ dài trên chuỗi gốc ("x" * 1001 rút gọn ký tự lặp sẽ thành "x").
+        # Che số điện thoại, email: không tới LLM, LangSmith, lịch sử hội thoại (thông tin nhận hàng nhập ở form)
+        v = pii.redact(normalize_user_text(v))
         if not v:
             raise ValueError('Tin nhắn trống')
         return v
@@ -78,6 +81,7 @@ class OrderRequest(BaseModel):
     phone: str = Field(pattern=r'^(0|\+84)\d{9}$')
     address: str = Field(min_length=10, max_length=300)
     email: str | None = Field(default=None, max_length=254)  # không bắt buộc
+    promo_code: str | None = Field(default=None, max_length=50)  # mã khuyến mãi, không bắt buộc
     # Form hiện chỉ hỗ trợ giao tận nơi, thanh toán khi nhận hàng
     fulfillment_type: Literal['delivery'] = 'delivery'
     payment: Literal['cod'] = 'cod'
@@ -98,11 +102,27 @@ class OrderRequest(BaseModel):
             raise ValueError('Email chưa đúng định dạng')
         return v
 
+    @field_validator('promo_code', mode='before')
+    @classmethod
+    def strip_code(cls, v):
+        return (v.strip().upper() or None) if isinstance(v, str) else v
+
     @field_validator('phone', mode='before')
     @classmethod
     def normalize_phone(cls, v):
         # "0912 345.678" -> "0912345678", giống kiểm tra trên form
         return ''.join(c for c in v if c not in ' .-') if isinstance(v, str) else v
+
+class QuoteRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=100)
+    promo_code: str | None = Field(default=None, max_length=50)
+
+class QuoteResponse(BaseModel):
+    subtotal: int
+    discount: int
+    total: int
+    promo: str | None = None         # mã (hoặc mô tả khuyến mãi tự động) đang áp dụng
+    promo_text: str | None = None    # mô tả đầy đủ: mức giảm, phạm vi, điều kiện, hạn
 
 class CancelRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=100)
@@ -138,12 +158,18 @@ def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    pii.install_log_filter()  # che số điện thoại, email trong log (handler của uvicorn đã có lúc này)
+    if not PII_KEY:
+        log.error('Chưa đặt PII_KEY trong .env: POST /order sẽ lỗi (không mã hóa được thông tin khách)')
     n = await asyncio.to_thread(prepare_vector_db)
     log.info('Qdrant sẵn sàng: %d tài liệu', n)
     try:
-        await asyncio.to_thread(orders.ensure_tables)  # bảng customers, orders cho form đặt hàng
+        # Bảng customers, orders cho form đặt hàng; mã hóa số điện thoại, email còn ở dạng chữ thường
+        await asyncio.to_thread(orders.ensure_tables)
     except psycopg.Error as e:
         log.error('Chưa tạo được bảng đơn hàng (%s): POST /order sẽ lỗi tới khi Postgres sẵn sàng', type(e).__name__)
+    except pii.PiiKeyError as e:
+        log.error('Chưa mã hóa được thông tin khách cũ: %s', e)
     # InMemorySaver: lịch sử hội thoại nằm trong RAM của process -> mất khi restart, chỉ chạy 1 worker
     # graph: có trạng thái hội thoại + giỏ hàng (graph.py); agent: create_agent không có state riêng (agent.py)
     build = build_graph if AGENT_IMPL == 'graph' else build_agent
@@ -234,7 +260,7 @@ def _stream_events(agent, message: str, thread_id: str, config: dict, n_before: 
         return
     except Exception as e:
         log.error('Lỗi khi stream câu trả lời', exc_info=e)
-        yield _sse({'type': 'error', 'status': 500, 'detail': 'Có lỗi hệ thống, anh/chị vui lòng thử lại.'})
+        yield _sse({'type': 'error', 'status': 500, 'detail': 'Dạ, hệ thống đang có lỗi, anh/chị thử lại giúp em nha.'})
         return
     values = agent.get_state(config).values
     yield _sse({'type': 'done', **_response(thread_id, values, n_before).model_dump()})
@@ -259,13 +285,16 @@ def order(req: OrderRequest, request: Request):
     cart = agent.get_state(config).values.get('cart') or []
     try:
         order_id = orders.create_order(cart, req.name, req.phone, req.address, req.fulfillment_type, req.payment,
-                                       thread_id=req.thread_id, email=req.email)
+                                       thread_id=req.thread_id, email=req.email, promo_code=req.promo_code)
         saved = orders.get_order(order_id)
-    except orders.OrderError as e:
+    except (orders.OrderError, promotions.PromoError) as e:
         raise HTTPException(409, str(e))
     except psycopg.Error as e:
         log.error('Lỗi khi lưu đơn hàng', exc_info=e)
-        raise HTTPException(503, 'Chưa lưu được đơn hàng, anh/chị vui lòng thử lại sau ít phút.')
+        raise HTTPException(503, 'Dạ, em chưa lưu được đơn hàng, anh/chị thử lại sau ít phút giúp em nha.')
+    except pii.PiiKeyError as e:
+        log.error('Không mã hóa được thông tin khách: %s', e)
+        raise HTTPException(503, 'Dạ, em chưa lưu được đơn hàng, anh/chị thử lại sau ít phút giúp em nha.')
     thanks = orders.thank_you(req.name)
     answer = f'{orders.summary(saved)}\n\n{thanks}'
     # Lượt sau agent biết đơn đã đặt; giỏ hàng làm trống để khách mua tiếp không bị cộng dồn
@@ -274,6 +303,22 @@ def order(req: OrderRequest, request: Request):
                        as_node='track_reply')
     return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
                          thanks=thanks)
+
+@app.post('/order/quote', response_model=QuoteResponse)
+def order_quote(req: QuoteRequest, request: Request):
+    """Form đặt hàng hỏi giá trước khi gửi: tạm tính, giảm giá (mã khách nhập hoặc khuyến mãi tự động), tổng tiền.
+    Tính từ giỏ hàng của thread trên server. Mã không dùng được thì 409 kèm lý do."""
+    cart = request.app.state.agent.get_state({'configurable': {'thread_id': req.thread_id}}).values.get('cart') or []
+    try:
+        price = orders.quote(cart, req.promo_code)
+    except (orders.OrderError, promotions.PromoError) as e:
+        raise HTTPException(409, str(e))
+    except psycopg.Error as e:
+        log.error('Lỗi khi tính giá đơn hàng', exc_info=e)
+        raise HTTPException(503, 'Dạ, em chưa kiểm tra được mã khuyến mãi, anh/chị thử lại sau ít phút giúp em nha.')
+    promo = price['promo']
+    return QuoteResponse(subtotal=price['subtotal'], discount=price['discount'], total=price['total'],
+                         promo=promotions.label(promo), promo_text=promotions.describe(promo) if promo else None)
 
 @app.post('/order/cancel', response_model=CancelResponse)
 def cancel_order(req: CancelRequest, request: Request):

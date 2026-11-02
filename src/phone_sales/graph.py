@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Checkpointer
-from phone_sales import llm
+from phone_sales import llm, pii
 from phone_sales.conversation import (AgentState, append_unique, cross_sell_step, decide_stage, describe,
                                     needs_handoff, products_mentioned, track_tool_results, track_user_message)
 from phone_sales.fallback import FallbackMiddleware
@@ -23,15 +23,21 @@ SYSTEM_PROMPT = get_system_prompt('agent_graph')
 
 def _last_user_text(state: AgentState) -> str:
     human = [m for m in state.get('messages', []) if isinstance(m, HumanMessage)]
-    # api.py đã chuẩn hóa; chuẩn hóa lại cho trường hợp gọi graph trực tiếp (langgraph dev, eval)
-    return normalize_user_text(human[-1].text) if human else ''
+    # api.py đã chuẩn hóa và che số điện thoại, email; làm lại cho trường hợp gọi graph trực tiếp (langgraph dev, eval)
+    return pii.redact(normalize_user_text(human[-1].text)) if human else ''
 
 def track_user(state: AgentState) -> dict:
     # Đọc tin nhắn mới của khách: nhu cầu, lo ngại, cảm xúc, có đòi gặp nhân viên không
     info = track_user_message(_last_user_text(state))
     after = {**state, 'sentiment_history': [*state.get('sentiment_history', []), *info['sentiment_history']]}
     after['handoff'] = needs_handoff(after, info['wants_handoff'])
+    objection = info['objection']
+    # Đổi loại phản đối (đang do dự thì chê giá) -> chiến lược mới làm lại từ bước đầu
+    restart = {'objection_type': objection, 'objection_step': 0} \
+        if objection and objection != state.get('objection_type') else {}
     return {
+        **restart,
+        'objection': objection,
         'slots': info['slots'],
         'objections': info['objections'],
         'sentiment_history': info['sentiment_history'],
@@ -56,7 +62,9 @@ def track_reply(state: AgentState) -> dict:
     after = {**state, 'shown_products': append_unique(state.get('shown_products'), shown)}
     # Bước bán kèm của lượt này (đã đưa vào prompt) coi như đã làm, lượt sau sang bước kế tiếp
     step = cross_sell_step(state)
-    return {'shown_products': shown, 'cross_sell': [step] if step else [], 'stage': _stage_now(after)}
+    # Lượt này đã xử lý phản đối -> lần sau khách phản đối cùng loại thì sang bậc kế tiếp
+    handled = {'objection_step': (state.get('objection_step') or 0) + 1} if state.get('objection') else {}
+    return {'shown_products': shown, 'cross_sell': [step] if step else [], 'stage': _stage_now(after), **handled}
 
 def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
     # checkpointer (vd InMemorySaver) lưu cả trạng thái hội thoại theo thread_id - api.py dùng cách này.

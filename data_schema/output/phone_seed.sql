@@ -66,7 +66,7 @@ INSERT INTO public.products (product_id, name, brand, category, description, att
 INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hrgx2zm', 'Cáp Sạc mophie USB-C sang USB-C 240W (3M) - Đen', 'Apple', 'accessory', 'Cáp Sạc mophie USB-C sang USB-C 240W (3M) - Đen', '{"accessory_type": "cable", "sku": "HRGX2ZM/A", "source_url": "https://www.apple.com/vn/shop/product/hrgx2zm/a/c%C3%A1p-s%E1%BA%A1c-mophie-usb-c-sang-usb-c-240w-3m-%C4%91en"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
 INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hrww2zm', 'Bộ Sạc Anker Cube 3 trong 1 Chuẩn Qi2 – Xám', 'Apple', 'accessory', 'Bộ Sạc Anker Cube 3 trong 1 Chuẩn Qi2 – Xám', '{"accessory_type": "charger", "sku": "HRWW2ZM/A", "source_url": "https://www.apple.com/vn/shop/product/hrww2zm/a/anker-3-in-1-cube-with-qi2-gray"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
 INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hq452zm', 'Bộ sạc trên ô tô mophie Dual (USB-C/USB-A) 32W PD', 'Apple', 'accessory', 'Bộ sạc trên ô tô mophie Dual (USB-C/USB-A) 32W PD', '{"accessory_type": "charger", "sku": "HQ452ZM/A", "source_url": "https://www.apple.com/vn/shop/product/hq452zm/a/b%E1%BB%99-s%E1%BA%A1c-tr%C3%AAn-%C3%B4-t%C3%B4-mophie-dual-usb-c-usb-a-32w-pd"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
-INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hr862zm', 'Bộ Chuyển Đổi Sạc + Dữ Liệu Belkin Connect USB-C', 'Apple', 'accessory', 'Bộ Chuyển Đổi Sạc + Dữ Liệu Belkin Connect USB-C', '{"accessory_type": "charger", "sku": "HR862ZM/B", "source_url": "https://www.apple.com/vn/shop/product/hr862zm/b/b%E1%BB%99-chuy%E1%BB%83n-%C4%91%E1%BB%95i-s%E1%BA%A1c-d%E1%BB%AF-li%E1%BB%87u-belkin-connect-usb-c"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
+INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hr862zm', 'Bộ Chuyển Đổi Sạc + Dữ Liệu Belkin Connect USB-C', 'Apple', 'accessory', 'Bộ Chuyển Đổi Sạc + Dữ Liệu Belkin Connect USB-C', '{"accessory_type": "other", "sku": "HR862ZM/B", "source_url": "https://www.apple.com/vn/shop/product/hr862zm/b/b%E1%BB%99-chuy%E1%BB%83n-%C4%91%E1%BB%95i-s%E1%BA%A1c-d%E1%BB%AF-li%E1%BB%87u-belkin-connect-usb-c"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
 INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hrqh2ll', 'Bộ Sạc Anker (Công Suất 150W, 4 Cổng)', 'Apple', 'accessory', 'Bộ Sạc Anker (Công Suất 150W, 4 Cổng)', '{"accessory_type": "charger", "sku": "HRQH2LL/A", "source_url": "https://www.apple.com/vn/shop/product/hrqh2ll/a/b%E1%BB%99-s%E1%BA%A1c-anker-c%C3%B4ng-su%E1%BA%A5t-150w-4-c%E1%BB%95ng"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
 INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hrwy2ll', 'Sạc Dự Phòng Anker MagGo (5K, Mỏng)', 'Apple', 'accessory', 'Sạc Dự Phòng Anker MagGo (5K, Mỏng)', '{"accessory_type": "power-bank", "sku": "HRWY2LL/A", "source_url": "https://www.apple.com/vn/shop/product/hrwy2ll/a/s%E1%BA%A1c-d%E1%BB%B1-ph%C3%B2ng-anker-maggo-5k-m%E1%BB%8Fng"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
 INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ('acc-apple-hrgg2zm', 'Bộ Sạc Gắn Tường 2 Cổng Belkin BoostCharge (42W)', 'Apple', 'accessory', 'Bộ Sạc Gắn Tường 2 Cổng Belkin BoostCharge (42W)', '{"accessory_type": "charger", "sku": "HRGG2ZM/A", "source_url": "https://www.apple.com/vn/shop/product/hrgg2zm/a/b%E1%BB%99-s%E1%BA%A1c-g%E1%BA%AFn-t%C6%B0%E1%BB%9Dng-2-c%E1%BB%95ng-belkin-boostcharge-42w"}') ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;
@@ -1137,8 +1137,6 @@ INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-e
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-p3401xuegww', 'samsung-galaxy-z-flip8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-p3401xuegww', 'samsung-galaxy-z-fold8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-p3401xuegww', 'samsung-galaxy-z-fold8-ultra');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-p2900bbegww', 'samsung-galaxy-s25');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-p2900bbegww', 'samsung-galaxy-s25-ultra');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-p2900bbegww', 'samsung-galaxy-s26');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-p2900bbegww', 'samsung-galaxy-s26-fe');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-p2900bbegww', 'samsung-galaxy-s26-plus');
@@ -1179,8 +1177,6 @@ INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-g
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-fps947pgajw', 'samsung-galaxy-s26-plus');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-fps942pgbnw', 'samsung-galaxy-s26');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-fps942pgajw', 'samsung-galaxy-s26');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-s25');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-s25-ultra');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-s26');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-s26-fe');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-s26-plus');
@@ -1188,8 +1184,6 @@ INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-g
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-z-flip8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-z-fold8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026pgbbw', 'samsung-galaxy-z-fold8-ultra');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-s25');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-s25-ultra');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-s26');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-s26-fe');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-s26-plus');
@@ -1197,8 +1191,6 @@ INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-g
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-z-flip8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-z-fold8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hialw', 'samsung-galaxy-z-fold8-ultra');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hibjw', 'samsung-galaxy-s25');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hibjw', 'samsung-galaxy-s25-ultra');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hibjw', 'samsung-galaxy-s26');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hibjw', 'samsung-galaxy-s26-fe');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-gp-tou026hibjw', 'samsung-galaxy-s26-plus');
@@ -1229,8 +1221,6 @@ INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-e
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-t4511xwegww', 'samsung-galaxy-z-flip8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-t4511xwegww', 'samsung-galaxy-z-fold8');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-ep-t4511xwegww', 'samsung-galaxy-z-fold8-ultra');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-u2500xjegww', 'samsung-galaxy-s25');
-INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-u2500xjegww', 'samsung-galaxy-s25-ultra');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-u2500xjegww', 'samsung-galaxy-s26');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-u2500xjegww', 'samsung-galaxy-s26-fe');
 INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ('acc-samsung-eb-u2500xjegww', 'samsung-galaxy-s26-plus');

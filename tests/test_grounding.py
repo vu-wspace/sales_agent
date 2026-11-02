@@ -37,7 +37,12 @@ def test_normalize_composes_decomposed_accents():
 
 
 def test_clean_answer_strips_thinking_and_blank_lines():
-    assert clean_answer('<think>tính giá</think>\n\nDạ   \n\n\n\nem gửi nhé') == 'Dạ\n\nem gửi nhé'
+    assert clean_answer('<think>tính giá</think>\n\nDạ   \n\n\n\nem gửi luôn') == 'Dạ\n\nem gửi luôn'
+
+
+def test_clean_answer_uses_southern_nha():
+    # Giọng miền Nam: "nhé" -> "nha"; chữ "Nhé" viết hoa đầu câu (hiếm) giữ nguyên
+    assert clean_answer('Dạ, em gửi giá luôn nhé. Còn hàng nhé!') == 'Dạ, em gửi giá luôn nha. Còn hàng nha!'
 
 
 # ---------------------------------------------------------------- số liệu không rõ nguồn

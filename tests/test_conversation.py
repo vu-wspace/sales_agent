@@ -122,7 +122,8 @@ def test_cross_sell_steps():
     assert conv.cross_sell_step(state) == 'charger'
     text = hint(state)
     assert text.startswith('Bán kèm (bước 1/3, củ sạc)') and "accessory_type='sạc, cáp', genuine_only=True" in text
-    assert "accessory_type='ốp lưng, cường lực'" not in text and 'chưa mời ốp lưng, cường lực' in text
+    assert "accessory_type='ốp lưng, cường lực'" not in text and 'chưa gợi ý ốp lưng, cường lực' in text
+    assert 'Gợi ý nhẹ, không ép' in text and 'không cần thì cũng không sao' in text
     # Bước 2: khách lấy củ sạc hoặc không -> mời ốp lưng, cường lực
     for cart in ([PHONE_IN_CART], [PHONE_IN_CART, CHARGER]):
         after = {**state, 'cart': cart, 'cross_sell': ['charger']}
@@ -138,7 +139,7 @@ def test_cross_sell_steps():
 
 def test_cross_sell_only_chargers_when_cable_in_box():
     text = conv.cross_sell_hint({'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'cable_in_box': True}]})
-    assert "accessory_type='củ sạc', genuine_only=True" in text and 'Củ sạc chính hãng (2-3 món' in text
+    assert "accessory_type='củ sạc', genuine_only=True" in text and 'bên em có củ sạc chính hãng (2-3 món' in text
     assert 'rẻ tới đắt' in text and 'đã có cáp sạc' in text and 'không mời cáp' in text
 
 
@@ -147,7 +148,7 @@ def test_cross_sell_starts_with_accessories_when_charger_in_box_or_cart():
         state = {'stage': 'closing', 'cart': cart}
         assert conv.cross_sell_step(state) == 'accessories'
         text = conv.cross_sell_hint(state)
-        assert text.startswith('Bán kèm (bước 1/2, ốp lưng, cường lực)') and 'Em đã thêm [máy' in text
+        assert text.startswith('Bán kèm (bước 1/2, ốp lưng, cường lực)') and 'em đã thêm [máy' in text and 'Gợi ý nhẹ, không ép' in text
     # Máy kèm củ sạc: mời phụ kiện xong là xác nhận đơn
     done = {'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'charger_in_box': True}], 'cross_sell': ['accessories']}
     assert conv.cross_sell_step(done) == 'confirm'

@@ -475,7 +475,8 @@ def accessory_type(name: str) -> str:
              ("ốp", "case"), ("bao da", "case"), ("folio", "case"), ("case", "case"),
              ("pin magsafe", "power-bank"), ("dự phòng", "power-bank"), ("battery", "power-bank"),
              # "củ sạc" trước "cáp": "Củ Sạc Kèm Cáp 45W" là củ sạc, không phải cáp
-             ("pin", "power-bank"), ("củ sạc", "charger"), ("cáp", "cable"), ("sạc", "charger"), ("tiếp hợp", "charger"),
+             # "Bộ Chuyển Đổi Sạc + Dữ Liệu" là bộ chia cổng USB-C, không phải củ sạc
+             ("pin", "power-bank"), ("chuyển đổi", "other"), ("củ sạc", "charger"), ("cáp", "cable"), ("sạc", "charger"), ("tiếp hợp", "charger"),
              ("adapter", "charger"), ("charger", "charger"), ("ví", "wallet"), ("wallet", "wallet"),
              ("dây đeo", "strap"), ("giá đỡ", "holder")]
     return next((t for k, t in rules if k in n), "other")
@@ -520,18 +521,29 @@ def build_accessories(apple_acc, samsung_acc, phones):
 
     slugs_longest_first = sorted(galaxy_by_slug, key=len, reverse=True)
     wireless_galaxy = [p["product_id"] for s, p in galaxy_by_slug.items() if re.match(r"galaxy-[sz]", s)]
+
+    def target_of(slug):
+        return next((s for s in slugs_longest_first if slug.startswith(s + "-")), None)
+
+    # Máy Galaxy không có nam châm sẵn: ví, giá đỡ, sạc "Magnet" chỉ dính được qua ốp lưng Magnet. Chỉ gắn cho
+    # máy cửa hàng có bán ốp Magnet (S25, S25 Ultra không có ốp nào -> không mời ví, giá đỡ nam châm)
+    magnet_ready = {galaxy_by_slug[t]["product_id"] for a in samsung_acc
+                    if (t := target_of(a["slug"])) and "magnet" in a["name"].lower() and accessory_type(a["name"]) == "case"}
+    magnet_galaxy = [pid for pid in wireless_galaxy if pid in magnet_ready]
     for a in samsung_acc:
         slug = a["slug"]
         if re.search(r"tab-|watch|buds|smarttag|keyboard|book-cover", slug):
             continue
-        target = next((s for s in slugs_longest_first if slug.startswith(s + "-")), None)
+        target = target_of(slug)
         if target:
             compatible = [galaxy_by_slug[target]["product_id"]]
         elif slug.startswith("galaxy-"):
             compatible = []  # phụ kiện cho model không còn bán trong DB
-        elif slug.startswith("magnet-") or "holder" in slug or "wireless" in slug or "magnet" in a["name"].lower():
+        elif slug.startswith("magnet-") or "magnet" in a["name"].lower():
             # Tên có "Nam Châm Magnet" nhưng slug không bắt đầu bằng magnet- (vd ví Valentinus S)
-            compatible = wireless_galaxy  # sạc không dây / nam châm: dòng A không hỗ trợ
+            compatible = magnet_galaxy
+        elif "holder" in slug or "wireless" in slug:
+            compatible = wireless_galaxy  # sạc không dây, giá đỡ: dòng A không hỗ trợ
         elif re.search(r"power-adapter|battery-pack|charger", slug):
             compatible = all_phone_ids
         else:

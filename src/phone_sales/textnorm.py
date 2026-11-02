@@ -50,6 +50,7 @@ def _keep_case(src: str, dst: str) -> str:
 
 # Chữ "ạ" đứng riêng ("không ạ?", "vâng ạ"), không đụng "Dạ", "lạ", "hạ"
 A_PARTICLE_RE = re.compile(r'[ \t]*(?<!\w)ạ(?!\w)', re.I)
+NHE_RE = re.compile(r'(?<!\w)nhé(?!\w)')  # giọng miền Nam: "nha" thay "nhé"
 
 def clean_answer(text: str) -> str:
     # Một số model (Nemotron, Qwen) để lộ phần suy nghĩ <think>...</think> trong câu trả lời
@@ -57,5 +58,6 @@ def clean_answer(text: str) -> str:
     text = INVISIBLE.sub('', text)
     # Cửa hàng không dùng "ạ" (prompt đã dặn, đây là chốt chặn khi model vẫn viết)
     text = A_PARTICLE_RE.sub('', text)
+    text = NHE_RE.sub('nha', text)
     text = re.sub(r'[ \t]+\n', '\n', text)
     return re.sub(r'\n{3,}', '\n\n', text).strip()

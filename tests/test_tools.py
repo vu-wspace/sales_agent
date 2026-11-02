@@ -297,20 +297,29 @@ def test_web_search_handles_backend_error(monkeypatch):
 
 def test_agent_main_has_all_tools():
     assert [t.name for t in tools.get_agent_tools('agent_main')] == [
-        'search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search']
+        'search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search', 'get_promotions']
 
 
 def test_find_accessories_genuine_only(monkeypatch):
-    # Bán kèm chỉ mời hàng chính hãng: Belkin, củ sạc Apple bị bỏ khỏi danh sách cho Galaxy
+    # Bán kèm: loại có hàng chính hãng thì bỏ hàng hãng khác (Belkin, củ sạc Apple cho Galaxy)
     rows = [{'name': 'Củ Sạc Không Kèm Cáp 60W', 'brand': 'Samsung', 'kind': 'charger', 'price': 1089720, 'stock': 10},
             {'name': 'Bộ Sạc Gắn Tường Belkin (42W)', 'brand': 'Apple', 'kind': 'charger', 'price': 951000, 'stock': 10},
             {'name': 'Bộ Tiếp Hợp Nguồn 35W', 'brand': 'Apple', 'kind': 'charger', 'price': 1471000, 'stock': 10}]
     phone = {'product_id': 'samsung-galaxy-s26', 'name': 'Galaxy S26', 'brand': 'Samsung', 'attributes': {}}
     monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
     out = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc', 'genuine_only': True})
-    assert 'Phụ kiện chính hãng tương thích với Galaxy S26:' in out and '60W' in out
-    assert 'Belkin' not in out and '35W' not in out and 'Hãng khác' not in out
+    assert '60W' in out and 'Belkin' not in out and '35W' not in out and 'Hãng khác' not in out
     assert 'Belkin' in tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc'})
-    rows[:] = rows[1:]
-    out = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc', 'genuine_only': True})
-    assert out == 'Chưa có phụ kiện củ sạc chính hãng tương thích với Galaxy S26.'
+
+
+def test_find_accessories_genuine_only_keeps_kind_without_genuine(monkeypatch):
+    # Apple không bán miếng dán màn hình: cường lực cho iPhone chỉ có Belkin -> vẫn giữ, không làm mất cả loại
+    rows = [{'name': 'Ốp Lưng Trong Suốt MagSafe cho iPhone 17', 'brand': 'Apple', 'kind': 'case', 'price': 1499000, 'stock': 10},
+            {'name': 'Ốp Lưng Beats cho iPhone 17', 'brand': 'Apple', 'kind': 'case', 'price': 1299000, 'stock': 10},
+            {'name': 'Miếng Dán Màn Hình Belkin UltraGlass 2 cho iPhone 17', 'brand': 'Apple', 'kind': 'screen-protector',
+             'price': 1177000, 'stock': 10}]
+    phone = {'product_id': 'apple-iphone-17', 'name': 'iPhone 17', 'brand': 'Apple', 'attributes': {}}
+    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
+    out = tools.find_accessories.invoke({'phone': 'iphone 17', 'accessory_type': 'ốp lưng, cường lực', 'genuine_only': True})
+    assert 'Ốp Lưng Trong Suốt MagSafe' in out and 'Beats' not in out   # có ốp chính hãng: bỏ ốp Beats
+    assert 'Belkin UltraGlass 2' in out                                 # cường lực chỉ có Belkin: giữ

@@ -167,13 +167,15 @@ $("orderForm").addEventListener("submit", async (e) => {
   const order_id = "DH3F9A1C2B";
 
   // Tóm tắt theo cùng mẫu orders.summary (bản thật dựng thẻ .receipt từ dữ liệu database)
-  const pretty = /^0\d{9}$/.test(phone) ? phone.replace(/^(\d{4})(\d{3})(\d{3})$/, "$1 $2 $3") : phone;
+  // Che số điện thoại, email giống app thật (pii.mask_phone, pii.mask_email): 0912 *** 678, ng***@gmail.com
+  const maskedPhone = phone.length >= 9 ? phone.slice(0, 4) + " *** " + phone.slice(-3) : "***";
+  const maskedEmail = email ? email.split("@")[0].slice(0, 2) + "***@" + email.split("@").pop() : "";
   $("orderForm").style.display = "none";
   $("result").innerHTML =
     '<div class="bub user">Đã gửi thông tin đặt hàng</div>' +
     '<div class="bub bot">Đặt hàng thành công. Mã đơn: <b>#' + escapeHtml(order_id) + '</b><br>' +
-    'Người nhận: ' + escapeHtml(name) + '<br>Điện thoại: ' + escapeHtml(pretty) + '<br>' +
-    (email ? 'Email: ' + escapeHtml(email) + '<br>' : '') +
+    'Người nhận: ' + escapeHtml(name) + '<br>Điện thoại: ' + escapeHtml(maskedPhone) + '<br>' +
+    (email ? 'Email: ' + escapeHtml(maskedEmail) + '<br>' : '') +
     'Địa chỉ: ' + escapeHtml(address) + '<br>Nhận hàng: Giao tận nơi<br>Thanh toán: Thanh toán khi nhận hàng<br>' +
     'Tổng cộng: <b>29.990.001đ</b><br>Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao.</div>';
 });

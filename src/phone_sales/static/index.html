@@ -50,6 +50,14 @@
            border: 1px solid var(--line); display: flex; flex-direction: column; font-size: 14px; }
   .order .item, .order .total { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
   .order .total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; font-weight: 600; }
+  .order .disc { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; color: var(--accent); }
+  .order .disc[hidden] { display: none; }
+  .order .promo { display: flex; gap: 8px; }
+  .order .promo input { flex: 1; text-transform: uppercase; }
+  .order .promo button.apply { flex: 0 0 auto; margin: 0; padding: 0 14px; height: auto; background: none;
+                               color: var(--text); border: 1px solid var(--line); }
+  .order .promo-text { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .order .promo-text:empty { display: none; }
   .order .lbl { display: block; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
   .order input[type=text], .order input[type=tel], .order input[type=email], .order textarea {
     width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg);
@@ -92,6 +100,8 @@
   .receipt .total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 14px;
                     border-top: 1px solid var(--line); font-weight: 600; }
   .receipt .total span:last-child { color: var(--accent); font-size: 18px; }
+  .receipt .sub { display: flex; justify-content: space-between; padding: 8px 14px 0; color: var(--muted); }
+  .receipt .sub.off span:last-child { color: var(--accent); }
   .receipt .note { padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 </style>
 </head>
@@ -105,6 +115,7 @@
   <template id="order-tpl">
     <form class="order" novalidate>
       <div class="items"></div>
+      <div class="disc" hidden><span class="disc-label">Giảm giá</span><span class="disc-amount"></span></div>
       <div class="total"><span>Tổng cộng</span><span class="sum"></span></div>
       <label class="lbl">Họ tên người nhận
         <input type="text" name="name" maxlength="100" placeholder="Nguyễn Văn A" autocomplete="name"></label>
@@ -115,6 +126,13 @@
       <label class="lbl">Email (không bắt buộc)
         <input type="email" name="email" maxlength="254" placeholder="ten@example.com" autocomplete="email"></label>
       <p class="ferr" data-for="email"></p>
+      <label class="lbl" for="promo-code">Mã khuyến mãi (nếu có)</label>
+      <div class="promo">
+        <input type="text" id="promo-code" name="promo" maxlength="50" placeholder="VD: GIAM500K" autocomplete="off">
+        <button type="button" class="apply">Áp dụng</button>
+      </div>
+      <p class="promo-text"></p>
+      <p class="ferr" data-for="promo"></p>
       <span class="lbl">Cách nhận hàng</span>
       <div class="opts">
         <div class="opt on">Giao tận nơi</div>
@@ -257,6 +275,45 @@
     }
     f.querySelector('.sum').textContent = money(cart.reduce((s, i) => s + i.price * i.quantity, 0));
     const err = key => f.querySelector(`.ferr[data-for="${key}"]`);
+    let appliedCode = null;  // mã đã áp dụng thành công; gửi kèm khi đặt hàng (server kiểm tra lại)
+
+    // Giá do server tính từ giỏ hàng của hội thoại: tạm tính, giảm giá (mã hoặc khuyến mãi tự động), tổng
+    function showQuote(q) {
+      const disc = f.querySelector('.disc');
+      disc.hidden = !q.discount;
+      f.querySelector('.disc-label').textContent = `Giảm giá${q.promo ? ` (${q.promo})` : ''}`;
+      f.querySelector('.disc-amount').textContent = '-' + money(q.discount);
+      f.querySelector('.sum').textContent = money(q.total);
+      f.querySelector('.promo-text').textContent = q.promo_text || '';
+    }
+    async function quote(code) {
+      const r = await fetch('/order/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread_id: threadId, promo_code: code || null }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Chưa kiểm tra được mã khuyến mãi.');
+      return data;
+    }
+    quote(null).then(showQuote).catch(() => {});  // khuyến mãi tự động (nếu có) hiện ngay khi mở form
+    // Enter trong ô mã: áp dụng mã, không gửi cả form đặt hàng
+    f.elements.promo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); f.querySelector('.apply').click(); }
+    });
+    f.querySelector('.apply').addEventListener('click', async () => {
+      const code = f.elements.promo.value.trim().toUpperCase();
+      err('promo').textContent = '';
+      try {
+        const q = await quote(code);
+        appliedCode = code || null;
+        showQuote(q);
+      } catch (ex) {
+        appliedCode = null;
+        err('promo').textContent = ex.message;
+        quote(null).then(showQuote).catch(() => {});  // mã sai: quay về giá không mã
+      }
+    });
     f.querySelectorAll('input').forEach(el => el.addEventListener('input', () => {
       if (err(el.name)) err(el.name).textContent = '';
     }));
@@ -283,7 +340,7 @@
         const r = await fetch('/order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ thread_id: threadId, name, phone, address, email: email || null,
+          body: JSON.stringify({ thread_id: threadId, name, phone, address, email: email || null, promo_code: appliedCode,
                                  fulfillment_type: 'delivery', payment: 'cod' }),
         });
         data = await r.json().catch(() => ({}));
@@ -383,7 +440,15 @@
 
     const total = el('div', 'total');
     total.append(el('span', '', 'Tổng cộng'), el('span', '', money(o.total)));
-    card.append(head, info, items, total, el('div', 'note', o.note));
+    const subs = [];
+    if (o.discount) {  // có khuyến mãi: tạm tính + dòng giảm giá trước tổng
+      const sub = el('div', 'sub');
+      sub.append(el('span', '', 'Tạm tính'), el('span', '', money(o.subtotal)));
+      const off = el('div', 'sub off');
+      off.append(el('span', '', `Giảm giá${o.promo ? ` (${o.promo})` : ''}`), el('span', '', '-' + money(o.discount)));
+      subs.push(sub, off);
+    }
+    card.append(head, info, items, ...subs, total, el('div', 'note', o.note));
     log.appendChild(card);
     log.scrollTop = log.scrollHeight;
   }
@@ -391,7 +456,7 @@
   function greet() {
     log.replaceChildren();
     threadId = null;
-    add('Dạ em chào anh/chị. Em có thể tư vấn iPhone, Samsung Galaxy, phụ kiện tương thích, giá và tình trạng hàng, cùng các chính sách đổi trả, giao hàng, trả góp và bảo hành.');
+    add('Dạ, em chào anh/chị. Bên em tư vấn iPhone, Samsung Galaxy, phụ kiện đi kèm, giá và tình trạng hàng, cùng chính sách đổi trả, giao hàng, trả góp và bảo hành. Anh/chị cần gì cứ hỏi em nha.');
   }
 
   form.addEventListener('submit', async (e) => {
@@ -429,7 +494,7 @@
           finished = true;
         } else if (ev.type === 'error') throw new Error(ev.detail || 'Có lỗi xảy ra.');
       }
-      if (!finished) throw new Error('Mất kết nối giữa chừng, anh/chị vui lòng gửi lại.');
+      if (!finished) throw new Error('Mất kết nối giữa chừng, anh/chị gửi lại giúp em nha.');
     } catch (err) {
       fill(pending.div, err.message || 'Không kết nối được máy chủ.', 'err');
     } finally {

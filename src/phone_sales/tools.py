@@ -8,6 +8,7 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
+from phone_sales import promotions
 from phone_sales.conversation import added_to_cart_this_turn, cross_sell_step
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
@@ -240,7 +241,7 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuin
     'củ sạc' chỉ lấy củ sạc cắm tường (bỏ sạc không dây, MagSafe, ô tô; hộp máy đã có cáp thì bỏ loại kèm cáp).
     Mỗi lần trả 5 phụ kiện (còn hàng trước, chính hãng trước, rẻ trước); tìm sạc/cáp thì kèm máy có sẵn gì trong hộp.
     Khách muốn xem thêm thì gọi lại với page=2, 3...
-    genuine_only=True: chỉ lấy hàng chính hãng (cùng hãng với máy), dùng khi mời bán kèm."""
+    genuine_only=True: loại nào có hàng chính hãng (cùng hãng với máy) thì chỉ lấy hàng chính hãng, dùng khi mời bán kèm."""
     # Nhiều loại cách nhau dấu phẩy ("sạc, cáp", "ốp lưng, cường lực"): mỗi loại lấy vài món, không bị 1 loại chiếm hết
     asked = [s.strip() for s in re.split(r',|\+|\bvà\b', accessory_type) if s.strip()]
     kinds = list(dict.fromkeys(_accessory_type(s) for s in asked))
@@ -270,13 +271,16 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuin
         skip = NOT_WALL_CHARGER + (r'|(?<!không )kèm cáp' if box and box['cable'] else '')
         rows = [r for r in rows if not (r['kind'] == 'charger' and re.search(skip, r['name'].lower()))]
     if genuine_only:
-        # Bán kèm chỉ mời hàng chính hãng: lọc ở đây, prompt dặn thì model vẫn hay lấy hàng hãng khác cho đủ số món
-        rows = [r for r in rows if _genuine(r, p['brand'])]
-    header = f"Phụ kiện {'chính hãng ' * genuine_only}tương thích với {p['name']}:"
+        # Bán kèm ưu tiên hàng chính hãng: lọc ở đây, prompt dặn thì model vẫn hay lấy hàng hãng khác cho đủ số món
+        # (vd củ sạc Apple, Belkin cho Galaxy). Lọc theo từng loại: loại không có hàng chính hãng thì giữ hàng hãng
+        # khác, vì Apple không bán miếng dán màn hình, cường lực cho iPhone chỉ có Belkin
+        has_genuine = {r['kind'] for r in rows if _genuine(r, p['brand'])}
+        rows = [r for r in rows if r['kind'] not in has_genuine or _genuine(r, p['brand'])]
+    header = f"Phụ kiện tương thích với {p['name']}:"
     if box and {'charger', 'cable'} & set(kinds):
         header = f"Trong hộp {p['name']}: {box['text']}.\n" + header
     if not rows:
-        return (f"Chưa có phụ kiện {accessory_type or ''} {'chính hãng ' * genuine_only}tương thích với {p['name']}."
+        return (f"Chưa có phụ kiện {accessory_type or ''} tương thích với {p['name']}."
                 .replace('  ', ' '))
     # Còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây/ô tô (máy thiếu là thiếu củ sạc), rẻ trước
     rows.sort(key=lambda r: (r['stock'] <= 0, not _genuine(r, p['brand']),
@@ -299,6 +303,100 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuin
         lines.insert(genuine.index(False), f"Hãng khác (không phải chính hãng {p['brand']}):")
     more = f'\n(còn {left} phụ kiện khác, xem tiếp bằng page={page + 1})' if left > 0 else ''
     return header + '\n' + '\n'.join(lines) + more
+
+@tool
+def find_cheaper_alternatives(product: str, state: Annotated[dict, InjectedState],
+                              tool_call_id: Annotated[str, InjectedToolCallId], min_drop_pct: float = 0.15,
+                              max_drop_pct: float = 0.35, storage: str = '') -> Command:
+    """Tìm điện thoại khác rẻ hơn máy khách đang chê đắt/phân vân, trong khoảng % cho trước, còn hàng.
+    product: máy khách đang xem (vd 'iPhone 17'); storage: dung lượng khách đang xem (để trống = bản rẻ nhất).
+    min_drop_pct, max_drop_pct: rẻ hơn ít nhất / nhiều nhất bao nhiêu phần trăm (vd 0.15 và 0.35).
+    Khách đã nói ngân sách thì không vượt ngân sách; máy đã gợi ý ở lượt trước không lặp lại."""
+    def reply(text: str, offered: list[str] | None = None) -> Command:
+        update = {'messages': [ToolMessage(text, tool_call_id=tool_call_id)]}
+        if offered:
+            update['offered_alternatives'] = offered
+        return Command(update=update)
+
+    low_pct, high_pct = sorted((max(min_drop_pct, 0.0), min(max_drop_pct, 0.9)))
+    try:
+        phones = _query("""SELECT p.product_id, p.name, p.brand, v.storage, v.color, v.price, v.stock
+                           FROM products p JOIN variants v USING (product_id) WHERE p.category = 'phone'""")
+    except Exception as e:
+        return reply(DB_ERROR.format(type(e).__name__))
+    products = list({r['product_id']: {'product_id': r['product_id'], 'name': r['name']} for r in phones}.values())
+    hits = _match(products, product)
+    if len(hits) != 1:
+        names = ', '.join(p['name'] for p in hits[:MAX_LINES])
+        return reply(f"Có nhiều máy khớp '{product}': {names}. Hỏi lại khách đang xem máy nào." if hits else
+                     f"Không tìm thấy điện thoại '{product}' (tool chỉ áp dụng cho điện thoại).")
+    base_id = hits[0]['product_id']
+    own = [r for r in phones if r['product_id'] == base_id]
+    chosen = [r for r in own if not storage.strip()
+              or _storage_key(r['storage'] or '')[:1] == _storage_key(storage)[:1]] or own
+    base = min(chosen, key=lambda r: r['price'])
+    budget = (state.get('slots') or {}).get('budget_max')
+    low, high = base['price'] * (1 - high_pct), base['price'] * (1 - low_pct)
+    if budget:
+        high = min(high, budget)
+    offered = set(state.get('offered_alternatives') or [])
+    # Mỗi máy lấy 1 phiên bản còn hàng trong khoảng giá: dung lượng lớn nhất (ít đánh đổi nhất), rồi rẻ hơn
+    best: dict[str, dict] = {}
+    for r in phones:
+        if (r['product_id'] == base_id or r['stock'] <= 0 or not low <= r['price'] <= high
+                or r['name'] in offered):
+            continue
+        cur = best.get(r['product_id'])
+        if cur is None or (_storage_key(r['storage'] or ''), -r['price']) > (_storage_key(cur['storage'] or ''), -cur['price']):
+            best[r['product_id']] = r
+    # Cùng hãng trước, rồi giá gần máy gốc nhất (ít tụt phân khúc)
+    rows = sorted(best.values(), key=lambda r: (r['brand'] != base['brand'], -r['price']))[:3]
+    base_text = f"{base['name']} {base['storage'] or ''} {_price(base['price'])}".replace('  ', ' ')
+    # Dung lượng thấp hơn của chính máy đó: lựa chọn ít đánh đổi nhất
+    smaller = sorted({r['storage']: r for r in own if r['stock'] > 0 and r['price'] < base['price']}.values(),
+                     key=lambda r: -r['price'])
+    lines = [f"Máy gốc: {base_text}. Khoảng tìm: {_price(int(low))} - {_price(int(high))}"
+             f" (rẻ hơn {low_pct:.0%}-{high_pct:.0%}{', không vượt ngân sách ' + _price(budget) if budget else ''})."]
+    lines += [f"- {r['name']} {r['storage'] or ''}: {_price(r['price'])} | rẻ hơn {_price(base['price'] - r['price'])}"
+              f" | {_stock(r['stock'])}" for r in rows]
+    if smaller:
+        lines.append('Dung lượng thấp hơn của chính máy này: ' + ', '.join(
+            f"{r['storage']} {_price(r['price'])} (rẻ hơn {_price(base['price'] - r['price'])})" for r in smaller))
+    if not rows:
+        lines.append('Không có máy khác còn hàng trong khoảng giá này'
+                     + (' (đã bỏ máy gợi ý ở lượt trước)' if offered else '')
+                     + '. Nói thật với khách, không gợi ý máy quá rẻ, không tự giảm giá.')
+    else:
+        lines.append('Thông số các máy này chưa có ở đây: muốn nêu đánh đổi về camera, pin, chip thì gọi '
+                     'get_product_details, không tự đoán; đánh đổi chắc chắn là giá, dung lượng, dòng máy.')
+    return reply('\n'.join(lines), [r['name'] for r in rows])
+
+@tool
+def get_promotions(product: str = '') -> str:
+    """Khuyến mãi đang áp dụng tại cửa hàng (mã giảm giá, khuyến mãi tự động): mức giảm, phạm vi, điều kiện, hạn.
+    product: tên sản phẩm khách đang xem để chỉ lấy khuyến mãi áp dụng cho sản phẩm đó (để trống = tất cả).
+    Dùng khi khách hỏi khuyến mãi, ưu đãi, mã giảm giá, hoặc khi đang do dự. Chỉ nêu khuyến mãi có trong kết quả."""
+    try:
+        with psycopg.connect(DATABASE_URL, connect_timeout=5, row_factory=dict_row) as conn:
+            promos = promotions.active(conn)
+        item = None
+        if product.strip():
+            hits = _match(_query('SELECT product_id, name, brand, category FROM products'), product)
+            if len(hits) != 1:
+                names = ', '.join(p['name'] for p in hits[:MAX_LINES])
+                return (f"Có nhiều sản phẩm khớp '{product}': {names}. Hỏi lại khách." if hits else
+                        f"Không tìm thấy sản phẩm '{product}'.")
+            item = hits[0]
+    except Exception as e:
+        return DB_ERROR.format(type(e).__name__)
+    if item:
+        promos = [p for p in promos if promotions.applies_to(p, item)]
+    target = f" cho {item['name']}" if item else ''
+    if not promos:
+        return (f'Hiện không có chương trình khuyến mãi nào đang áp dụng{target}. Không nêu khuyến mãi, giảm giá, '
+                'quà tặng nào khác.')
+    return (f'Khuyến mãi đang áp dụng{target} (khách nhập mã ở form đặt hàng; hệ thống kiểm tra điều kiện và số lần '
+            'dùng khi đặt):\n' + '\n'.join('- ' + promotions.describe(p) for p in promos))
 
 def _genuine(acc: dict, phone_brand: str) -> bool:
     # Chính hãng = cùng hãng với máy; cửa hàng Apple bán cả Beats, mophie, Belkin, Anker nhưng đó là hãng khác
@@ -457,12 +555,15 @@ def show_order_form(state: Annotated[dict, InjectedState],
 
 # Tool của từng agent. Mô tả tool mà model nhìn thấy lấy từ docstring của hàm @tool ở trên.
 TOOLS = {t.name: t for t in (search_products, get_product_details, find_accessories, search_policy, web_search,
-                             add_to_cart, remove_from_cart, show_order_form)}
+                             add_to_cart, remove_from_cart, show_order_form, find_cheaper_alternatives,
+                             get_promotions)}
 AGENT_TOOLS = {
-    'agent_main': ['search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search'],
+    'agent_main': ['search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search',
+                   'get_promotions'],
     # graph.py có trạng thái hội thoại (giỏ hàng...) nên thêm tool giỏ hàng và form đặt hàng
     'agent_graph': ['search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search',
-                    'add_to_cart', 'remove_from_cart', 'show_order_form'],
+                    'get_promotions', 'add_to_cart', 'remove_from_cart', 'show_order_form',
+                    'find_cheaper_alternatives'],
 }
 
 def get_agent_tools(agent: str) -> list:

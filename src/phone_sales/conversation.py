@@ -44,6 +44,10 @@ class AgentState(TypedDict, total=False):
     declined: bool                                        # tin nhắn mới nhất của khách là từ chối ("không cần")
     order_form: bool                                      # lượt này hiện form đặt hàng (show_order_form)
     orders: Annotated[list[str], append]                  # mã các đơn đã đặt trong cuộc trò chuyện (api.py: /order)
+    objection: str | None                                 # phản đối trong tin nhắn lượt này: price, competitor, hesitation
+    objection_type: str | None                            # loại phản đối đang xử lý (đổi loại thì làm lại từ bước đầu)
+    objection_step: int                                   # đã xử lý loại đó bao nhiêu lượt (bậc thang khi khách do dự)
+    offered_alternatives: Annotated[list[str], append_unique]  # máy rẻ hơn đã gợi ý (find_cheaper_alternatives không lặp lại)
 
 # ---------------------------------------------------------------- trích từ tin nhắn của khách
 
@@ -75,6 +79,16 @@ HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư 
            r'chưa nhận được hàng|chưa giao|hủy đơn|huỷ đơn|đòi tiền|hoàn tiền ngay')
 COMPARE = r'so sánh|khác gì|khác nhau|nên chọn|nên lấy cái nào|hơn không|với .+ thì sao'
 CLOSING = r'chốt|lấy máy|lấy cái|mua luôn|đặt hàng|đặt mua|thanh toán|giao cho|ship cho|lên đơn'
+# Phản đối cần xử lý theo chiến lược (OBJECTION_GUIDE). Khác OBJECTIONS ở trên (lo ngại cụ thể để trả lời thẳng).
+# So với nơi khác: không khớp "bên em" (chính cửa hàng)
+COMPETITOR = (r'bên (?:kia|khác|đó|ngoài)|chỗ khác|shop khác|cửa hàng khác|tiệm khác|nơi khác|ngoài tiệm|'
+              r'thế giới di động|tgdđ|tgdd|fpt shop|fpt|cellphones|cellphone s|hoàng hà|di động việt|'
+              r'shopee|lazada|tiki|online rẻ hơn|trên mạng rẻ hơn')
+# Do dự. Không dùng "để sau" (trùng câu từ chối bán kèm "củ sạc để sau")
+HESITATION = (r'để (?:anh|chị|em|mình|tui|tôi|tớ) (?:suy nghĩ|tính|cân nhắc|xem lại|về hỏi|hỏi lại)|'
+              r'suy nghĩ thêm|cân nhắc thêm|tính thêm|chưa chắc|phân vân|lưỡng lự|chưa quyết|đắn đo|'
+              r'chưa biết có nên')
+
 # Từ chối lời mời bán kèm. Không dùng "thôi" đứng riêng: "lấy luôn thôi" là đồng ý
 DECLINE = (r'không cần|ko cần|k cần|khỏi|không lấy|không mua|chưa cần|để sau|thôi khỏi|thôi không|không đâu|'
            r'không ạ|không nhé|không em|vậy được rồi|vậy thôi')
@@ -123,7 +137,19 @@ def track_user_message(text: str) -> dict:
         'wants_compare': _has(COMPARE, t),
         'wants_close': _has(CLOSING, t),
         'declined': _has(DECLINE, t),
+        'objection': objection_of(t),
     }
+
+def objection_of(text: str) -> str | None:
+    """Loại phản đối trong tin nhắn (đã viết thường): so với nơi khác > chê giá > do dự.
+    "Phân vân giữa A và B" là so sánh (comparing), không phải do dự."""
+    if _has(COMPETITOR, text):
+        return 'competitor'
+    if _has(OBJECTIONS['chê giá cao'], text):
+        return 'price'
+    if _has(HESITATION, text) and not _has(COMPARE, text):
+        return 'hesitation'
+    return None
 
 # ---------------------------------------------------------------- trích từ kết quả tool
 
@@ -245,10 +271,68 @@ def describe(state: dict) -> str:
     unhappy = (state.get('sentiment_history') or [])[-1:] == ['negative']
     if unhappy:
         lines.append('Khách đang không vui: trả lời ngắn, xin lỗi, không quảng cáo thêm.')
+    objection = objection_hint(state)
+    if objection:
+        lines.append(objection)
     hint = cross_sell_hint(state)
     if hint and not unhappy:
         lines.append(hint)
     return '\n'.join(lines)
+
+# Khoảng giá máy thay thế theo % (không dùng số tiền cố định: "rẻ hơn 5-10 triệu" với máy 7 triệu là tụt phân khúc
+# hoặc không có máy nào). Khách đã nói ngân sách thì find_cheaper_alternatives lấy ngân sách làm trần
+DROP_PCT = {'price': (0.15, 0.35), 'hesitation': (0.07, 0.15)}
+HESITATION_STEPS = 3  # trả góp 0% -> giá trị máy -> máy rẻ hơn; quá số này thì thôi thuyết phục
+
+def _cheaper_call(kind: str) -> str:
+    low, high = DROP_PCT[kind]
+    return (f"find_cheaper_alternatives(product=<máy khách đang chê/phân vân>, min_drop_pct={low}, "
+            f"max_drop_pct={high})")
+
+def _value_text(state: dict) -> str:
+    purposes = (state.get('slots') or {}).get('purposes') or []
+    need = f" gắn với nhu cầu khách đã nói ({', '.join(purposes)})" if purposes else ''
+    return (f"nêu 1-2 giá trị của máy khách đang xem{need}, chỉ dùng thông số từ get_product_details (máy chưa có "
+            "thông số thì chỉ nói về dung lượng, dòng máy, chính sách bảo hành); không tự liệt kê ưu điểm theo trí nhớ")
+
+def objection_hint(state: dict) -> str | None:
+    """Hướng dẫn xử lý phản đối của lượt này (state['objection'] do graph.track_user đặt mỗi lượt).
+    price: ghi nhận + giá trị + 2-3 máy rẻ hơn 15-35%. competitor: ưu điểm cửa hàng theo chính sách thật.
+    hesitation: bậc thang qua nhiều lượt (trả góp 0% -> giá trị -> máy rẻ hơn 7-15%), sau đó thôi thuyết phục."""
+    kind = state.get('objection')
+    if not kind:
+        return None
+    step = state.get('objection_step') or 0
+    if kind == 'price':
+        return ("Xử lý phản đối (chê giá): ghi nhận ngắn băn khoăn về giá, không phủ nhận, không tự giảm giá. "
+                f"Rồi {_value_text(state)}. Sau đó gọi {_cheaper_call('price')} và giới thiệu 2-3 máy kèm giá, số "
+                "tiền rẻ hơn và điểm đánh đổi trung thực (dung lượng thấp hơn, dòng thấp hơn; thông số chỉ theo dữ "
+                "liệu). Tool không có máy nào thì nói thật, không gợi ý máy quá rẻ; có thể nhắc dung lượng thấp "
+                "hơn của chính máy đó (nếu tool liệt kê), khuyến mãi đang áp dụng (get_promotions) hoặc trả góp "
+                "0% (search_policy), chỉ đúng theo kết quả tool."
+                + (" Khách vẫn chê giá: tool tự bỏ máy đã gợi ý, không giới thiệu lại máy cũ." if step else ''))
+    if kind == 'competitor':
+        return ("Xử lý phản đối (so với nơi khác): không chê bai, không bình luận về bên kia, không xác nhận hay "
+                "phủ nhận giá của bên đó (không kiểm chứng được; cần thì nói nhẹ 1 câu kiểu \"giá bên đó em không nắm "
+                "được\", không nói \"không xác nhận hay phủ nhận\"), không hứa khớp giá hay giảm giá. Gọi "
+                "search_policy về bảo hành, đổi trả (và trả góp 0% nếu khách quan tâm giá), rồi nêu 2-3 điểm của "
+                "cửa hàng đúng theo kết quả (hàng chính hãng, đổi trả, bảo hành, hậu mãi); không nói chung chung "
+                "kiểu \"uy tín nhất\". Giá ở cửa hàng chỉ nêu theo dữ liệu công cụ.")
+    if step >= HESITATION_STEPS:
+        return ("Xử lý phản đối (do dự, đã gợi ý đủ 3 bước): không thuyết phục thêm, không gợi ý thêm máy. Tôn "
+                "trọng quyết định, nói khách cứ thong thả, cần gì cứ nhắn; có thể hỏi khách có muốn gặp nhân viên "
+                "tư vấn trực tiếp không.")
+    steps = [
+        # Khuyến mãi chỉ lấy từ bảng promotions (get_promotions); không có thì bỏ qua, không bịa
+        "bước 1/3: gọi get_promotions(product=<máy khách đang xem>); có khuyến mãi thì nêu ngắn 1 khuyến mãi phù "
+        "hợp nhất đúng theo kết quả (mức giảm, điều kiện, hạn, mã nhập ở form đặt hàng); không có thì không nhắc "
+        "khuyến mãi, giảm giá, quà tặng nào. Muốn nhắc trả góp 0% thì phải gọi search_policy trong lượt này rồi "
+        "nêu đúng theo kết quả. Nói khách cứ thong thả, không ép",
+        f"bước 2/3: {_value_text(state)}; không ép",
+        f"bước 3/3: gọi {_cheaper_call('hesitation')}, giới thiệu 2-3 máy kèm giá, số tiền rẻ hơn và điểm đánh "
+        "đổi trung thực; tool không có máy nào thì nói thật. Không ép",
+    ]
+    return f"Xử lý phản đối (khách do dự), {steps[step]}."
 
 CROSS_SELL_ACCESSORIES = {'case', 'screen-protector'}
 
@@ -271,7 +355,8 @@ def cross_sell_step(state: dict) -> str | None:
     cart = state.get('cart') or []
     phone = _phone_in_cart(cart)
     unhappy = (state.get('sentiment_history') or [])[-1:] == ['negative']
-    if state.get('stage') != 'closing' or not phone or unhappy:
+    # Lượt khách chê giá, so giá, do dự: không mời bán kèm (không ghi là đã mời), lượt sau mời tiếp
+    if state.get('stage') != 'closing' or not phone or unhappy or state.get('objection'):
         return None
     done = set(state.get('cross_sell') or [])
     in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
@@ -282,6 +367,10 @@ def cross_sell_step(state: dict) -> str | None:
     if 'confirm' not in done:
         return 'confirm'
     return None
+
+# Bán kèm chỉ là gợi ý nhẹ: khách không lấy cũng được, không thúc giục
+LIGHT_OFFER = ('Gợi ý nhẹ, không ép: không thúc giục, không nói "nên mua", "đừng bỏ lỡ", không khen quá lời; '
+               'khách không lấy thì thôi, không hỏi lại.')
 
 def cross_sell_hint(state: dict) -> str | None:
     """Hướng dẫn + mẫu câu trả lời cho bước bán kèm của lượt này (xem cross_sell_step)."""
@@ -295,33 +384,36 @@ def cross_sell_hint(state: dict) -> str | None:
         if phone.get('cable_in_box'):
             # Hộp đã có cáp: chỉ mời củ sạc (tool bỏ loại kèm cáp), vài lựa chọn từ rẻ tới đắt
             call, box = 'củ sạc', f"Hộp {name} đã có cáp sạc nhưng chưa kèm củ sạc.\n"
-            group = "Củ sạc chính hãng (2-3 món, từ rẻ tới đắt; tool chỉ có 1 thì mời 1; không mời cáp):\n"
+            group = "củ sạc chính hãng (2-3 món, từ rẻ tới đắt; tool chỉ có 1 thì mời 1; không mời cáp):\n"
         else:
             call, box = 'sạc, cáp', f"{name} không kèm củ sạc trong hộp (nói đúng như dòng 'Trong hộp').\n"
-            group = "Củ sạc, cáp chính hãng (1 củ sạc + 1 cáp; củ sạc đã kèm cáp thì không cần cáp):\n"
+            group = "củ sạc, cáp chính hãng (1 củ sạc + 1 cáp; củ sạc đã kèm cáp thì không cần cáp):\n"
         return (f"Bán kèm (bước 1/3, củ sạc): gọi find_accessories(phone='{name}', accessory_type='{call}', "
-                "genuine_only=True). Chỉ mời củ sạc trong lượt này, chưa mời ốp lưng, cường lực; chưa gọi "
-                "show_order_form. Trả lời theo mẫu:\n"
-                "Em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ.\n" + box + group + "- [tên món]: [giá]\n"
-                "Anh/chị có muốn lấy thêm củ sạc không?")
+                f"genuine_only=True). {LIGHT_OFFER} Chỉ gợi ý củ sạc trong lượt này, chưa gợi ý ốp lưng, cường lực; "
+                "chưa gọi show_order_form. Trả lời theo mẫu:\n"
+                "Dạ, em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ rồi nha.\n" + box
+                + "Nếu anh/chị cần thì bên em có " + group + "- [tên món]: [giá]\n"
+                "Anh/chị không cần thì cũng không sao, cứ nói em một tiếng nha.")
     if step == 'accessories':
         done = set(state.get('cross_sell') or [])
         first = 'charger' not in done  # máy đã kèm củ sạc: lượt chọn máy mời luôn ốp lưng, cường lực
-        opening = ("Em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ.\n" if first else
+        opening = ("Dạ, em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ rồi nha.\n" if first else
                    "[1 câu: đã thêm món khách chọn và tổng giỏ; khách không lấy gì thì bỏ câu này]\n")
         return (f"Bán kèm (bước {'1/2' if first else '2/3'}, ốp lưng, cường lực): "
                 + ('' if first else "khách chọn củ sạc trong tin nhắn thì add_to_cart món đó. ")
                 + f"Gọi find_accessories(phone='{name}', accessory_type='ốp lưng, cường lực', genuine_only=True), "
-                "mời 2-3 món; không nhắc lại củ sạc. Tool không có món nào thì nói ngắn chưa có ốp lưng, cường lực "
+                f"gợi ý 2-3 món. {LIGHT_OFFER} Món không ghi 'chính hãng' (vd miếng dán Belkin cho iPhone) thì nói "
+                "đúng tên hãng, không gọi là chính hãng; không nhắc lại củ sạc. Tool không có món nào thì nói ngắn chưa "
+                "có ốp lưng, cường lực "
                 "cho máy này rồi hỏi khách xác nhận đặt hàng. Chưa gọi show_order_form, kể cả khi khách nói xác nhận. "
                 "Trả lời theo mẫu:\n" + opening
-                + f"Anh/chị có muốn thêm ốp lưng hoặc cường lực để bảo vệ {name} không?\n"
+                + f"Anh/chị muốn giữ {name} kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em:\n"
                 "- [tên món]: [giá]\n"
-                "Nếu không cần thêm, anh/chị xác nhận đặt hàng giúp em nhé.")
+                "Không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha.")
     return ("Bán kèm đã xong, không mời thêm phụ kiện. Khách chọn món nào trong tin nhắn thì add_to_cart món "
             "đó. Khách đã nói xác nhận/chốt đơn trong tin nhắn này mà không thêm món mới thì gọi show_order_form. "
             "Còn lại trả lời theo mẫu (giỏ hàng, tổng tiền lấy từ trạng thái hoặc kết quả tool):\n"
             "Đơn hàng của anh/chị:\n"
             "- [số lượng] x [tên, dung lượng, màu]: [giá]\n"
             "Tổng cộng: [tổng tiền]\n"
-            "Anh/chị xác nhận đặt hàng để em mở form điền thông tin nhận hàng nhé?")
+            "Anh/chị xác nhận đặt hàng giúp em, em mở form để mình điền thông tin nhận hàng nha.")
