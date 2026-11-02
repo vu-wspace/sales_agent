@@ -8,6 +8,7 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
+from phone_sales.conversation import added_to_cart_this_turn
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_sales.vector_db import get_vector_store
@@ -19,6 +20,15 @@ tavily_client = TavilyClient()
 MAX_LINES = 15  # số sản phẩm tối đa trả về cho model, tránh kết quả quá dài
 # Phụ kiện mỗi trang: prompt dặn tối đa 5 dòng nhưng tool trả 8-15 dòng thì model vẫn liệt kê hết (eval acc-01)
 ACCESSORIES_PER_PAGE = 5
+PER_KIND = 2  # tìm nhiều loại phụ kiện một lúc ("sạc, cáp"): mỗi loại lấy ngần này món
+NOT_WALL_CHARGER = r'không dây|magsafe|magnet|qi2|ô tô'
+THIRD_PARTY_BRANDS = ('beats', 'mophie', 'belkin', 'anker', 'otterbox', 'zagg', 'spigen')
+# Máy không có mục "Trong Hộp Sản Phẩm" trong dữ liệu (web Samsung không ghi): theo chính sách chung của hãng,
+# Galaxy bán tại Việt Nam chỉ kèm cáp USB-C, không kèm củ sạc. GIẢ ĐỊNH, cần kiểm tra lại với từng model.
+IN_BOX_BY_BRAND = {'Samsung': {'cable': True, 'charger': False}}
+# Up-sell trong search_products: kèm tối đa 2 máy có giá thấp nhất vượt ngân sách không quá 10%
+UPSELL_BUDGET_MARGIN = 0.1
+UPSELL_ABOVE_BUDGET = 2
 
 # Cách khách hay gọi tắt -> từ có trong tên sản phẩm (đã chuẩn hóa bằng _norm_text)
 ALIASES = {'ip': 'iphone', 'ss': 'samsung', 'promax': 'pro max', 'zfold': 'z fold', 'zflip': 'z flip'}
@@ -44,6 +54,11 @@ SPEC_KEYS = [
     'Pin Và Nguồn Điện', 'Dung lượng pin (mAh, Typical)', 'Chống Tia Nước, Chống Nước, Và Chống Bụi',
     'Trọng lượng (g)',
 ]
+
+NO_SPECS_IN_LIST = ('(Danh sách chỉ có giá, dung lượng, tình trạng hàng, không có thông số. '
+                    'Cần nêu chip, camera, pin, màn hình thì gọi get_product_details, không tự nêu.)')
+NO_SPECS = ('Thông số: chưa có thông số chi tiết của máy này trong dữ liệu. Không tự nêu chip, camera, pin, màn hình; '
+            'khách hỏi thì nói chưa có thông tin chi tiết.')
 
 DB_ERROR = ('Lỗi hệ thống khi tra cứu kho hàng ({}). Không tự đưa ra giá hay tình trạng hàng; '
             'xin lỗi anh/chị và đề nghị liên hệ hotline hoặc cửa hàng gần nhất.')
@@ -124,20 +139,31 @@ def search_products(query: str = '', brand: str = '', max_price: int = 0, catego
         return DB_ERROR.format(type(e).__name__)
     if query.strip():
         rows = _match(rows, query, prefer_exact=False)
+    above = []
     if max_price > 0:
+        # Up-sell: vài máy chỉ nhỉnh hơn ngân sách một chút, để model nhắc khi hợp nhu cầu hơn
+        above = [r for r in rows if max_price < r['min_price'] <= max_price * (1 + UPSELL_BUDGET_MARGIN)]
         rows = [r for r in rows if r['min_price'] <= max_price]
     if not rows:
         return (f"Không có sản phẩm khớp (tên: '{query}', hãng: '{brand}', giá tối đa: "
                 f"{_price(max_price) if max_price else 'không giới hạn'}).")
-    lines = []
-    for r in rows[:MAX_LINES]:
+
+    def line(r: dict) -> str:
         price = _price(r['min_price']) if r['min_price'] == r['max_price'] else \
             f"{_price(r['min_price'])} - {_price(r['max_price'])}"
         storages = ', '.join(sorted((s for s in r['storages'] if s), key=_storage_key))
-        lines.append(f"- {r['name']} ({r['brand']}): {price}"
-                     + (f' | {storages}' if storages else '') + f" | {_stock(r['stock'])}")
+        return (f"- {r['name']} ({r['brand']}): {price}"
+                + (f' | {storages}' if storages else '') + f" | {_stock(r['stock'])}")
+
+    lines = [line(r) for r in rows[:MAX_LINES]]
     more = f'\n(còn {len(rows) - MAX_LINES} sản phẩm khác, hãy hỏi cụ thể hơn)' if len(rows) > MAX_LINES else ''
-    return 'Sản phẩm đang bán (giá đã gồm VAT):\n' + '\n'.join(lines) + more
+    if above:
+        more += ('\nNhỉnh hơn ngân sách (chỉ nhắc tối đa 1 máy, khi hợp nhu cầu hơn rõ rệt):\n'
+                 + '\n'.join(f"{line(r)} | vượt {_price(r['min_price'] - max_price)}"
+                             for r in above[:UPSELL_ABOVE_BUDGET]))
+    # Không có dòng này thì model tự thêm thông số theo hiểu biết riêng (vd "S26 FE pin 4.500mAh", dữ liệu là 4900)
+    return ('Sản phẩm đang bán (giá đã gồm VAT):\n' + '\n'.join(lines) + more
+            + f'\n{NO_SPECS_IN_LIST}' * (category == 'phone'))
 
 @tool
 def get_product_details(product: str, storage: str = '', color: str = '') -> str:
@@ -160,9 +186,11 @@ def get_product_details(product: str, storage: str = '', color: str = '') -> str
         return DB_ERROR.format(type(e).__name__)
 
     attrs = p['attributes'] or {}
+    bigger = []
     if storage.strip():
         # "256gb" khớp cả "256GB - RAM 8GB" và "256GB - RAM 12GB"
         want = _storage_key(storage)[:1]
+        bigger = [v for v in variants if _storage_key(v['storage'] or '')[:1] > want]
         variants = [v for v in variants if _storage_key(v['storage'] or '')[:1] == want]
     if color.strip():
         variants = [v for v in variants if _norm_text(color) in _norm_text(v['color'] or '')]
@@ -171,51 +199,116 @@ def get_product_details(product: str, storage: str = '', color: str = '') -> str
     if attrs.get('ram_by_storage'):
         lines.append('RAM: ' + ', '.join(f'{s}: {r}' for s, r in attrs['ram_by_storage'].items()))
     specs = attrs.get('specs') or {}
-    for k in SPEC_KEYS:
-        if specs.get(k):
-            lines.append(f'{k}: {specs[k][:220]}')
+    spec_lines = [f'{k}: {specs[k][:220]}' for k in SPEC_KEYS if specs.get(k)]
+    lines += spec_lines or [NO_SPECS]  # dòng Galaxy S/Z chưa có thông số (web Samsung tải bằng JavaScript)
+    box = _in_box(p)
+    if box:
+        lines.append(f"Trong hộp: {box['text']}")
     lines.append('Phiên bản (dung lượng | màu | giá | kho):' if variants else
                  f"Không có phiên bản khớp (dung lượng: '{storage}', màu: '{color}').")
     lines += [f"- {v['storage']} | {v['color']} | {_price(v['price'])}"
               f"{' (giá tham khảo)' if v['variant_id'] in estimated else ''} | {_stock(v['stock'])}"
               for v in variants]
+    lines.append(_bigger_storages(variants, bigger))
     return '\n'.join(line for line in lines if line)
+
+def _bigger_storages(chosen: list[dict], bigger: list[dict]) -> str:
+    # Up-sell: giá từng dung lượng lớn hơn bản khách chọn, kèm số tiền chênh tính sẵn (model hay cộng trừ sai)
+    base = min((v['price'] for v in chosen), default=None)
+    in_stock = [v for v in bigger if v['stock'] > 0]
+    if base is None or not in_stock:
+        return ''
+    cheapest: dict[str, int] = {}
+    for v in in_stock:
+        key = v['storage'] or ''
+        cheapest[key] = min(cheapest.get(key, v['price']), v['price'])
+    parts = [f'{s} từ {_price(price)} (thêm {_price(price - base)})'
+             for s, price in sorted(cheapest.items(), key=lambda kv: _storage_key(kv[0]))]
+    return 'Dung lượng lớn hơn còn hàng: ' + ', '.join(parts)
 
 @tool
 def find_accessories(phone: str, accessory_type: str = '', page: int = 1) -> str:
     """Tìm phụ kiện tương thích với 1 điện thoại: ốp lưng, miếng dán màn hình, củ sạc, cáp, sạc dự phòng,
     S Pen, ví, giá đỡ. phone: tên máy (vd 'iPhone 17', 'Galaxy S26 Ultra').
-    accessory_type: loại phụ kiện (vd 'ốp lưng', 'sạc', 'cáp', 'cường lực'), để trống để xem tất cả loại.
-    Mỗi lần trả 5 phụ kiện (còn hàng trước, rẻ trước); khách muốn xem thêm thì gọi lại với page=2, 3..."""
-    kind = _accessory_type(accessory_type) if accessory_type.strip() else None
-    if accessory_type.strip() and not kind:
+    accessory_type: loại phụ kiện (vd 'ốp lưng', 'sạc', 'củ sạc', 'cáp', 'cường lực'), nhiều loại cách nhau dấu phẩy
+    (vd 'sạc, cáp' hoặc 'ốp lưng, cường lực': mỗi loại 2 món), để trống để xem tất cả loại.
+    'củ sạc' chỉ lấy củ sạc cắm tường (bỏ sạc không dây, MagSafe, ô tô; hộp máy đã có cáp thì bỏ loại kèm cáp).
+    Mỗi lần trả 5 phụ kiện (còn hàng trước, chính hãng trước, rẻ trước); tìm sạc/cáp thì kèm máy có sẵn gì trong hộp.
+    Khách muốn xem thêm thì gọi lại với page=2, 3..."""
+    # Nhiều loại cách nhau dấu phẩy ("sạc, cáp", "ốp lưng, cường lực"): mỗi loại lấy vài món, không bị 1 loại chiếm hết
+    asked = [s.strip() for s in re.split(r',|\+|\bvà\b', accessory_type) if s.strip()]
+    kinds = list(dict.fromkeys(_accessory_type(s) for s in asked))
+    if None in kinds:
         return f"Không rõ loại phụ kiện '{accessory_type}'. Các loại có: ốp lưng, miếng dán, sạc, cáp, sạc dự phòng, S Pen, ví, giá đỡ."
     try:
-        phones = _query("SELECT product_id, name FROM products WHERE category = 'phone'")
+        phones = _query("SELECT product_id, name, brand, attributes FROM products WHERE category = 'phone'")
         hits = _match(phones, phone)
         if len(hits) != 1:
             names = ', '.join(p['name'] for p in hits[:MAX_LINES])
             return (f"Có nhiều máy khớp '{phone}': {names}. Hỏi lại khách dùng máy nào." if hits else
                     f"Không tìm thấy điện thoại '{phone}' trong danh sách máy cửa hàng đang bán.")
         rows = _query(
-            """SELECT a.name, a.attributes->>'accessory_type' AS kind, v.price, v.stock
+            """SELECT a.name, a.brand, a.attributes->>'accessory_type' AS kind, v.price, v.stock
                FROM compatibility c JOIN products a ON a.product_id = c.accessory_id
                JOIN variants v ON v.product_id = a.product_id
-               WHERE c.phone_id = %s AND (%s::text IS NULL OR a.attributes->>'accessory_type' = %s)
+               WHERE c.phone_id = %s AND (%s::text[] IS NULL OR a.attributes->>'accessory_type' = ANY(%s))
                ORDER BY v.stock = 0, v.price""",
-            (hits[0]['product_id'], kind, kind))
+            (hits[0]['product_id'], kinds or None, kinds or None))
     except Exception as e:
         return DB_ERROR.format(type(e).__name__)
+    p = hits[0]
+    box = _in_box(p)
+    if any(re.search(r'\bcu sac\b', _norm_text(s)) for s in asked):
+        # Khách/bước bán kèm cần củ sạc cắm tường: sạc không dây vẫn phải có củ sạc mới dùng được.
+        # Hộp máy đã có cáp thì bỏ bộ củ sạc kèm cáp, chỉ lấy củ sạc
+        skip = NOT_WALL_CHARGER + (r'|(?<!không )kèm cáp' if box and box['cable'] else '')
+        rows = [r for r in rows if not (r['kind'] == 'charger' and re.search(skip, r['name'].lower()))]
+    header = f"Phụ kiện tương thích với {p['name']}:"
+    if box and {'charger', 'cable'} & set(kinds):
+        header = f"Trong hộp {p['name']}: {box['text']}.\n" + header
     if not rows:
-        return f"Chưa có phụ kiện {accessory_type or ''} tương thích với {hits[0]['name']}.".replace('  ', ' ')
-    start = (max(page, 1) - 1) * ACCESSORIES_PER_PAGE
-    shown = rows[start:start + ACCESSORIES_PER_PAGE]
+        return f"Chưa có phụ kiện {accessory_type or ''} tương thích với {p['name']}.".replace('  ', ' ')
+    # Còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây/ô tô (máy thiếu là thiếu củ sạc), rẻ trước
+    rows.sort(key=lambda r: (r['stock'] <= 0, not _genuine(r, p['brand']),
+                             r['kind'] == 'charger' and bool(re.search(NOT_WALL_CHARGER, r['name'].lower())), r['price']))
+    start = max(page, 1) - 1
+    if len(kinds) > 1:
+        by_kind = [[r for r in rows if r['kind'] == k] for k in kinds]
+        shown = [r for group in by_kind for r in group[start * PER_KIND:(start + 1) * PER_KIND]]
+        left = sum(max(len(group) - (start + 1) * PER_KIND, 0) for group in by_kind)
+    else:
+        shown = rows[start * ACCESSORIES_PER_PAGE:(start + 1) * ACCESSORIES_PER_PAGE]
+        left = len(rows) - start * ACCESSORIES_PER_PAGE - len(shown)
     if not shown:
-        return f"Đã xem hết {len(rows)} phụ kiện tương thích với {hits[0]['name']}."
-    lines = [f"- {r['name']}: {_price(r['price'])} | {_stock(r['stock'])}" for r in shown]
-    left = len(rows) - start - len(shown)
+        return f"Đã xem hết {len(rows)} phụ kiện tương thích với {p['name']}."
+    lines = [f"- {r['name']}: {_price(r['price'])}" + (f" | chính hãng {p['brand']}" if _genuine(r, p['brand']) else '')
+             + f" | {_stock(r['stock'])}" for r in shown]
+    # 1 loại: hàng chính hãng xếp trước, tách rõ phần hãng khác để model không trộn vào lời mời hàng chính hãng
+    genuine = [_genuine(r, p['brand']) for r in shown]
+    if len(kinds) <= 1 and genuine[0] and not all(genuine):
+        lines.insert(genuine.index(False), f"Hãng khác (không phải chính hãng {p['brand']}):")
     more = f'\n(còn {left} phụ kiện khác, xem tiếp bằng page={page + 1})' if left > 0 else ''
-    return f"Phụ kiện tương thích với {hits[0]['name']}:\n" + '\n'.join(lines) + more
+    return header + '\n' + '\n'.join(lines) + more
+
+def _genuine(acc: dict, phone_brand: str) -> bool:
+    # Chính hãng = cùng hãng với máy; cửa hàng Apple bán cả Beats, mophie, Belkin, Anker nhưng đó là hãng khác
+    name = acc['name'].lower()
+    return acc.get('brand') == phone_brand and not any(b in name for b in THIRD_PARTY_BRANDS)
+
+def _in_box(phone: dict) -> dict | None:
+    """Máy có kèm củ sạc, cáp không: {'charger': bool, 'cable': bool, 'text': ...}; None nếu không rõ."""
+    box = ((phone.get('attributes') or {}).get('specs') or {}).get('Trong Hộp Sản Phẩm')
+    if box:
+        # Chỉ đọc phần đầu (danh sách món trong hộp); phía sau là đoạn giới thiệu môi trường của Apple
+        head = box.lower()[:120]
+        found = {'cable': 'cáp' in head, 'charger': bool(re.search(r'củ sạc|bộ sạc|bộ tiếp hợp|adapter', head))}
+    else:
+        found = IN_BOX_BY_BRAND.get(phone.get('brand'))
+    if found is None:
+        return None
+    text = ', '.join(['có cáp sạc' if found['cable'] else 'không có cáp sạc',
+                      'có củ sạc' if found['charger'] else 'không kèm củ sạc'])
+    return {**found, 'text': text}
 
 @tool
 def search_policy(query: str) -> str:
@@ -262,6 +355,13 @@ def _cart_reply(tool_call_id: str, text: str, cart: list | None = None) -> Comma
         update['cart'] = cart
     return Command(update=update)
 
+def _cart_extra(p: dict) -> dict:
+    # Cho bước bán kèm (conversation.cross_sell_hint): máy có kèm củ sạc không, phụ kiện thuộc loại nào
+    if p.get('category') == 'accessory':
+        return {'accessory_type': (p.get('attributes') or {}).get('accessory_type')}
+    box = _in_box(p)
+    return {'charger_in_box': box['charger'] if box else None, 'cable_in_box': box['cable'] if box else None}
+
 @tool
 def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId],
                 storage: str = '', color: str = '', quantity: int = 1) -> Command:
@@ -272,7 +372,7 @@ def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_i
     if quantity < 1:
         return _cart_reply(tool_call_id, 'Số lượng phải từ 1 trở lên.')
     try:
-        products = _query('SELECT product_id, name, category FROM products')
+        products = _query('SELECT product_id, name, brand, category, attributes FROM products')
         hits = _match(products, product)
         if len(hits) != 1:
             names = ', '.join(p['name'] for p in hits[:MAX_LINES])
@@ -302,8 +402,9 @@ def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_i
     if item:
         item['quantity'] = new_qty
     else:
-        cart.append({'variant_id': v['variant_id'], 'name': p['name'], 'storage': v['storage'],
-                     'color': v['color'], 'price': v['price'], 'quantity': quantity})
+        cart.append({'variant_id': v['variant_id'], 'name': p['name'], 'category': p['category'],
+                     'storage': v['storage'], 'color': v['color'], 'price': v['price'], 'quantity': quantity,
+                     **_cart_extra(p)})
     total = sum(i['price'] * i['quantity'] for i in cart)
     return _cart_reply(tool_call_id, f"Đã thêm {quantity} x {p['name']} {v['storage'] or ''} {v['color'] or ''} "
                        f"({_price(v['price'])}). Giỏ có {len(cart)} sản phẩm, tổng {_price(total)}.", cart)
@@ -321,14 +422,33 @@ def remove_from_cart(product: str, state: Annotated[dict, InjectedState],
     return _cart_reply(tool_call_id, f'Đã bỏ {len(cart) - len(keep)} sản phẩm. Giỏ còn {len(keep)} sản phẩm, '
                        f'tổng {_price(total)}.', keep)
 
+@tool
+def show_order_form(state: Annotated[dict, InjectedState],
+                    tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
+    """Hiện form đặt hàng (họ tên, số điện thoại, địa chỉ, cách thanh toán) ngay dưới câu trả lời.
+    Gọi khi khách xác nhận đặt hàng/chốt đơn với giỏ hàng hiện tại. Không hỏi thông tin nhận hàng bằng chữ."""
+    cart = state.get('cart') or []
+    if not cart:
+        return _cart_reply(tool_call_id, 'Giỏ hàng đang trống, chưa mở form đặt hàng. Hỏi khách muốn mua sản phẩm nào.')
+    if added_to_cart_this_turn(state.get('messages') or []):
+        # "Chốt S26 256GB đen" là chọn máy, chưa phải xác nhận đơn: bán kèm, hỏi chốt đơn trước, form để lượt sau
+        return _cart_reply(tool_call_id, 'Chưa mở form: khách vừa thêm hàng vào giỏ ở lượt này. Làm theo mục "Bán kèm" '
+                           'trong trạng thái (nếu có) rồi hỏi khách có xác nhận đặt hàng không; khách xác nhận ở '
+                           'lượt sau thì mới gọi show_order_form.')
+    total = sum(i['price'] * i['quantity'] for i in cart)
+    # Giao diện đọc order_form trong state để hiện form; khách gửi form thì api.py (POST /order) tạo đơn
+    return Command(update={'order_form': True, 'messages': [ToolMessage(
+        f'Đã hiện form đặt hàng cho {len(cart)} sản phẩm, tổng {_price(total)}. Trả lời 1 câu ngắn mời khách điền '
+        'form bên dưới; không hỏi lại tên, số điện thoại, địa chỉ hay cách thanh toán.', tool_call_id=tool_call_id)]})
+
 # Tool của từng agent. Mô tả tool mà model nhìn thấy lấy từ docstring của hàm @tool ở trên.
 TOOLS = {t.name: t for t in (search_products, get_product_details, find_accessories, search_policy, web_search,
-                             add_to_cart, remove_from_cart)}
+                             add_to_cart, remove_from_cart, show_order_form)}
 AGENT_TOOLS = {
     'agent_main': ['search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search'],
-    # graph.py có trạng thái hội thoại (giỏ hàng...) nên thêm tool giỏ hàng
+    # graph.py có trạng thái hội thoại (giỏ hàng...) nên thêm tool giỏ hàng và form đặt hàng
     'agent_graph': ['search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search',
-                    'add_to_cart', 'remove_from_cart'],
+                    'add_to_cart', 'remove_from_cart', 'show_order_form'],
 }
 
 def get_agent_tools(agent: str) -> list:

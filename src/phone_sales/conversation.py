@@ -36,6 +36,10 @@ class AgentState(TypedDict, total=False):
     objections: Annotated[list[str], append_unique]       # khách đang chê/lo ngại gì
     sentiment_history: Annotated[list[str], append]       # cảm xúc của khách qua từng lượt
     handoff: bool                                         # có cần chuyển nhân viên không (đã bật thì giữ)
+    cross_sell: Annotated[list[str], append_unique]       # bước bán kèm đã mời: 'charger' (sạc, cáp), 'accessories'
+    declined: bool                                        # tin nhắn mới nhất của khách là từ chối ("không cần")
+    order_form: bool                                      # lượt này hiện form đặt hàng (show_order_form)
+    orders: Annotated[list[str], append]                  # mã các đơn đã đặt trong cuộc trò chuyện (api.py: /order)
 
 # ---------------------------------------------------------------- trích từ tin nhắn của khách
 
@@ -67,6 +71,9 @@ HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư 
            r'chưa nhận được hàng|chưa giao|hủy đơn|huỷ đơn|đòi tiền|hoàn tiền ngay')
 COMPARE = r'so sánh|khác gì|khác nhau|nên chọn|nên lấy cái nào|hơn không|với .+ thì sao'
 CLOSING = r'chốt|lấy máy|lấy cái|mua luôn|đặt hàng|đặt mua|thanh toán|giao cho|ship cho|lên đơn'
+# Từ chối lời mời bán kèm. Không dùng "thôi" đứng riêng: "lấy luôn thôi" là đồng ý
+DECLINE = (r'không cần|ko cần|k cần|khỏi|không lấy|không mua|chưa cần|để sau|thôi khỏi|thôi không|không đâu|'
+           r'không ạ|không nhé|không em|vậy được rồi|vậy thôi')
 
 def parse_budget(text: str) -> int | None:
     # "15 triệu", "15tr", "15 củ", "dưới 20 triệu", "từ 10 đến 15 triệu" -> ngân sách tối đa (VND)
@@ -111,6 +118,7 @@ def track_user_message(text: str) -> dict:
         'wants_handoff': _has(HANDOFF, t),
         'wants_compare': _has(COMPARE, t),
         'wants_close': _has(CLOSING, t),
+        'declined': _has(DECLINE, t),
     }
 
 # ---------------------------------------------------------------- trích từ kết quả tool
@@ -127,6 +135,11 @@ def _tool_results(messages: list[AnyMessage]):
         if isinstance(m, ToolMessage) and m.tool_call_id in calls:
             yield calls[m.tool_call_id], str(m.content)
 
+def added_to_cart_this_turn(messages: list[AnyMessage]) -> bool:
+    # Cả khi add_to_cart nằm cùng 1 message với tool đang chạy (model gọi song song)
+    return any(tc['name'] == 'add_to_cart' for m in _current_turn(messages) if isinstance(m, AIMessage)
+               for tc in (m.tool_calls or []))
+
 def track_tool_results(messages: list[AnyMessage]) -> dict:
     """Nhu cầu suy ra từ tham số tool model đã gọi trong lượt hiện tại (ngân sách, hãng, dung lượng, màu)."""
     slots = {}
@@ -140,6 +153,15 @@ def track_tool_results(messages: list[AnyMessage]) -> dict:
             if args.get('brand'):
                 slots.setdefault('brand', args['brand'])
     return {'slots': slots}
+
+def cross_sell_offers(messages: list[AnyMessage]) -> list[str]:
+    """Bước bán kèm đã mời trong lượt này, suy từ loại phụ kiện model tìm: sạc/cáp -> 'charger', còn lại -> 'accessories'."""
+    offers = []
+    for call, _ in _tool_results(messages):
+        if call['name'] == 'find_accessories':
+            kind = (call['args'].get('accessory_type') or '').lower()
+            offers.append('charger' if re.search(r'sạc|cáp|sac|cap', kind) else 'accessories')
+    return list(dict.fromkeys(offers))
 
 def _candidate_products(messages: list[AnyMessage]) -> list[str]:
     # Tên sản phẩm xuất hiện trong kết quả tool của lượt này: danh sách search_products ("- Tên (Hãng): ..."),
@@ -189,7 +211,11 @@ STAGE_GUIDE = {
     'discovery': 'Khách chưa xem máy nào. Nếu thiếu ngân sách hoặc nhu cầu chính, hỏi tối đa 1 câu ngắn trước khi gợi ý.',
     'recommending': 'Đã giới thiệu sản phẩm. Trả lời câu hỏi về máy đó; khách có vẻ ưng thì hỏi màu/dung lượng và mời thêm vào giỏ.',
     'comparing': 'Khách đang phân vân giữa các máy. So sánh ngắn theo đúng nhu cầu đã biết, đưa ra 1 gợi ý rõ ràng kèm lý do.',
-    'closing': 'Khách đã chọn hàng. Xác nhận giỏ hàng và tổng tiền, hỏi hình thức nhận hàng và thanh toán (trả thẳng/trả góp).',
+    # Không kèm phí/thời gian giao, kỳ hạn trả góp: model tự bịa ("trả góp 3-24 tháng", chính sách là tối đa 12 tháng)
+    'closing': 'Khách đã chọn hàng. Xác nhận giỏ hàng và tổng tiền, hỏi khách có chốt đơn không. Khách xác nhận đặt '
+               'hàng thì gọi show_order_form (form hỏi tên, số điện thoại, địa chỉ, thanh toán), không hỏi các thông tin '
+               'đó bằng chữ. Không tự nêu phí, thời gian giao, kỳ hạn hay đối tác trả góp; '
+               'khách hỏi chi tiết thì gọi search_policy.',
     'handoff': 'Cần chuyển nhân viên. Xin lỗi nếu khách không hài lòng, nêu bước cần làm theo chính sách (nếu có), '
                'rồi thông báo đã chuyển cho nhân viên hỗ trợ. Không cố bán thêm.',
 }
@@ -221,6 +247,45 @@ def describe(state: dict) -> str:
     if state.get('objections'):
         lines.append('Khách đang lo ngại: ' + ', '.join(state['objections'])
                      + '. Trả lời thẳng vào lo ngại này bằng dữ liệu công cụ (vd gợi ý máy rẻ hơn, pin lớn hơn).')
-    if (state.get('sentiment_history') or [])[-1:] == ['negative']:
+    unhappy = (state.get('sentiment_history') or [])[-1:] == ['negative']
+    if unhappy:
         lines.append('Khách đang không vui: trả lời ngắn, xin lỗi, không quảng cáo thêm.')
+    hint = cross_sell_hint(state)
+    if hint and not unhappy:
+        lines.append(hint)
     return '\n'.join(lines)
+
+def cross_sell_hint(state: dict) -> str | None:
+    """Bước bán kèm tiếp theo khi khách đã cho điện thoại vào giỏ (bước closing), mỗi lượt tối đa 1 lời mời:
+    1. Máy không kèm củ sạc: mời sạc + cáp chính hãng; hộp đã có cáp thì chỉ mời 2-3 củ sạc chính hãng.
+    2. Ốp lưng, cường lực (2-3 món). Khách vừa từ chối sạc thì mời nhẹ.
+    3. Khách từ chối tiếp: không mời nữa, hỏi khách có chốt đơn không."""
+    cart = state.get('cart') or []
+    # Giỏ tạo trước khi có trường category thì coi là điện thoại
+    phone = next((i for i in cart if i.get('category', 'phone') == 'phone'), None)
+    if state.get('stage') != 'closing' or not phone:
+        return None
+    if cross_sell_offers(state.get('messages') or []):
+        return None  # lượt này đã mời rồi, bước kế tiếp để lượt sau
+    offered = set(state.get('cross_sell') or [])
+    in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
+    name = phone['name']
+    declined = bool(state.get('declined'))
+    if phone.get('charger_in_box') is False and 'charger' not in offered and 'charger' not in in_cart:
+        if phone.get('cable_in_box'):
+            # Hộp đã có cáp: chỉ mời củ sạc, vài lựa chọn chính hãng từ rẻ tới đắt
+            return (f"Bán kèm (bước 1): hộp {name} đã có cáp sạc nhưng không kèm củ sạc; nói rõ điều này với khách. "
+                    f"Gọi find_accessories cho {name} với accessory_type='củ sạc', liệt kê 2-3 củ sạc "
+                    "chính hãng (dòng có 'chính hãng'; chỉ có 1 thì mời 1, không lấy món ở mục 'Hãng khác'), mỗi món 1 gạch đầu dòng kèm giá, xếp từ rẻ tới đắt. "
+                    "Không mời cáp. Lượt này chưa mời ốp lưng, cường lực.")
+        return (f"Bán kèm (bước 1): {name} không kèm củ sạc trong hộp. Gọi find_accessories cho {name} với "
+                "accessory_type='sạc, cáp', mời 1 củ sạc chính hãng và 1 cáp sạc chính hãng (củ sạc đã kèm cáp thì "
+                "không cần mời cáp) kèm giá, nói đúng như dòng 'Trong hộp'. Lượt này chưa mời ốp lưng, cường lực.")
+    if 'accessories' not in offered and not in_cart & {'case', 'screen-protector'}:
+        light = ' Khách vừa không lấy sạc: chỉ mời nhẹ 1 câu, không nhắc lại sạc.' if 'charger' in offered and declined else ''
+        return (f"Bán kèm (bước 2): gọi find_accessories cho {name} với accessory_type='ốp lưng, cường lực', "
+                f"mời 2-3 món kèm giá trong 1-2 câu ngắn.{light}")
+    if declined and offered:
+        return ('Bán kèm: khách không cần thêm phụ kiện. Không mời thêm, không ép; '
+                'hỏi khách có chốt đơn với giỏ hàng hiện tại không.')
+    return None

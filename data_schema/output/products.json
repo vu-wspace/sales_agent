@@ -2465,7 +2465,7 @@
     "category": "accessory",
     "description": "Củ Sạc Kèm Cáp 45W",
     "attributes": {
-      "accessory_type": "cable",
+      "accessory_type": "charger",
       "sku": "EP-T4511XWEGWW",
       "source_url": "https://www.samsung.com/vn/mobile-accessories/45w-power-adapter-white-ep-t4511xwegww/"
     }
@@ -2489,7 +2489,7 @@
     "category": "accessory",
     "description": "Củ Sạc Không Kèm Cáp 60W (Đen)",
     "attributes": {
-      "accessory_type": "cable",
+      "accessory_type": "charger",
       "sku": "EP-T6010NBEGWW",
       "source_url": "https://www.samsung.com/vn/mobile-accessories/60w-power-adapter-black-ep-t6010nbegww/"
     }

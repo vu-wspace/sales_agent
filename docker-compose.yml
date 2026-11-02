@@ -24,6 +24,8 @@ services:
       # Cào lại dữ liệu thì nạp tay (xem README) hoặc `docker compose down -v` để khởi tạo lại.
       - ./data_schema/phone.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./data_schema/output/phone_seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      # Bảng khách hàng, đơn hàng; API cũng tự tạo khi khởi động nên volume cũ không cần làm gì
+      - ./data_schema/orders.sql:/docker-entrypoint-initdb.d/03-orders.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d phone"]
       interval: 5s

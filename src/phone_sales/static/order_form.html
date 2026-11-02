@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Form đặt hàng</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root{
+  --surface-0:#f5f4ef;--surface-1:#faf9f5;--surface-2:#ffffff;
+  --text-primary:#1f1e1d;--text-secondary:#5f5e5a;--text-muted:#9a9893;
+  --text-accent:#185fa5;--bg-accent:#e6f1fb;--border-accent:#378add;
+  --text-danger:#a32d2d;--text-success:#3b6d11;
+  --border:rgba(0,0,0,.12);--border-strong:rgba(0,0,0,.22);
+  --radius:8px;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --surface-0:#1b1b1a;--surface-1:#242423;--surface-2:#2c2c2a;
+    --text-primary:#f1efe8;--text-secondary:#b4b2a9;--text-muted:#7a7873;
+    --text-accent:#85b7eb;--bg-accent:#0c447c;--border-accent:#85b7eb;
+    --text-danger:#f09595;--text-success:#97c459;
+    --border:rgba(255,255,255,.14);--border-strong:rgba(255,255,255,.26);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--surface-0);color:var(--text-primary)}
+input,textarea,button{font:inherit;color:inherit}
+input[type=text],input[type=tel],textarea{
+  width:100%;padding:8px 10px;border:0.5px solid var(--border-strong);
+  border-radius:var(--radius);background:var(--surface-2);
+}
+input[type=text],input[type=tel]{height:36px}
+input::placeholder,textarea::placeholder{color:var(--text-muted)}
+input:focus,textarea:focus{outline:none;border-color:var(--border-accent);box-shadow:0 0 0 2px var(--bg-accent)}
+textarea:disabled{opacity:.6;cursor:not-allowed;resize:none}
+button{
+  width:100%;margin-top:14px;height:40px;cursor:pointer;
+  border:0.5px solid var(--border-strong);border-radius:var(--radius);background:transparent;
+}
+button:hover{background:var(--surface-1)}
+.chat{max-width:440px;margin:0 auto;background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:16px}
+.head{display:flex;align-items:center;gap:8px;padding-bottom:10px;border-bottom:0.5px solid var(--border);margin-bottom:12px;font-weight:500}
+.head i{font-size:20px;color:var(--text-accent)}
+.bub{max-width:80%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;margin:0 0 10px}
+.bub.user{margin-left:auto;background:var(--bg-accent);color:var(--text-accent)}
+.bub.bot{background:var(--surface-1)}
+.card{border:0.5px solid var(--border-strong);border-radius:12px;padding:12px 14px;margin:0 0 10px}
+.product{display:flex;justify-content:space-between;font-size:14px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
+.product b{font-weight:500}
+.lbl{font-size:13px;color:var(--text-secondary);display:block;margin:10px 0 4px}
+.err{font-size:13px;color:var(--text-danger);margin:4px 0 0;min-height:0}
+.opts{display:flex;gap:8px}
+.opt{flex:1;border:0.5px solid var(--border-strong);border-radius:var(--radius);padding:8px;font-size:13px;text-align:center}
+.opt.on{border:2px solid var(--border-accent);color:var(--text-accent);background:var(--bg-accent)}
+.opt.dis{color:var(--text-muted);border-color:var(--border);cursor:not-allowed}
+.rad{display:flex;align-items:center;gap:8px;font-size:14px;padding:4px 0}
+.rad.dis{color:var(--text-muted);cursor:not-allowed}
+.tag{font-size:12px;padding:2px 8px;border-radius:var(--radius);background:var(--surface-1);color:var(--text-muted);margin-left:auto}
+.row{display:flex;align-items:center;margin:10px 0 4px}
+.row label{font-size:13px;color:var(--text-muted)}
+.ok{color:var(--text-success)}
+</style>
+</head>
+<body>
+<div class="chat">
+  <div class="head"><i class="ti ti-device-mobile" aria-hidden="true"></i>PhoneShop Demo</div>
+
+  <div class="bub user">Ok em lấy S24 màu xanh nhé</div>
+  <div class="bub bot">Dạ vâng ạ. Anh/chị điền giúp em thông tin nhận hàng bên dưới nhé.</div>
+
+  <form id="orderForm" class="card" novalidate>
+    <div class="product"><span>Galaxy S24 · Xanh · 256GB</span><b>20.990.000đ</b></div>
+
+    <label class="lbl" for="fname">Họ tên người nhận</label>
+    <input type="text" id="fname" name="name" placeholder="Nguyễn Văn A" autocomplete="name">
+    <p class="err" id="e-name"></p>
+
+    <label class="lbl" for="fphone">Số điện thoại</label>
+    <input type="tel" id="fphone" name="phone" placeholder="0123456789" autocomplete="tel">
+    <p class="err" id="e-phone"></p>
+
+    <span class="lbl">Cách nhận hàng</span>
+    <div class="opts">
+      <div class="opt on"><i class="ti ti-truck-delivery" aria-hidden="true"></i> Giao tận nơi</div>
+      <div class="opt dis" aria-disabled="true" title="Chưa hỗ trợ"><i class="ti ti-lock" aria-hidden="true"></i> Nhận tại cửa hàng</div>
+    </div>
+
+    <label class="lbl" for="faddr">Địa chỉ giao hàng</label>
+    <input type="text" id="faddr" name="address" placeholder="123 Lê Hồng Phong, Quy Nhơn, Gia Lai" autocomplete="street-address">
+    <p class="err" id="e-addr"></p>
+
+    <span class="lbl">Thanh toán</span>
+    <label class="rad"><input type="radio" name="payment" value="cod" checked> Thanh toán khi nhận hàng</label>
+    <label class="rad dis"><input type="radio" name="payment" value="bank_transfer" disabled> Chuyển khoản <span class="tag">Chưa hỗ trợ</span></label>
+    <label class="rad dis"><input type="radio" name="payment" value="installment" disabled> Trả góp 0% <span class="tag">Chưa hỗ trợ</span></label>
+
+    <div class="row">
+      <label for="fnote">Ghi chú</label>
+      <span class="tag">Chưa hỗ trợ</span>
+    </div>
+    <textarea id="fnote" name="note" rows="2" disabled placeholder="Giao giờ hành chính, gọi trước khi giao..."></textarea>
+
+    <button type="submit">Xác nhận đặt hàng</button>
+  </form>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fields = { fname: "e-name", fphone: "e-phone", faddr: "e-addr" };
+
+Object.entries(fields).forEach(([input, err]) =>
+  $(input).addEventListener("input", () => { $(err).textContent = ""; })
+);
+
+const escapeHtml = s => s.replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+$("orderForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("fname").value.trim();
+  const phone = $("fphone").value.replace(/[\s.\-]/g, "");
+  const address = $("faddr").value.trim();
+  let ok = true;
+
+  if (name.length < 2) { $("e-name").textContent = "Nhập họ tên người nhận"; ok = false; }
+  if (!/^(0|\+84)\d{9}$/.test(phone)) { $("e-phone").textContent = "Số điện thoại chưa đúng định dạng"; ok = false; }
+  if (address.length < 10) { $("e-addr").textContent = "Nhập địa chỉ đầy đủ hơn"; ok = false; }
+  if (!ok) return;
+
+  const payload = {
+    variant_id: "S24_BLUE_256",
+    name, phone, address,
+    fulfillment_type: "delivery",
+    payment: "cod"
+  };
+
+  // Nối với backend của bạn tại đây, ví dụ:
+  // const res = await fetch("/api/order-form", {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify(payload)
+  // });
+  // const { order_id } = await res.json();
+  const order_id = "DH1024";
+
+  const masked = phone.slice(0, 3) + "****" + phone.slice(-3);
+  $("orderForm").style.display = "none";
+  $("result").innerHTML =
+    '<div class="bub user">Đã gửi thông tin</div>' +
+    '<div class="bub bot"><i class="ti ti-check ok" aria-hidden="true"></i> Đơn #' + escapeHtml(order_id) +
+    ' đã được tạo. Em sẽ gọi xác nhận qua số ' + masked +
+    ' và giao tới địa chỉ anh/chị đã cung cấp. Thanh toán khi nhận hàng.</div>';
+});
+</script>
+</body>
+</html>

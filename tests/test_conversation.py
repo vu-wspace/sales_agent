@@ -107,6 +107,59 @@ def test_describe_lists_state_for_prompt():
     assert 'Khách đang lo ngại: chê giá cao' in text and 'Khách đang không vui' in text
 
 
+PHONE_IN_CART = {'name': 'Galaxy S26', 'category': 'phone', 'storage': '256GB', 'color': 'Đen', 'price': 1,
+                 'quantity': 1, 'charger_in_box': False}
+
+
+def _find_acc(kind: str) -> list:
+    return [HumanMessage('ok'),
+            AIMessage('', tool_calls=[{'name': 'find_accessories', 'args': {'phone': 'S26', 'accessory_type': kind},
+                                       'id': 'f'}]),
+            ToolMessage('Phụ kiện tương thích với Galaxy S26:\n- Ốp: 490.320đ | còn hàng', tool_call_id='f')]
+
+
+def test_cross_sell_charger_first_then_accessories_then_stop():
+    state = {'stage': 'closing', 'cart': [PHONE_IN_CART]}
+    hint = conv.cross_sell_hint
+    # Máy không kèm củ sạc: bước 1 mời sạc + cáp
+    assert hint(state).startswith('Bán kèm (bước 1)') and "accessory_type='sạc, cáp'" in hint(state)
+    # Đã mời sạc: bước 2 ốp lưng, cường lực; khách vừa từ chối sạc thì mời nhẹ
+    assert hint({**state, 'cross_sell': ['charger']}).startswith('Bán kèm (bước 2)')
+    assert 'mời nhẹ' in hint({**state, 'cross_sell': ['charger'], 'declined': True})
+    # Khách từ chối tiếp: không mời nữa, hỏi chốt đơn; không từ chối thì im lặng
+    assert 'hỏi khách có chốt đơn' in hint({**state, 'cross_sell': ['charger', 'accessories'], 'declined': True})
+    assert hint({**state, 'cross_sell': ['charger', 'accessories']}) is None
+
+
+def test_cross_sell_only_chargers_when_cable_in_box():
+    text = conv.cross_sell_hint({'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'cable_in_box': True}]})
+    assert "accessory_type='củ sạc'" in text and '2-3 củ sạc chính hãng' in text and 'rẻ tới đắt' in text
+    assert 'đã có cáp sạc' in text and 'Không mời cáp' in text
+
+
+def test_cross_sell_skips_charger_when_in_box_or_already_in_cart():
+    state = {'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'charger_in_box': True}]}
+    assert conv.cross_sell_hint(state).startswith('Bán kèm (bước 2)')
+    with_charger = [PHONE_IN_CART, {'name': 'Củ sạc', 'category': 'accessory', 'accessory_type': 'charger'}]
+    assert conv.cross_sell_hint({'stage': 'closing', 'cart': with_charger}).startswith('Bán kèm (bước 2)')
+
+
+def test_cross_sell_not_offered_outside_closing_twice_in_turn_or_when_unhappy():
+    state = {'stage': 'closing', 'cart': [PHONE_IN_CART]}
+    assert conv.cross_sell_hint({**state, 'stage': 'recommending'}) is None
+    assert conv.cross_sell_hint({**state, 'messages': _find_acc('sạc, cáp')}) is None   # lượt này đã mời
+    assert 'Bán kèm' in conv.describe(state)
+    assert 'Bán kèm' not in conv.describe({**state, 'sentiment_history': ['negative']})
+
+
+def test_cross_sell_offers_and_decline_detection():
+    assert conv.cross_sell_offers(_find_acc('sạc, cáp')) == ['charger']
+    assert conv.cross_sell_offers(_find_acc('ốp lưng, cường lực')) == ['accessories']
+    assert conv.cross_sell_offers(_find_acc('')) == ['accessories']
+    assert conv.track_user_message('thôi không cần sạc đâu em')['declined']
+    assert not conv.track_user_message('ok lấy luôn thôi')['declined']
+
+
 # ---------------------------------------------------------------- tool giỏ hàng
 
 CATALOG = [{'product_id': 'samsung-galaxy-s26', 'name': 'Galaxy S26', 'category': 'phone'},
@@ -134,8 +187,9 @@ def call(tool, state, **args):
 
 def test_add_to_cart_merges_same_variant_and_checks_stock(fake_catalog):
     cart, text = call(tools.add_to_cart, {}, product='galaxy s26', storage='256gb', color='đen')
-    assert cart == [{'variant_id': 'S26-256-DEN', 'name': 'Galaxy S26', 'storage': '256GB', 'color': 'Đen Classic',
-                     'price': 29990001, 'quantity': 1}]
+    assert cart == [{'variant_id': 'S26-256-DEN', 'name': 'Galaxy S26', 'category': 'phone', 'storage': '256GB',
+                     'color': 'Đen Classic', 'price': 29990001, 'quantity': 1, 'charger_in_box': None,
+                     'cable_in_box': None}]
     assert text.endswith('Giỏ có 1 sản phẩm, tổng 29.990.001đ.')
     cart, _ = call(tools.add_to_cart, {'cart': cart}, product='s26', storage='256GB', quantity=2)
     assert cart[0]['quantity'] == 3
@@ -190,3 +244,27 @@ def test_graph_keeps_state_across_turns(monkeypatch, fake_catalog):
     assert s2['slots']['budget_max'] == 30_000_000                    # nhu cầu lượt trước vẫn giữ
     assert s2['sentiment_history'] == ['neutral', 'positive']
     assert s2['messages'][-1].text == 'Dạ em đã thêm Galaxy S26 vào giỏ ạ.'
+
+
+def test_show_order_form_needs_cart():
+    cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
+                                        'args': {'state': {'cart': [PHONE_IN_CART]}}})
+    assert cmd.update['order_form'] is True and 'Đã hiện form đặt hàng cho 1 sản phẩm' in cmd.update['messages'][0].content
+    empty = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c2', 'args': {'state': {}}})
+    assert 'order_form' not in empty.update and 'Giỏ hàng đang trống' in empty.update['messages'][0].content
+
+
+def test_show_order_form_not_in_same_turn_as_add_to_cart():
+    turn = [HumanMessage('chốt s26 256gb đen'),
+            AIMessage('', tool_calls=[{'name': 'add_to_cart', 'args': {}, 'id': 'a'}]),
+            ToolMessage('Đã thêm', tool_call_id='a'),
+            AIMessage('', tool_calls=[{'name': 'show_order_form', 'args': {}, 'id': 'c1'}])]
+    cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
+                                        'args': {'state': {'cart': [PHONE_IN_CART], 'messages': turn}}})
+    assert 'order_form' not in cmd.update and 'Chưa mở form' in cmd.update['messages'][0].content
+    # Lượt sau khách xác nhận: mở form
+    later = turn + [AIMessage('Anh/chị xác nhận đặt hàng không?'), HumanMessage('xác nhận'),
+                    AIMessage('', tool_calls=[{'name': 'show_order_form', 'args': {}, 'id': 'c2'}])]
+    cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c2',
+                                        'args': {'state': {'cart': [PHONE_IN_CART], 'messages': later}}})
+    assert cmd.update['order_form'] is True

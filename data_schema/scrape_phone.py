@@ -474,7 +474,8 @@ def accessory_type(name: str) -> str:
     rules = [("s pen", "s-pen"), ("dán", "screen-protector"), ("film", "screen-protector"),
              ("ốp", "case"), ("bao da", "case"), ("folio", "case"), ("case", "case"),
              ("pin magsafe", "power-bank"), ("dự phòng", "power-bank"), ("battery", "power-bank"),
-             ("pin", "power-bank"), ("cáp", "cable"), ("sạc", "charger"), ("tiếp hợp", "charger"),
+             # "củ sạc" trước "cáp": "Củ Sạc Kèm Cáp 45W" là củ sạc, không phải cáp
+             ("pin", "power-bank"), ("củ sạc", "charger"), ("cáp", "cable"), ("sạc", "charger"), ("tiếp hợp", "charger"),
              ("adapter", "charger"), ("charger", "charger"), ("ví", "wallet"), ("wallet", "wallet"),
              ("dây đeo", "strap"), ("giá đỡ", "holder")]
     return next((t for k, t in rules if k in n), "other")
@@ -571,12 +572,34 @@ def write_sql(products, variants, compat, path: Path):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def rebuild_from_json():
+    # Sửa luật accessory_type thì chạy lại từ dữ liệu đã cào: giá, tồn kho giữ nguyên
+    rows = {name: json.loads((OUT_DIR / f"{name}.json").read_text(encoding="utf-8"))
+            for name in ("products", "variants", "compatibility")}
+    changed = 0
+    for p in rows["products"]:
+        if p["category"] == "accessory":
+            kind = accessory_type(p["name"])
+            changed += p["attributes"].get("accessory_type") != kind
+            p["attributes"]["accessory_type"] = kind
+    for name, data in rows.items():
+        (OUT_DIR / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_sql(rows["products"], rows["variants"], rows["compatibility"], OUT_DIR / "phone_seed.sql")
+    log(f"Xong: phân loại lại {changed} phụ kiện -> {OUT_DIR}")
+
+
 def main():
     global _refresh
     sys.stderr.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--refresh", action="store_true", help="bỏ qua cache, tải lại trang")
-    _refresh = ap.parse_args().refresh
+    ap.add_argument("--from-json", action="store_true",
+                    help="không tải trang: phân loại lại phụ kiện từ output/*.json rồi ghi lại JSON và phone_seed.sql")
+    args = ap.parse_args()
+    _refresh = args.refresh
+    if args.from_json:
+        rebuild_from_json()
+        return
 
     a_prod, a_var = scrape_apple_phones()
     s_prod, s_var = scrape_samsung_phones()

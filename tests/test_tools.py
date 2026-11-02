@@ -84,7 +84,17 @@ def fake_db(monkeypatch):
 def test_search_products_filters_and_formats(fake_db):
     out = tools.search_products.invoke({'max_price': 15000000})
     assert out == ('Sản phẩm đang bán (giá đã gồm VAT):\n'
-                   '- Galaxy A57 5G (Samsung): 12.490.000đ - 16.490.280đ | 128GB, 256GB - RAM 8GB | còn hàng')
+                   '- Galaxy A57 5G (Samsung): 12.490.000đ - 16.490.280đ | 128GB, 256GB - RAM 8GB | còn hàng\n'
+                   + tools.NO_SPECS_IN_LIST)
+
+
+def test_search_products_lists_slightly_over_budget(fake_db):
+    # Up-sell: S26 (29.990.001đ) vượt ngân sách 28 triệu chưa tới 10% -> liệt kê riêng, kèm số tiền vượt
+    out = tools.search_products.invoke({'max_price': 28_000_000})
+    listed, above = out.split('\nNhỉnh hơn ngân sách')
+    assert 'Galaxy A57 5G' in listed and 'Galaxy S26' not in listed
+    assert '- Galaxy S26 (Samsung): 29.990.001đ - 35.990.000đ | 256GB, 512GB | hết hàng | vượt 1.990.001đ' in above
+    assert 'Nhỉnh hơn' not in tools.search_products.invoke({'max_price': 20_000_000})   # S26 vượt quá 10%
 
 
 def test_search_products_no_match(fake_db):
@@ -97,9 +107,30 @@ def test_product_details(fake_db):
     assert out.endswith('- 256GB | Đen | 29.990.001đ | còn hàng\n- 512GB | Đen | 35.990.000đ (giá tham khảo) | hết hàng')
 
 
+def test_product_details_says_when_specs_missing(monkeypatch, fake_db):
+    # Dòng Galaxy S/Z không có thông số: tool phải nói rõ, không thì model tự bịa chip, pin...
+    assert tools.NO_SPECS not in tools.get_product_details.invoke({'product': 'galaxy s26'})
+    fake = tools._query
+    monkeypatch.setattr(tools, '_query', lambda sql, params=(): [
+        {**p, 'attributes': {}} if 'attributes' in p else p for p in fake(sql, params)])
+    out = tools.get_product_details.invoke({'product': 'galaxy s26'})
+    assert tools.NO_SPECS in out and 'Chip' not in out
+
+
 def test_product_details_filters_storage(fake_db):
     out = tools.get_product_details.invoke({'product': 'galaxy s26', 'storage': '512 GB'})
     assert '256GB |' not in out and '512GB | Đen' in out
+
+
+def test_product_details_lists_bigger_storage_for_upsell(monkeypatch, fake_db):
+    # 512GB hết hàng thì không gợi ý; còn hàng thì ghi giá và số tiền chênh so với bản khách chọn
+    assert 'Dung lượng lớn hơn' not in tools.get_product_details.invoke({'product': 'galaxy s26', 'storage': '256gb'})
+    fake = tools._query
+    monkeypatch.setattr(tools, '_query', lambda sql, params=(): [
+        {**v, 'stock': 4} if v.get('variant_id') == 'B' else v for v in fake(sql, params)])
+    out = tools.get_product_details.invoke({'product': 'galaxy s26', 'storage': '256gb'})
+    assert out.endswith('Dung lượng lớn hơn còn hàng: 512GB từ 35.990.000đ (thêm 5.999.999đ)')
+    assert 'Dung lượng lớn hơn' not in tools.get_product_details.invoke({'product': 'galaxy s26'})  # chưa chọn bản
 
 
 def test_product_details_ambiguous_asks_back(fake_db):
@@ -110,7 +141,64 @@ def test_product_details_ambiguous_asks_back(fake_db):
 def test_find_accessories(fake_db):
     out = tools.find_accessories.invoke({'phone': 's26', 'accessory_type': 'ốp lưng'})
     assert out == 'Phụ kiện tương thích với Galaxy S26:\n- Ốp Lưng Trong Suốt Galaxy S26: 490.320đ | còn hàng'
-    assert fake_db[-1][1] == ('samsung-galaxy-s26', 'case', 'case')
+    assert fake_db[-1][1] == ('samsung-galaxy-s26', ['case'], ['case'])
+
+
+ACCESSORY_ROWS = [
+    {'name': 'Bộ sạc USB-C 20W', 'brand': 'Apple', 'kind': 'charger', 'price': 539000, 'stock': 10},
+    {'name': 'Bộ Sạc Gắn Tường 2 Cổng Belkin BoostCharge (42W)', 'brand': 'Apple', 'kind': 'charger', 'price': 100, 'stock': 10},
+    {'name': 'Củ Sạc Kèm Cáp 45W', 'brand': 'Samsung', 'kind': 'charger', 'price': 1168363, 'stock': 10},
+    {'name': 'Sạc Không Dây Nam Châm Magnet', 'brand': 'Samsung', 'kind': 'charger', 'price': 990360, 'stock': 10},
+    {'name': 'Cáp Sạc USB-C 60W (1m)', 'brand': 'Apple', 'kind': 'cable', 'price': 539000, 'stock': 10},
+    {'name': 'Cáp Bện USB-C sang USB-C của Beats', 'brand': 'Apple', 'kind': 'cable', 'price': 519000, 'stock': 10},
+    {'name': 'Ốp Lưng MagSafe', 'brand': 'Apple', 'kind': 'case', 'price': 1499000, 'stock': 10},
+]
+IPHONE_BOX = {'specs': {'Trong Hộp Sản Phẩm': 'iPhone với iOS 27 Cáp Sạc USB‑C (1 m) Tài liệu iPhone Và Môi Trường...'}}
+
+
+@pytest.fixture
+def fake_accessories(monkeypatch):
+    phones = [{**p, 'attributes': IPHONE_BOX if p['brand'] == 'Apple' else {}} for p in PHONES]
+
+    def query(sql, params=()):
+        if 'compatibility' not in sql:
+            return phones
+        kinds = params[1]
+        return [dict(r) for r in ACCESSORY_ROWS if kinds is None or r['kind'] in kinds]
+    monkeypatch.setattr(tools, '_query', query)
+
+
+def test_in_box_reads_apple_specs_and_samsung_default():
+    # iPhone: "Cáp Sạc USB-C" có chữ "sạc" nhưng là cáp, không phải củ sạc
+    assert tools._in_box({'brand': 'Apple', 'attributes': IPHONE_BOX}) == {
+        'cable': True, 'charger': False, 'text': 'có cáp sạc, không kèm củ sạc'}
+    assert tools._in_box({'brand': 'Samsung', 'attributes': {}})['charger'] is False
+    assert tools._in_box({'brand': 'Xiaomi', 'attributes': {}}) is None
+
+
+def test_find_charger_and_cable_genuine_first_with_box_contents(fake_accessories):
+    out = tools.find_accessories.invoke({'phone': 'iphone 18 pro', 'accessory_type': 'sạc, cáp'})
+    lines = out.splitlines()
+    assert lines[0] == 'Trong hộp iPhone 18 Pro: có cáp sạc, không kèm củ sạc.'
+    # Chính hãng Apple trước hàng Belkin/Beats dù đắt hơn; mỗi loại 2 món
+    assert lines[2:] == [
+        '- Bộ sạc USB-C 20W: 539.000đ | chính hãng Apple | còn hàng',
+        '- Bộ Sạc Gắn Tường 2 Cổng Belkin BoostCharge (42W): 100đ | còn hàng',
+        '- Cáp Sạc USB-C 60W (1m): 539.000đ | chính hãng Apple | còn hàng',
+        '- Cáp Bện USB-C sang USB-C của Beats: 519.000đ | còn hàng',
+        '(còn 2 phụ kiện khác, xem tiếp bằng page=2)',
+    ]
+    samsung = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'sạc'})
+    assert samsung.splitlines()[2] == '- Củ Sạc Kèm Cáp 45W: 1.168.363đ | chính hãng Samsung | còn hàng'
+    # 'củ sạc' bỏ sạc không dây; hộp Galaxy đã có cáp nên bỏ cả củ sạc kèm cáp
+    wall = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc'})
+    assert 'Nam Châm' in samsung and 'Nam Châm' not in wall
+    assert 'Kèm Cáp 45W' in samsung and 'Kèm Cáp 45W' not in wall
+    assert 'Củ Sạc' not in wall
+    # Hàng chính hãng trước, tách mục hãng khác
+    assert samsung.splitlines()[4] == 'Hãng khác (không phải chính hãng Samsung):'
+    # Tìm ốp lưng thì không cần dòng "Trong hộp"
+    assert 'Trong hộp' not in tools.find_accessories.invoke({'phone': 'iphone 18 pro', 'accessory_type': 'ốp lưng'})
 
 
 def test_find_accessories_pages_of_five(monkeypatch):

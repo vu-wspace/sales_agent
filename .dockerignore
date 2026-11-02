@@ -1,4 +1,4 @@
-# Image chỉ cần: pyproject.toml, uv.lock, README.md, certs/, src/, data_schema/policies/ (xem Dockerfile)
+# Image chỉ cần: pyproject.toml, uv.lock, README.md, certs/, src/, data_schema/policies/, data_schema/orders.sql (xem Dockerfile)
 .git
 .env
 .venv

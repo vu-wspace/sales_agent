@@ -256,3 +256,81 @@ def test_prepare_vector_db_retries_then_raises(monkeypatch):
     with pytest.raises(ConnectionError):
         api.prepare_vector_db(retries=3, delay=0)
     assert len(calls) == 3
+
+
+# ---------------------------------------------------------------- form đặt hàng
+
+CART = [{'variant_id': 'S26-256-DEN', 'name': 'Galaxy S26', 'storage': '256GB', 'color': 'Đen', 'price': 1, 'quantity': 1}]
+ORDER_FORM = {'thread_id': 't1', 'name': ' Nguyễn Văn A ', 'phone': '0912 345.678', 'address': '12 Lê Lợi, Quy Nhơn'}
+
+
+class CartAgent(FakeAgent):
+    """Agent có giỏ hàng trong state (như graph.py) và ghi lại update_state."""
+
+    def __init__(self, cart):
+        super().__init__()
+        self.cart = cart
+        self.updates = []
+
+    def get_state(self, config):
+        return SimpleNamespace(values={'messages': [], 'cart': self.cart, 'order_form': True})
+
+    def invoke(self, input, config):
+        return {**super().invoke(input, config), 'cart': self.cart, 'order_form': True}
+
+    def update_state(self, config, values, as_node=None):
+        self.updates.append((config['configurable']['thread_id'], values, as_node))
+
+
+@pytest.fixture
+def fake_orders(monkeypatch):
+    saved = []
+    def create_order(cart, *args, thread_id=None):
+        if not cart:
+            raise api.orders.OrderError('Giỏ hàng đang trống')
+        saved.append((cart, args, thread_id))
+        return 'DH0000000C'
+    monkeypatch.setattr(api.orders, 'create_order', create_order)
+    monkeypatch.setattr(api.orders, 'get_order', lambda order_id: {'order_id': order_id})
+    monkeypatch.setattr(api.orders, 'summary', lambda order: f"Đơn #{order['order_id']}")
+    monkeypatch.setattr(api.orders, 'thank_you', lambda name: f'Cảm ơn {name}!')
+    return saved
+
+
+def test_chat_response_has_order_form_flag():
+    api.app.state.agent = CartAgent(CART)
+    data = TestClient(api.app).post('/chat', json={'message': 'chốt đơn', 'thread_id': 't1'}).json()
+    assert data['order_form'] is True and data['cart'] == CART
+
+
+def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
+    agent = api.app.state.agent = CartAgent(CART)
+    r = TestClient(api.app).post('/order', json={**ORDER_FORM, 'cart': [{'price': 0}]})  # giỏ client gửi bị bỏ qua
+    assert r.status_code == 200
+    assert r.json() == {'thread_id': 't1', 'order_id': 'DH0000000C', 'answer': 'Đơn #DH0000000C\n\nCảm ơn Nguyễn Văn A!'}
+    assert fake_orders == [(CART, ('Nguyễn Văn A', '0912345678', '12 Lê Lợi, Quy Nhơn', 'delivery', 'cod'), 't1')]
+    thread, values, node = agent.updates[0]
+    assert thread == 't1' and node == 'track_reply'
+    assert values['cart'] == [] and values['orders'] == ['DH0000000C'] and values['messages'][1].text == r.json()['answer']
+
+
+def test_order_empty_cart_returns_409(fake_orders):
+    api.app.state.agent = CartAgent([])
+    r = TestClient(api.app).post('/order', json=ORDER_FORM)
+    assert r.status_code == 409 and r.json()['detail'] == 'Giỏ hàng đang trống'
+
+
+@pytest.mark.parametrize('change', [{'phone': '12345'}, {'name': 'A'}, {'address': 'ngắn'}, {'payment': 'installment'}])
+def test_order_validation(fake_orders, change):
+    api.app.state.agent = CartAgent(CART)
+    assert TestClient(api.app).post('/order', json={**ORDER_FORM, **change}).status_code == 422
+    assert fake_orders == []
+
+
+def test_order_database_error_returns_503(monkeypatch):
+    def boom(*a, **k):
+        raise api.psycopg.OperationalError('down')
+    monkeypatch.setattr(api.orders, 'create_order', boom)
+    api.app.state.agent = CartAgent(CART)
+    r = TestClient(api.app).post('/order', json=ORDER_FORM)
+    assert r.status_code == 503 and 'Chưa lưu được đơn hàng' in r.json()['detail']

@@ -29,8 +29,8 @@
   .me { align-self: flex-end; background: var(--me); border-color: transparent; }
   .err { color: var(--err); }
   .msg a { color: var(--accent); overflow-wrap: anywhere; }
-  form { display: flex; gap: 8px; }
-  textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border-radius: 8px;
+  #form { display: flex; gap: 8px; }
+  #input { flex: 1; resize: none; font: inherit; padding: 10px 12px; border-radius: 8px;
              border: 1px solid var(--line); background: var(--card); color: var(--text); }
   #send { background: var(--accent); color: #fff; border: 0; padding: 0 18px; }
   #send:disabled { opacity: .6; cursor: wait; }
@@ -43,6 +43,30 @@
   @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
   .draft:not(:empty) { margin-top: 6px; }
   @media (prefers-reduced-motion: reduce) { .dots span { animation: none; opacity: .6; } }
+  /* Form đặt hàng hiện trong khung chat khi agent gọi show_order_form (theo order_form.html) */
+  .order { max-width: 85%; width: 420px; padding: 12px 14px; border-radius: 12px; background: var(--card);
+           border: 1px solid var(--line); display: flex; flex-direction: column; font-size: 14px; }
+  .order .item, .order .total { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .order .total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; font-weight: 600; }
+  .order .lbl { display: block; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+  .order input[type=text], .order input[type=tel], .order textarea {
+    width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; resize: none; }
+  .order input:focus, .order textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .order textarea:disabled { opacity: .6; cursor: not-allowed; }
+  .order .ferr { margin: 4px 0 0; font-size: 13px; color: var(--err); }
+  .order .ferr:empty { display: none; }
+  .order .opts { display: flex; gap: 8px; }
+  .order .opt { flex: 1; padding: 8px; text-align: center; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; }
+  .order .opt.on { border: 2px solid var(--accent); color: var(--accent); background: var(--me); }
+  .order .dis { color: var(--muted); cursor: not-allowed; }
+  .order .rad { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .order .tag { margin-left: auto; padding: 1px 8px; font-size: 12px; border-radius: 8px; color: var(--muted);
+                background: var(--bg); }
+  .order .row { display: flex; align-items: center; }
+  .order .row .lbl { margin-bottom: 4px; }
+  .order button { margin-top: 14px; height: 40px; border: 0; background: var(--accent); color: #fff; }
+  .order button:disabled { opacity: .6; cursor: wait; }
 </style>
 </head>
 <body>
@@ -52,6 +76,37 @@
     <button id="reset" type="button">Cuộc trò chuyện mới</button>
   </header>
   <div id="log" aria-live="polite"></div>
+  <template id="order-tpl">
+    <form class="order" novalidate>
+      <div class="items"></div>
+      <div class="total"><span>Tổng cộng</span><span class="sum"></span></div>
+      <label class="lbl">Họ tên người nhận
+        <input type="text" name="name" maxlength="100" placeholder="Nguyễn Văn A" autocomplete="name"></label>
+      <p class="ferr" data-for="name"></p>
+      <label class="lbl">Số điện thoại
+        <input type="tel" name="phone" maxlength="20" placeholder="0123456789" autocomplete="tel"></label>
+      <p class="ferr" data-for="phone"></p>
+      <span class="lbl">Cách nhận hàng</span>
+      <div class="opts">
+        <div class="opt on">Giao tận nơi</div>
+        <div class="opt dis" aria-disabled="true" title="Chưa hỗ trợ">Nhận tại cửa hàng</div>
+      </div>
+      <label class="lbl">Địa chỉ giao hàng
+        <input type="text" name="address" maxlength="300" placeholder="123 Lê Hồng Phong, Quy Nhơn, Gia Lai"
+               autocomplete="street-address"></label>
+      <p class="ferr" data-for="address"></p>
+      <span class="lbl">Thanh toán</span>
+      <label class="rad"><input type="radio" name="payment" value="cod" checked> Thanh toán khi nhận hàng</label>
+      <label class="rad dis"><input type="radio" name="payment" value="bank_transfer" disabled> Chuyển khoản
+        <span class="tag">Chưa hỗ trợ</span></label>
+      <label class="rad dis"><input type="radio" name="payment" value="installment" disabled> Trả góp 0%
+        <span class="tag">Chưa hỗ trợ</span></label>
+      <div class="row"><span class="lbl">Ghi chú</span><span class="tag">Chưa hỗ trợ</span></div>
+      <textarea name="note" rows="2" disabled placeholder="Giao giờ hành chính, gọi trước khi giao..."></textarea>
+      <p class="ferr" data-for="submit"></p>
+      <button type="submit">Xác nhận đặt hàng</button>
+    </form>
+  </template>
   <form id="form">
     <textarea id="input" rows="2" maxlength="1000" placeholder="Anh/chị đang tìm máy nào ạ?" required></textarea>
     <button id="send">Gửi</button>
@@ -151,6 +206,69 @@
     }
   }
 
+  const money = v => v.toLocaleString('vi-VN') + 'đ';
+
+  // Form đặt hàng trong khung chat: giỏ hàng lấy từ state của agent; gửi form thì /order tạo đơn từ giỏ
+  // của thread trên server (không dùng giỏ trình duyệt gửi lên) và trả tóm tắt đơn
+  function addOrderForm(cart) {
+    log.querySelectorAll('form.order').forEach(f => f.remove());  // giỏ đã đổi: form cũ không còn đúng
+    const f = document.getElementById('order-tpl').content.firstElementChild.cloneNode(true);
+    for (const i of cart) {
+      const row = document.createElement('div');
+      row.className = 'item';
+      const name = document.createElement('span');
+      name.textContent = `${i.quantity} x ${[i.name, i.storage, i.color].filter(Boolean).join(' · ')}`;
+      const price = document.createElement('b');
+      price.textContent = money(i.price * i.quantity);
+      row.append(name, price);
+      f.querySelector('.items').appendChild(row);
+    }
+    f.querySelector('.sum').textContent = money(cart.reduce((s, i) => s + i.price * i.quantity, 0));
+    const err = key => f.querySelector(`.ferr[data-for="${key}"]`);
+    f.querySelectorAll('input').forEach(el => el.addEventListener('input', () => {
+      if (err(el.name)) err(el.name).textContent = '';
+    }));
+
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = f.elements.name.value.trim();
+      const phone = f.elements.phone.value.replace(/[\s.\-]/g, '');
+      const address = f.elements.address.value.trim();
+      let ok = true;
+      if (name.length < 2) { err('name').textContent = 'Nhập họ tên người nhận'; ok = false; }
+      if (!/^(0|\+84)\d{9}$/.test(phone)) { err('phone').textContent = 'Số điện thoại chưa đúng định dạng'; ok = false; }
+      if (address.length < 10) { err('address').textContent = 'Nhập địa chỉ đầy đủ hơn'; ok = false; }
+      if (!ok) return;
+      const button = f.querySelector('button');
+      button.disabled = true;
+      button.textContent = 'Đang gửi…';
+      err('submit').textContent = '';
+      try {
+        const r = await fetch('/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thread_id: threadId, name, phone, address,
+                                 fulfillment_type: 'delivery', payment: 'cod' }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error(typeof data.detail === 'string' ? data.detail
+                          : 'Thông tin chưa hợp lệ, anh/chị kiểm tra lại giúp em.');
+        }
+        f.remove();
+        add('Đã gửi thông tin đặt hàng', 'me');
+        add(data.answer);
+      } catch (ex) {
+        err('submit').textContent = ex.message || 'Không kết nối được máy chủ.';
+        button.disabled = false;
+        button.textContent = 'Xác nhận đặt hàng';
+      }
+    });
+    log.appendChild(f);
+    log.scrollTop = log.scrollHeight;
+    f.elements.name.focus();
+  }
+
   function greet() {
     log.replaceChildren();
     threadId = null;
@@ -188,6 +306,7 @@
         } else if (ev.type === 'done') {
           threadId = ev.thread_id;
           fill(pending.div, ev.answer, '');
+          if (ev.order_form && ev.cart.length) addOrderForm(ev.cart);
           finished = true;
         } else if (ev.type === 'error') throw new Error(ev.detail || 'Có lỗi xảy ra.');
       }

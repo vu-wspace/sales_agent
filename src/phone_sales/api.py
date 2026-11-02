@@ -5,17 +5,20 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 import groq
+import psycopg
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from langchain_core.exceptions import ModelError
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
 from openrouter import errors as openrouter_errors
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from phone_sales import orders
 from phone_sales.agent import build_agent
 from phone_sales.config import AGENT_IMPL, AUTO_INGEST
 from phone_sales.graph import build_graph
@@ -39,6 +42,7 @@ TOOL_STATUS = {
     'web_search': 'Đang tìm thông tin trên web…',
     'add_to_cart': 'Đang cập nhật giỏ hàng…',
     'remove_from_cart': 'Đang cập nhật giỏ hàng…',
+    'show_order_form': 'Đang mở form đặt hàng…',
 }
 THINKING_STATUS = 'Em đang cân nhắc…'
 
@@ -54,6 +58,32 @@ class ChatResponse(BaseModel):
     stage: str | None = None
     cart: list[dict] = []
     handoff: bool = False
+    order_form: bool = False  # hiện form đặt hàng dưới câu trả lời (agent gọi show_order_form)
+
+class OrderRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=2, max_length=100)
+    phone: str = Field(pattern=r'^(0|\+84)\d{9}$')
+    address: str = Field(min_length=10, max_length=300)
+    # Form hiện chỉ hỗ trợ giao tận nơi, thanh toán khi nhận hàng
+    fulfillment_type: Literal['delivery'] = 'delivery'
+    payment: Literal['cod'] = 'cod'
+
+    @field_validator('name', 'address', mode='before')
+    @classmethod
+    def strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator('phone', mode='before')
+    @classmethod
+    def normalize_phone(cls, v):
+        # "0912 345.678" -> "0912345678", giống kiểm tra trên form
+        return ''.join(c for c in v if c not in ' .-') if isinstance(v, str) else v
+
+class OrderResponse(BaseModel):
+    thread_id: str
+    order_id: str
+    answer: str
 
 def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
     # Qdrant có thể khởi động chậm hơn API khi chạy bằng docker compose -> thử lại vài lần
@@ -77,6 +107,10 @@ def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
 async def lifespan(app: FastAPI):
     n = await asyncio.to_thread(prepare_vector_db)
     log.info('Qdrant sẵn sàng: %d tài liệu', n)
+    try:
+        await asyncio.to_thread(orders.ensure_tables)  # bảng customers, orders cho form đặt hàng
+    except psycopg.Error as e:
+        log.error('Chưa tạo được bảng đơn hàng (%s): POST /order sẽ lỗi tới khi Postgres sẵn sàng', type(e).__name__)
     # InMemorySaver: lịch sử hội thoại nằm trong RAM của process -> mất khi restart, chỉ chạy 1 worker
     # graph: có trạng thái hội thoại + giỏ hàng (graph.py); agent: create_agent không có state riêng (agent.py)
     build = build_graph if AGENT_IMPL == 'graph' else build_agent
@@ -117,7 +151,8 @@ def _response(thread_id: str, values: dict, n_before: int) -> ChatResponse:
     new_messages = values['messages'][n_before:]
     tools = [tc['name'] for m in new_messages for tc in (getattr(m, 'tool_calls', None) or [])]
     return ChatResponse(thread_id=thread_id, answer=values['messages'][-1].text, tools=tools,
-                        stage=values.get('stage'), cart=values.get('cart') or [], handoff=bool(values.get('handoff')))
+                        stage=values.get('stage'), cart=values.get('cart') or [], handoff=bool(values.get('handoff')),
+                        order_form=bool(values.get('order_form')))
 
 @app.post('/chat', response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
@@ -180,3 +215,25 @@ def chat_stream(req: ChatRequest, request: Request):
     return StreamingResponse(_stream_events(agent, req.message, thread_id, config, n_before),
                              media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+@app.post('/order', response_model=OrderResponse)
+def order(req: OrderRequest, request: Request):
+    """Khách gửi form đặt hàng: tạo đơn từ giỏ hàng của thread (không tin giỏ do trình duyệt gửi lên),
+    trả tóm tắt đơn lấy từ database + 1-2 câu cảm ơn do LLM viết, và ghi vào lịch sử hội thoại."""
+    agent = request.app.state.agent
+    config = {'configurable': {'thread_id': req.thread_id}}
+    cart = agent.get_state(config).values.get('cart') or []
+    try:
+        order_id = orders.create_order(cart, req.name, req.phone, req.address, req.fulfillment_type, req.payment,
+                                       thread_id=req.thread_id)
+        text = orders.summary(orders.get_order(order_id))
+    except orders.OrderError as e:
+        raise HTTPException(409, str(e))
+    except psycopg.Error as e:
+        log.error('Lỗi khi lưu đơn hàng', exc_info=e)
+        raise HTTPException(503, 'Chưa lưu được đơn hàng, anh/chị vui lòng thử lại sau ít phút.')
+    answer = f'{text}\n\n{orders.thank_you(req.name)}'
+    # Lượt sau agent biết đơn đã đặt; giỏ hàng làm trống để khách mua tiếp không bị cộng dồn
+    agent.update_state(config, {'messages': [HumanMessage('Đã gửi thông tin đặt hàng'), AIMessage(answer)],
+                                'cart': [], 'order_form': False, 'orders': [order_id]}, as_node='track_reply')
+    return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer)

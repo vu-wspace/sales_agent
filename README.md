@@ -8,6 +8,8 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 - Tìm phụ kiện tương thích (ốp lưng, cường lực, sạc, cáp, S Pen…).
 - Trả lời chính sách đổi trả, giao hàng, trả góp, bảo hành bằng RAG.
 - Nhớ trạng thái hội thoại bán hàng (nhu cầu, máy đã giới thiệu, lo ngại, cảm xúc) và quản lý giỏ hàng.
+- Bán thêm: gợi ý dung lượng lớn hơn khi nhu cầu cần (kèm số tiền chênh), máy nhỉnh hơn ngân sách; khi khách chốt mua thì mời sạc chính hãng nếu máy không kèm sạc, rồi ốp lưng, cường lực.
+- Đặt hàng ngay trong khung chat: khách xác nhận thì hiện form (tên, số điện thoại, địa chỉ), đơn lưu vào Postgres, tóm tắt đơn lấy từ database.
 - Chuyển nhân viên khi khách khiếu nại, đơn có vấn đề hoặc khách bực bội.
 - Stream trạng thái và câu trả lời theo thời gian thực.
 - Tự chuyển sang LLM dự phòng khi model chính lỗi hoặc hết quota.
@@ -107,6 +109,7 @@ Trong Docker, compose tự đặt `DATABASE_URL` và `QDRANT_URL` trỏ tới c�
 | `GET` | `/` | Trang chat |
 | `POST` | `/chat` | Gửi tin nhắn, nhận câu trả lời đầy đủ |
 | `POST` | `/chat/stream` | Như `/chat`, trả Server-Sent Events |
+| `POST` | `/order` | Gửi form đặt hàng, tạo đơn từ giỏ hàng của hội thoại |
 | `GET` | `/health` | Trạng thái Qdrant và số đoạn chính sách |
 
 ### `POST /chat`
@@ -120,11 +123,11 @@ Trong Docker, compose tự đặt `DATABASE_URL` và `QDRANT_URL` trỏ tới c�
  "tools": ["add_to_cart"], "stage": "closing",
  "cart": [{"variant_id": "SM-S942BZKCXXV", "name": "Galaxy S26", "storage": "256GB",
            "color": "Đen Classic", "price": 29990001, "quantity": 1}],
- "handoff": false}
+ "handoff": false, "order_form": false}
 ```
 
 - `message` dài 1–1000 ký tự, `thread_id` tối đa 100 ký tự.
-- `stage`, `cart`, `handoff` chỉ có giá trị khi `AGENT_IMPL=graph`.
+- `stage`, `cart`, `handoff`, `order_form` chỉ có giá trị khi `AGENT_IMPL=graph`. `order_form: true` là lượt agent gọi `show_order_form`: giao diện hiện form đặt hàng dưới câu trả lời.
 - Mã lỗi: `422` input sai, `429` mọi LLM đều vượt giới hạn, `502` mọi LLM đều lỗi.
 
 ### `POST /chat/stream`
@@ -141,6 +144,25 @@ Request giống `/chat`. Mỗi sự kiện là một dòng `data: {json}` với 
 | `error` | `status` (429/502/500) và `detail` |
 
 Kết quả tool và nội dung suy nghĩ của model không bao giờ được gửi cho client.
+
+### `POST /order`
+
+```jsonc
+// request: thread_id của hội thoại có giỏ hàng; giỏ hàng lấy từ state trên server, không nhận từ trình duyệt
+{"thread_id": "5f0c…", "name": "Nguyễn Văn A", "phone": "0912 345 678",
+ "address": "123 Lê Hồng Phong, Quy Nhơn, Gia Lai", "fulfillment_type": "delivery", "payment": "cod"}
+
+// response
+{"thread_id": "5f0c…", "order_id": "DH3F9A1C2B",
+ "answer": "Đơn hàng **#DH3F9A1C2B** đã được tạo.
+Khách hàng: Nguyễn Văn A
+…
+
+Em cảm ơn anh Nguyễn Văn A…"}
+```
+
+- Kiểm tra giống form: tên ≥ 2 ký tự, số điện thoại `0`/`+84` + 9 số (bỏ dấu cách, chấm, gạch), địa chỉ ≥ 10 ký tự. Hiện chỉ nhận `delivery` và `cod`.
+- Mã lỗi: `422` thông tin sai, `409` giỏ trống hoặc hết hàng, `503` không ghi được database.
 
 ## Kiến trúc
 
@@ -169,6 +191,17 @@ flowchart LR
 3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng.
 4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời.
 
+### Đặt hàng
+
+1. Lượt khách chọn máy ("chốt S26 256GB đen"): agent `add_to_cart`, mời bán kèm, hỏi khách có xác nhận đặt hàng không. `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ.
+2. Khách xác nhận ("xác nhận đặt hàng", "chốt đơn"): agent gọi `show_order_form`, giao diện hiện form (`index.html`, theo thiết kế `static/order_form.html`) với giỏ hàng và tổng tiền.
+3. Khách gửi form → `POST /order` (`orders.py`), trong 1 transaction:
+   - trừ tồn kho, thiếu hàng thì hủy cả đơn;
+   - khách cũ nhận theo số điện thoại (cập nhật tên, địa chỉ), khách mới thì tạo `customers` (mã `KH…`);
+   - ghi `orders` (mã `DH…`) và `order_items`.
+4. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định.
+5. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
+
 `agent.py` dựng bằng `create_agent`, dùng chung LLM, tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng.
 
 ### Trạng thái hội thoại
@@ -184,8 +217,36 @@ flowchart LR
 | `objections` | Lo ngại của khách (giá, pin, nhiệt độ, camera…) |
 | `sentiment_history` | Cảm xúc từng lượt |
 | `handoff` | Cần chuyển nhân viên |
+| `cross_sell` | Các bước bán kèm đã mời: `charger` (sạc, cáp), `accessories` (ốp lưng, cường lực) |
+| `declined` | Tin nhắn mới nhất của khách là từ chối ("không cần", "khỏi"…) |
+| `order_form` | Lượt này hiện form đặt hàng |
+| `orders` | Mã các đơn đã đặt trong hội thoại |
 
-Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `closing`: xác nhận giỏ và tổng tiền, hỏi cách nhận hàng và thanh toán.
+Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `closing`: xác nhận giỏ và tổng tiền, hỏi khách có chốt đơn không, khách xác nhận thì mở form đặt hàng; không tự nêu phí giao hàng hay kỳ hạn trả góp.
+
+### Bán thêm (up-sell, cross-sell)
+
+Tool trả sẵn dữ liệu để model gợi ý bằng số liệu thật, không tự tính hay đoán:
+
+| Loại | Dữ liệu | Khi nào model gợi ý |
+|---|---|---|
+| Dung lượng lớn hơn | `get_product_details` có lọc dung lượng thì kèm dòng `Dung lượng lớn hơn còn hàng: 512GB từ 45.499.000đ (thêm 6.500.000đ)…` | Khách cần nhiều bộ nhớ (quay video, chơi game…) mà chọn bản thấp |
+| Máy nhỉnh hơn ngân sách | `search_products` kèm tối đa 2 máy vượt ngân sách không quá 10%, ghi số tiền vượt | Máy đó hợp nhu cầu hơn rõ rệt; chỉ nhắc 1 máy |
+| Phụ kiện | `find_accessories` | Sau khi khách cho điện thoại vào giỏ, theo các bước bên dưới |
+
+Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
+
+**Bán kèm phụ kiện** (`cross_sell_hint` trong `conversation.py`, mỗi lượt chat tối đa 1 bước, không mời khi khách đang bực):
+
+| Bước | Khi nào | Model làm gì |
+|---|---|---|
+| 1. Sạc, cáp | Máy không kèm củ sạc trong hộp và giỏ chưa có củ sạc | Nói đúng hộp máy có gì. Hộp đã có cáp: chỉ mời 2–3 củ sạc chính hãng không kèm cáp, liệt kê gạch đầu dòng từ rẻ tới đắt. Hộp không có cáp: mời củ sạc và cáp, ưu tiên chính hãng |
+| 2. Ốp lưng, cường lực | Sau bước 1 (máy đã kèm củ sạc thì bắt đầu từ đây) và giỏ chưa có ốp/cường lực | Mời 2–3 món; khách vừa từ chối sạc thì chỉ mời nhẹ 1 câu |
+| 3. Dừng | Khách từ chối tiếp | Không mời thêm, hỏi khách có chốt đơn với giỏ hiện tại không |
+
+- **Hộp máy có gì:** iPhone đọc từ mục "Trong Hộp Sản Phẩm" (cáp USB-C, không có củ sạc). Web Samsung không có mục này, nên `IN_BOX_BY_BRAND` trong `tools.py` **giả định** Galaxy chỉ kèm cáp, không kèm củ sạc; cần kiểm tra lại với từng model. Máy không rõ thông tin thì bỏ qua bước 1.
+- **Chính hãng:** phụ kiện cùng hãng với máy; hàng Beats, mophie, Belkin, Anker do cửa hàng Apple bán không tính là chính hãng. `find_accessories` xếp còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây hoặc sạc ô tô, rồi rẻ trước, và nhận nhiều loại một lúc (`'sạc, cáp'`: mỗi loại 2 món). `'củ sạc'` chỉ trả củ sạc cắm tường, bỏ sạc không dây, MagSafe, sạc ô tô; nếu hộp máy đã có cáp thì bỏ cả bộ củ sạc kèm cáp (khách không mua thêm cáp lần hai). Bước 1 dùng loại này khi hộp đã có cáp, nên Galaxy hiện chỉ có 1 củ sạc chính hãng để mời (60W). Danh sách 1 loại tách riêng mục "Hãng khác" sau hàng chính hãng; bước bán kèm chỉ mời hàng chính hãng, có 1 món thì mời 1.
+- **Nhận diện từ chối** (`DECLINE` trong `conversation.py`) dùng từ khóa: "không cần", "khỏi", "không lấy", "chưa cần", "để sau", "thôi không", "vậy thôi"… Cách nói lạ ("để em tính", "cái đó em có rồi", viết không dấu "ko can", trả lời im lặng sang chủ đề khác) có thể bị bỏ sót, khi đó agent có thể mời tiếp bước sau thay vì mời nhẹ hoặc dừng. Chữ "thôi" đứng một mình không tính là từ chối vì hay dùng khi chốt ("lấy luôn thôi").
 
 ### Tools
 
@@ -195,11 +256,13 @@ Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `c
 | `get_product_details` | Postgres | Giá, tồn kho từng phiên bản, thông số của 1 máy |
 | `find_accessories` | Postgres | Phụ kiện tương thích, 5 món mỗi trang |
 | `add_to_cart`, `remove_from_cart` | Postgres + state | Khách chốt mua hoặc đổi ý (chỉ `graph.py`) |
+| `show_order_form` | State | Khách xác nhận đặt hàng: hiện form đặt hàng (chỉ `graph.py`) |
 | `search_policy` | Qdrant | Đổi trả, giao hàng, trả góp, bảo hành, lỗi máy |
 | `web_search` | Tavily | Đánh giá, tin tức ngoài dữ liệu nội bộ |
 
 - Tên máy được chuẩn hóa (bỏ dấu, viết tắt như `ip`, `promax`, `17pro`). Khi nhiều sản phẩm khớp, tool trả danh sách để model hỏi lại khách.
 - Tồn kho chỉ trả `còn hàng` / `sắp hết` / `hết hàng`, không trả số lượng.
+- Thông số chỉ có trong `get_product_details`. `search_products` và máy chưa có thông số (dòng Galaxy S/Z) kèm dòng nhắc model không tự nêu chip, camera, pin, vì model hay bịa theo trí nhớ.
 - Mọi tool tự bắt lỗi hệ thống và báo cho model, để lượt chat không bị hỏng.
 
 ### RAG chính sách
@@ -232,6 +295,11 @@ Database `phone` (schema `data_schema/phone.sql`, dữ liệu `data_schema/outpu
 | `products` | Điện thoại và phụ kiện: tên, hãng, mô tả, thông số (JSON) |
 | `variants` | Phiên bản theo màu và dung lượng: SKU, giá (VND), tồn kho |
 | `compatibility` | Cặp phụ kiện – điện thoại tương thích |
+| `customers` | Khách đặt hàng: mã `KH…`, tên, số điện thoại, địa chỉ mặc định |
+| `orders` | Đơn hàng: mã `DH…`, khách, người nhận, địa chỉ, cách nhận, thanh toán, tổng tiền, trạng thái (`pending`) |
+| `order_items` | Sản phẩm trong đơn: phiên bản, số lượng, đơn giá lúc đặt |
+
+Schema đơn hàng ở `data_schema/orders.sql` (`CREATE TABLE IF NOT EXISTS`), web app chạy file này mỗi lần khởi động. `order_items.variant_id` có khóa ngoại tới `variants`: khi đã có đơn, `db-seed` (`TRUNCATE variants`) sẽ báo lỗi.
 
 Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_schema/scrape_phone.py`. Lưu ý:
 
@@ -243,6 +311,7 @@ Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_sche
 | Cập nhật | Cách làm |
 |---|---|
 | Sản phẩm | `cd data_schema && python scrape_phone.py --refresh`, rồi `docker compose run --rm db-seed` |
+| Phân loại phụ kiện (sau khi sửa `accessory_type`) | `cd data_schema && python scrape_phone.py --from-json` (không tải lại trang, giữ nguyên giá), rồi `docker compose run --rm db-seed` |
 | Chính sách | Sửa file trong `data_schema/policies/`, rồi `docker compose up -d --build api` |
 
 ## Cấu trúc thư mục
@@ -250,7 +319,7 @@ Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_sche
 ```
 sales_agent/
 ├── data_schema/
-│   ├── phone.sql, scrape_phone.py
+│   ├── phone.sql, orders.sql, scrape_phone.py
 │   ├── output/                 # Dữ liệu đã cào và file seed
 │   └── policies/               # Chính sách (.md), nạp vào Qdrant
 ├── src/phone_sales/
@@ -264,8 +333,9 @@ sales_agent/
 │   ├── history.py              # Cắt gọn lịch sử trước khi gửi LLM
 │   ├── data_prep.py            # Tách chính sách thành đoạn
 │   ├── vector_db.py            # Embedding và Qdrant
+│   ├── orders.py               # Lưu đơn đặt hàng, tóm tắt đơn
 │   ├── api.py                  # FastAPI
-│   └── static/index.html       # Giao diện chat
+│   └── static/                 # Giao diện chat (index.html), mẫu form đặt hàng (order_form.html)
 ├── tests/                      # Unit test
 ├── evals/                      # Bộ câu hỏi và script đánh giá
 ├── certs/                      # CA nội bộ cho mạng có SSL inspection (không commit)
@@ -282,11 +352,11 @@ sales_agent/
 uv run pytest
 ```
 
-118 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+143 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
-Eval gọi LLM, Postgres, Qdrant, Tavily thật trên 37 câu hỏi cố định (`evals/dataset.jsonl`) và chấm điểm bằng Gemini. Chuỗi dự phòng bị tắt để điểm phản ánh đúng model chính.
+Eval gọi LLM, Postgres, Qdrant, Tavily thật trên 42 câu hỏi cố định (`evals/dataset.jsonl`) và chấm điểm bằng Gemini. Câu `cross-01` (nhóm `cross_sell`) cần giỏ hàng nên chỉ chạy với `--target graph`. Chuỗi dự phòng bị tắt để điểm phản ánh đúng model chính.
 
 ```bash
 docker compose up -d postgres qdrant
@@ -295,7 +365,7 @@ uv run python evals/run_eval.py --target graph              # chấm graph.py (m
 uv run python evals/run_eval.py --only product,acc-01       # lọc theo nhóm hoặc id
 ```
 
-Cả bộ cần khoảng 90 request, vượt quota ngày của OpenRouter gói free, nên cần chia làm nhiều lần.
+Cả bộ cần khoảng 100 request, vượt quota ngày của OpenRouter gói free, nên cần chia làm nhiều lần.
 
 Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu lấy lần chạy mới nhất). Truy xuất chính sách: hit@1 89%, hit@3 100%, MRR 0,95.
 
@@ -310,13 +380,15 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 | `out_of_scope` | 2 | 2/2 | – | 2/2 | 2/2 | 5,00 |
 | **Tổng** | **37** | **31/33** | **24/24** | **6/6** | **37/37** | **4,81** |
 
+5 câu thêm ngày 02/11/2026 (`spec-01`, `spec-02`, `upsell-01`, `upsell-02`, `cross-01`) chưa có trong bảng: chạy khi OpenRouter còn quota bằng `uv run python evals/run_eval.py --target graph --only spec-01,spec-02,upsell,cross_sell`.
+
 Độ trễ trung bình 15,8 giây mỗi câu do model chính là model suy luận. Kết quả chi tiết lưu ở `evals/results/` (không commit).
 
 ## Hạn chế
 
 - State hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker.
-- Giỏ hàng chưa thành đơn hàng thật.
-- Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt lạ).
+- Form đặt hàng chỉ hỗ trợ giao tận nơi và thanh toán khi nhận hàng; chưa có trang quản lý đơn, đơn chỉ nằm trong database.
+- Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt lạ), kể cả câu từ chối phụ kiện bán kèm.
 - API chưa có xác thực và giới hạn request.
 - Bộ eval nhỏ, chưa có câu hỏi nhiều lượt; judge là LLM nên có thể chấm sai.
 
