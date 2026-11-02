@@ -161,6 +161,11 @@ def search_products(query: str = '', brand: str = '', max_price: int = 0, catego
         more += ('\nNhỉnh hơn ngân sách (chỉ nhắc tối đa 1 máy, khi hợp nhu cầu hơn rõ rệt):\n'
                  + '\n'.join(f"{line(r)} | vượt {_price(r['min_price'] - max_price)}"
                              for r in above[:UPSELL_ABOVE_BUDGET]))
+    # "muốn mua Galaxy S26": model hay coi là cả dòng máy, chỉ đưa khoảng giá thay vì các phiên bản của đúng máy đó
+    exact = [r for r in rows if _tokens(r['name']) == _tokens(query)] if query.strip() else []
+    if len(exact) == 1:
+        more += (f"\nKhách nêu đúng tên máy {exact[0]['name']}: nếu khách muốn mua/xem máy này thì gọi "
+                 f"get_product_details('{exact[0]['name']}') và liệt kê các phiên bản, không chỉ đưa khoảng giá.")
     # Không có dòng này thì model tự thêm thông số theo hiểu biết riêng (vd "S26 FE pin 4.500mAh", dữ liệu là 4900)
     return ('Sản phẩm đang bán (giá đã gồm VAT):\n' + '\n'.join(lines) + more
             + f'\n{NO_SPECS_IN_LIST}' * (category == 'phone'))

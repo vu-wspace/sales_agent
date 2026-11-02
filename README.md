@@ -269,6 +269,7 @@ Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 - Tên máy được chuẩn hóa (bỏ dấu, viết tắt như `ip`, `promax`, `17pro`). Khi nhiều sản phẩm khớp, tool trả danh sách để model hỏi lại khách.
 - Tồn kho chỉ trả `còn hàng` / `sắp hết` / `hết hàng`, không trả số lượng.
 - Thông số chỉ có trong `get_product_details`. `search_products` và máy chưa có thông số (dòng Galaxy S/Z) kèm dòng nhắc model không tự nêu chip, camera, pin, vì model hay bịa theo trí nhớ.
+- Khách nêu tên 1 máy cụ thể ("muốn mua iPhone 17", "cho xem Galaxy S26") thì model gọi `get_product_details` và liệt kê từng dung lượng kèm giá, màu, tình trạng hàng rồi hỏi khách chọn phiên bản. `search_products` khớp đúng tên 1 máy cũng kèm dòng nhắc gọi `get_product_details`, vì model hay coi "Galaxy S26" là cả dòng máy và chỉ đưa khoảng giá.
 - Mọi tool tự bắt lỗi hệ thống và báo cho model, để lượt chat không bị hỏng.
 
 ### RAG chính sách
@@ -358,7 +359,7 @@ sales_agent/
 uv run pytest
 ```
 
-143 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+144 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 

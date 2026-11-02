@@ -97,6 +97,12 @@ def test_search_products_lists_slightly_over_budget(fake_db):
     assert 'Nhỉnh hơn' not in tools.search_products.invoke({'max_price': 20_000_000})   # S26 vượt quá 10%
 
 
+def test_search_products_exact_name_points_to_variants(fake_db):
+    # "muốn mua Galaxy S26": đúng tên 1 máy -> nhắc model gọi get_product_details để liệt kê phiên bản
+    assert "get_product_details('Galaxy S26')" in tools.search_products.invoke({'query': 'galaxy s26'})
+    assert 'get_product_details' not in tools.search_products.invoke({'query': 'galaxy'})
+
+
 def test_search_products_no_match(fake_db):
     assert tools.search_products.invoke({'query': 'xiaomi'}).startswith('Không có sản phẩm khớp')
 

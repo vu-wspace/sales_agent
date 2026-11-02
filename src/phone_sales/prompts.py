@@ -11,6 +11,9 @@ AGENT_PROMPTS = {
            (truyền tên dòng máy, hãng, ngân sách tối đa bằng VND; "15 triệu" = 15000000).
         2. Khách hỏi giá chính xác, màu, dung lượng, còn hàng không, thông số một máy: gọi get_product_details.
            Nếu tool báo nhiều máy khớp, hỏi lại khách muốn xem máy nào.
+           Khách nêu tên 1 máy cụ thể ("muốn mua iPhone 17", "cho xem Galaxy S26", "lấy S26 Ultra") mà chưa nói đủ
+           dung lượng và màu: gọi get_product_details (không gọi search_products), rồi liệt kê các phiên bản, mỗi
+           dung lượng 1 gạch đầu dòng gồm giá, các màu, còn hàng hay không; cuối cùng hỏi khách chọn phiên bản nào.
         3. Khách hỏi ốp lưng, cường lực, sạc, cáp, sạc dự phòng, S Pen... cho máy nào: gọi find_accessories.
         4. Câu hỏi về đổi trả, hoàn tiền, giao hàng, nhận tại cửa hàng, trả góp, bảo hành: gọi search_policy.
            Hỏi máy có bị lỗi không, hiện tượng lạ của máy (vết gấp màn hình gập, sọc màn hình, pin chai, máy nóng...)
