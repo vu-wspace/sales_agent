@@ -193,8 +193,39 @@ def fake_catalog(monkeypatch):
 
 
 def call(tool, state, **args):
+    # Tool trả thao tác trên giỏ ({'add'/'remove'}); áp lên giỏ hiện tại như reducer của graph để ra giỏ mới
     cmd = tool.invoke({'type': 'tool_call', 'name': tool.name, 'id': 'c1', 'args': {**args, 'state': state}})
-    return cmd.update.get('cart'), cmd.update['messages'][0].content
+    change = cmd.update.get('cart')
+    cart = None if change is None else conv.cart_update(state.get('cart'), change)
+    return cart, cmd.update['messages'][0].content
+
+
+def test_cart_update_applies_each_change():
+    phone = {'variant_id': 'A', 'name': 'Galaxy S26', 'price': 10, 'quantity': 1}
+    charger = {'variant_id': 'B', 'name': 'Củ sạc', 'price': 2, 'quantity': 1}
+    cart = conv.cart_update(None, {'add': phone})
+    cart = conv.cart_update(cart, {'add': charger})                  # 2 thao tác trong cùng 1 bước: giữ cả hai
+    cart = conv.cart_update(cart, {'add': {**phone, 'quantity': 2}})  # cùng phiên bản: cộng số lượng
+    assert [(i['variant_id'], i['quantity']) for i in cart] == [('A', 3), ('B', 1)]
+    assert [i['variant_id'] for i in conv.cart_update(cart, {'remove': ['A']})] == ['B']
+    assert conv.cart_update(cart, []) == []                          # api.py làm trống sau khi đặt/hủy đơn
+    assert phone['quantity'] == 1                                    # không sửa món gốc
+
+
+def test_graph_parallel_add_to_cart_keeps_both(monkeypatch, fake_catalog):
+    # Lỗi cũ: model dự phòng gọi 2 add_to_cart song song -> InvalidUpdateError: At key 'cart'
+    script = iter([
+        AIMessage('', tool_calls=[
+            {'name': 'add_to_cart', 'id': 't1', 'args': {'product': 'galaxy s26', 'storage': '256GB', 'color': 'đen'}},
+            {'name': 'add_to_cart', 'id': 't2', 'args': {'product': 'ốp lưng trong suốt s26'}}]),
+        AIMessage('Dạ em đã thêm máy và ốp lưng vào giỏ.'),
+    ])
+    monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=script))
+    from phone_sales.graph import build_graph
+    g = build_graph(fallback=False, checkpointer=InMemorySaver())
+    res = g.invoke({'messages': [HumanMessage('lấy galaxy s26 256gb đen với ốp lưng trong suốt')]},
+                   {'configurable': {'thread_id': 'p'}})
+    assert sorted(i['variant_id'] for i in res['cart']) == ['OP', 'S26-256-DEN']
 
 
 def test_add_to_cart_merges_same_variant_and_checks_stock(fake_catalog):
@@ -295,3 +326,18 @@ def test_show_order_form_waits_for_cross_sell():
     assert form({'cart': [PHONE_IN_CART, CASE], 'cross_sell': ['charger']})['order_form'] is True   # đã lấy ốp
     acc_only = {**CASE, 'name': 'Cáp', 'accessory_type': 'cable'}
     assert form({'cart': [acc_only]})['order_form'] is True                                          # giỏ không có máy
+
+
+def test_openrouter_allows_parallel_tool_calls(monkeypatch):
+    # State chịu được nhiều tool cập nhật cùng bước (cart_update...) nên model chính được gọi tool song song
+    seen = {}
+
+    class Recording(ScriptedModel):
+        def bind_tools(self, tools, **kwargs):
+            seen.update(kwargs)
+            return self
+
+    monkeypatch.setattr(llm, 'open_llm', Recording(messages=iter([])))
+    from phone_sales.graph import build_graph
+    build_graph(fallback=False)
+    assert seen == {'parallel_tool_calls': True}

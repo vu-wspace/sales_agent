@@ -20,6 +20,8 @@ AGENT_PROMPTS = {
            dung lượng và màu: gọi get_product_details (không gọi search_products), rồi liệt kê các phiên bản, mỗi
            dung lượng 1 gạch đầu dòng gồm giá, các màu, còn hàng hay không; cuối cùng hỏi khách chọn phiên bản nào.
         3. Khách hỏi ốp lưng, cường lực, sạc, cáp, sạc dự phòng, S Pen... cho máy nào: gọi find_accessories.
+           Kết quả có dòng "Công suất sạc của ..." thì nói rõ củ sạc nào đủ công suất sạc nhanh cho máy, củ nào chỉ
+           sạc thường (theo ghi chú từng dòng); máy không có dòng này thì không tự nêu công suất cần.
         4. Câu hỏi về đổi trả, hoàn tiền, giao hàng, nhận tại cửa hàng, trả góp, bảo hành: gọi search_policy.
            Hỏi máy có bị lỗi không, hiện tượng lạ của máy (vết gấp màn hình gập, sọc màn hình, pin chai, máy nóng...)
            cũng gọi search_policy: chính sách bảo hành có ghi lỗi nào được bảo hành và lưu ý khi sử dụng.

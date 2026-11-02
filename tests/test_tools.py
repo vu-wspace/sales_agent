@@ -323,3 +323,41 @@ def test_find_accessories_genuine_only_keeps_kind_without_genuine(monkeypatch):
     out = tools.find_accessories.invoke({'phone': 'iphone 17', 'accessory_type': 'ốp lưng, cường lực', 'genuine_only': True})
     assert 'Ốp Lưng Trong Suốt MagSafe' in out and 'Beats' not in out   # có ốp chính hãng: bỏ ốp Beats
     assert 'Belkin UltraGlass 2' in out                                 # cường lực chỉ có Belkin: giữ
+
+
+IPHONE17_SPECS = {'Pin Và Nguồn Điện': 'Khả năng sạc nhanh: Sạc lên đến 50% trong 20 phút với bộ tiếp hợp 40W trở lên '
+                                       '(được bán riêng) sử dụng cáp sạc USB‑C Sạc lên đến 50% trong 30 phút với bộ tiếp '
+                                       'hợp 30W trở lên sử dụng Bộ Sạc MagSafe',
+                  'MagSafe và Sạc Không Dây': 'Sạc không dây MagSafe lên đến 25W Sạc không dây Qi2 lên đến 25W'}
+
+
+def test_charging_spec_and_charger_fit():
+    c = tools._charging({'name': 'iPhone 17', 'attributes': {'specs': IPHONE17_SPECS}})
+    assert (c['wired'], c['wireless']) == (40, 25)            # 40W qua cáp, không lấy 30W của MagSafe
+    assert 'sạc nhanh 50% trong 20 phút cần bộ tiếp hợp từ 40W trở lên' in c['text']
+    fit = lambda name: tools._charger_fit({'name': name, 'kind': 'charger'}, c)
+    assert fit('Bộ Tiếp Hợp Nguồn Động 40W Với Công Suất Tối Đa 60W') == ' | đủ công suất sạc nhanh cho máy (từ 40W)'
+    assert fit('Bộ Tiếp Hợp Nguồn Cổng Kép 35W') == ' | dưới 40W: sạc được nhưng không đạt sạc nhanh'
+    assert fit('Bộ Sạc MagSafe (1 m)') == ' | sạc không dây tối đa 25W trên máy này'
+    assert tools._charger_fit({'name': 'Cáp Sạc USB-C 60W', 'kind': 'cable'}, c) == ''   # chỉ ghi cho củ sạc
+
+
+def test_no_charging_note_without_specs():
+    # Galaxy chưa có thông số sạc: không ghi công suất cần, không để model tự đoán
+    assert tools._charging({'name': 'Galaxy S26', 'attributes': {}}) == {}
+    assert tools._charger_fit({'name': 'Củ Sạc 60W', 'kind': 'charger'}, {}) == ''
+    wireless_only = tools._charging({'name': 'iPhone 18 Pro', 'attributes': {'specs': {
+        'MagSafe': 'Sạc không dây MagSafe lên đến 25W'}}})
+    assert 'wired' not in wireless_only and 'Nói rõ củ sạc' not in wireless_only['text']
+
+
+def test_find_chargers_puts_fast_enough_first(monkeypatch):
+    phone = {'product_id': 'apple-iphone-17', 'name': 'iPhone 17', 'brand': 'Apple',
+             'attributes': {'specs': IPHONE17_SPECS}}
+    rows = [{'name': 'Bộ Tiếp Hợp Nguồn Cổng Kép 35W', 'brand': 'Apple', 'kind': 'charger', 'price': 500_000, 'stock': 5},
+            {'name': 'Bộ Tiếp Hợp Nguồn Động 40W', 'brand': 'Apple', 'kind': 'charger', 'price': 999_000, 'stock': 5}]
+    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
+    out = tools.find_accessories.invoke({'phone': 'iphone 17', 'accessory_type': 'củ sạc'}).splitlines()
+    assert out[0].startswith('Công suất sạc của iPhone 17 (theo thông số)')
+    assert '40W' in out[2] and 'đủ công suất sạc nhanh' in out[2]       # đủ công suất xếp trước, dù đắt hơn
+    assert '35W' in out[3] and 'không đạt sạc nhanh' in out[3]

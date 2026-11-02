@@ -224,7 +224,7 @@ flowchart LR
 
 1. `track_user` đọc tin nhắn của khách: nhu cầu, lo ngại, cảm xúc, có cần chuyển nhân viên không.
 2. `model` gọi LLM với system prompt, tóm tắt trạng thái hội thoại và lịch sử đã cắt gọn (4 lượt gần nhất).
-3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng.
+3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng. Model được gọi nhiều tool song song trong 1 bước (OpenRouter bật `parallel_tool_calls=True`, model dự phòng mặc định cũng song song), vd tra giá 2 máy khi so sánh, thêm máy và củ sạc cùng lúc; các khóa state mà tool ghi (`cart`, `order_form`, `offered_alternatives`) đều có reducer nên nhận được nhiều cập nhật cùng bước.
 4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời.
 
 ### Đặt hàng
@@ -282,7 +282,7 @@ Bảng `promotions` (`promotions.py`):
 | `stage` | Bước bán hàng: `discovery` → `recommending` → `comparing` → `closing`, hoặc `handoff` |
 | `slots` | Nhu cầu: ngân sách, hãng, mục đích, dung lượng, màu |
 | `shown_products` | Sản phẩm đã giới thiệu |
-| `cart` | Giỏ hàng |
+| `cart` | Giỏ hàng. Tool giỏ hàng trả thao tác (`{'add': món}`, `{'remove': [variant_id]}`), reducer `cart_update` áp lần lượt: model gọi 2 tool giỏ hàng song song trong 1 bước (vd thêm máy và củ sạc) vẫn giữ đủ, không lỗi `InvalidUpdateError`. `api.py` ghi `[]` để làm trống sau khi đặt/hủy đơn |
 | `objections` | Lo ngại của khách (giá, pin, nhiệt độ, camera…) |
 | `sentiment_history` | Cảm xúc từng lượt |
 | `handoff` | Cần chuyển nhân viên |
@@ -320,6 +320,7 @@ Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 - **Hộp máy có gì:** iPhone đọc từ mục "Trong Hộp Sản Phẩm" (cáp USB-C, không có củ sạc). Web Samsung không có mục này, nên `IN_BOX_BY_BRAND` trong `tools.py` **giả định** Galaxy chỉ kèm cáp, không kèm củ sạc; cần kiểm tra lại với từng model. Máy không rõ thông tin thì bỏ qua bước 1.
 - **Chính hãng:** phụ kiện cùng hãng với máy; hàng Beats, mophie, Belkin, Anker do cửa hàng Apple bán không tính là chính hãng. `find_accessories` xếp còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây hoặc sạc ô tô, rồi rẻ trước, và nhận nhiều loại một lúc (`'sạc, cáp'`: mỗi loại 2 món). `'củ sạc'` chỉ trả củ sạc cắm tường, bỏ sạc không dây, MagSafe, sạc ô tô; nếu hộp máy đã có cáp thì bỏ cả bộ củ sạc kèm cáp (khách không mua thêm cáp lần hai). Bước 1 dùng loại này khi hộp đã có cáp, nên Galaxy hiện chỉ có 1 củ sạc chính hãng để mời (60W). Danh sách 1 loại tách riêng mục "Hãng khác" sau hàng chính hãng. Bước bán kèm gọi `find_accessories(..., genuine_only=True)`: loại nào có hàng chính hãng thì tool bỏ hàng hãng khác của loại đó (chỉ dặn trong prompt thì model vẫn lấy củ sạc Apple, Belkin cho Galaxy cho đủ số món); loại không có hàng chính hãng thì giữ hàng hãng khác, vì Apple không bán miếng dán màn hình, cường lực cho iPhone chỉ có Belkin. Model nói đúng tên hãng, không gọi hàng Belkin là chính hãng.
 - **Gợi ý nhẹ, không ép:** cả củ sạc lẫn ốp lưng, cường lực đều là gợi ý (`LIGHT_OFFER` trong `conversation.py`, quy tắc 9 trong prompt): không thúc giục, không nói "nên mua", "đừng bỏ lỡ", không khen quá lời, luôn cho khách thấy không lấy cũng được, khách không lấy thì không hỏi lại.
+- **Công suất sạc:** máy có thông số sạc (hiện là iPhone, đọc từ mục "Pin Và Nguồn Điện", "MagSafe và Sạc Không Dây") thì `find_accessories` thêm dòng đầu "Công suất sạc của … (theo thông số)" (vd iPhone 17: sạc nhanh 50% trong 20 phút cần bộ tiếp hợp từ 40W qua cáp USB-C; MagSafe tối đa 25W) và ghi chú từng củ sạc: "đủ công suất sạc nhanh cho máy" hoặc "dưới 40W: sạc được nhưng không đạt sạc nhanh"; củ sạc đủ công suất xếp trước. Sạc MagSafe ghi công suất không dây tối đa trên máy đó. Máy không có thông số sạc (dòng Galaxy, iPhone 18 Pro, Duo với sạc có dây) thì không ghi, agent không tự nêu công suất cần.
 - **Mẫu câu trả lời:** mỗi bước có mẫu riêng trong `cross_sell_hint`: bước củ sạc "Dạ, em đã thêm … vào giỏ rồi nha" + dòng hộp máy có gì + "Nếu anh/chị cần thì bên em có củ sạc chính hãng" + danh sách + "Anh/chị không cần thì cũng không sao, cứ nói em một tiếng nha."; bước ốp lưng, cường lực "Anh/chị muốn giữ … kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em" + danh sách + "Không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha."; bước xác nhận "Đơn hàng của anh/chị:" + từng món + "Tổng cộng" + "Anh/chị xác nhận đặt hàng giúp em, em mở form để mình điền thông tin nhận hàng nha."
 - **Nhận diện từ chối** (`DECLINE` trong `conversation.py`) dùng từ khóa: "không cần", "khỏi", "không lấy", "chưa cần", "để sau", "thôi không", "vậy thôi"… Các bước bán kèm không phụ thuộc vào việc nhận ra từ chối (khách lấy hay không đều sang bước kế tiếp), nhưng cách nói lạ ("để em tính", viết không dấu "ko can") vẫn có thể ảnh hưởng tới cảm xúc và bước bán hàng. Chữ "thôi" đứng một mình không tính là từ chối vì hay dùng khi chốt ("lấy luôn thôi").
 
@@ -437,13 +438,14 @@ Database `phone` (schema `data_schema/phone.sql`, dữ liệu `data_schema/outpu
 | `order_items` | Sản phẩm trong đơn: phiên bản, số lượng, đơn giá lúc đặt |
 | `cart_item` | Có trong database nhưng code chưa dùng: giỏ hàng nằm trong state hội thoại (`AgentState.cart`) |
 
-Luật gán `compatibility` (`build_accessories` trong `scrape_phone.py`, 714 dòng):
+Luật gán `compatibility` (`build_accessories` trong `scrape_phone.py`, 620 dòng):
 
 | Phụ kiện | Gắn cho |
 |---|---|
 | Ốp lưng, miếng dán, S Pen ghi tên máy | Đúng máy trong tên (iPhone đọc theo tên, Galaxy theo slug). Tên có máy cửa hàng không bán (iPhone 17 Pro, 16 Pro) thì bỏ phần đó |
 | MagSafe, Qi2, MagGo (Apple) | iPhone có mục "MagSafe" trong thông số (cả 7 máy) |
-| Củ sạc, cáp, sạc dự phòng USB-C | Cả 23 máy (đều dùng cổng USB-C) |
+| Củ sạc | Máy cùng hãng với cửa hàng bán: củ sạc ở trang Apple (kể cả Belkin, Anker, mophie) cho iPhone, củ sạc Samsung cho Galaxy. Củ sạc Apple cắm vào Galaxy vẫn sạc được nhưng không có sạc siêu nhanh của Samsung (và ngược lại), nên không gợi ý chéo hãng |
+| Cáp, sạc dự phòng USB-C | Cả 23 máy (đều dùng cổng USB-C) |
 | Sạc không dây, giá đỡ (Samsung) | Galaxy S, Z (dòng A không có sạc không dây) |
 | Phụ kiện "Magnet" (ví, giá đỡ Mirror Tok, sạc, pin nam châm) | Galaxy S, Z cửa hàng có bán ốp lưng Magnet: máy Galaxy không có nam châm sẵn, cần ốp Magnet mới dính. S25, S25 Ultra không có ốp nào nên không được gắn |
 
@@ -506,7 +508,7 @@ sales_agent/
 uv run pytest
 ```
 
-230 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+236 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 

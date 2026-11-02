@@ -9,7 +9,7 @@ from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
 from phone_sales import promotions
-from phone_sales.conversation import added_to_cart_this_turn, cross_sell_step
+from phone_sales.conversation import added_to_cart_this_turn, cart_update, cross_sell_step
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_sales.vector_db import get_vector_store
@@ -283,8 +283,11 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuin
         return (f"Chưa có phụ kiện {accessory_type or ''} tương thích với {p['name']}."
                 .replace('  ', ' '))
     # Còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây/ô tô (máy thiếu là thiếu củ sạc), rẻ trước
+    need = _charging(p).get('wired') if 'charger' in kinds or not kinds else None
     rows.sort(key=lambda r: (r['stock'] <= 0, not _genuine(r, p['brand']),
-                             r['kind'] == 'charger' and bool(re.search(NOT_WALL_CHARGER, r['name'].lower())), r['price']))
+                             r['kind'] == 'charger' and bool(re.search(NOT_WALL_CHARGER, r['name'].lower())),
+                             bool(need) and r['kind'] == 'charger' and 'dưới' in _charger_fit(r, {'wired': need}),
+                             r['price']))
     start = max(page, 1) - 1
     if len(kinds) > 1:
         by_kind = [[r for r in rows if r['kind'] == k] for k in kinds]
@@ -295,14 +298,55 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuin
         left = len(rows) - start * ACCESSORIES_PER_PAGE - len(shown)
     if not shown:
         return f"Đã xem hết {len(rows)} phụ kiện tương thích với {p['name']}."
+    charging = _charging(p) if any(r['kind'] == 'charger' for r in shown) else {}
     lines = [f"- {r['name']}: {_price(r['price'])}" + (f" | chính hãng {p['brand']}" if _genuine(r, p['brand']) else '')
-             + f" | {_stock(r['stock'])}" for r in shown]
+             + _charger_fit(r, charging) + f" | {_stock(r['stock'])}" for r in shown]
     # 1 loại: hàng chính hãng xếp trước, tách rõ phần hãng khác để model không trộn vào lời mời hàng chính hãng
     genuine = [_genuine(r, p['brand']) for r in shown]
     if len(kinds) <= 1 and genuine[0] and not all(genuine):
         lines.insert(genuine.index(False), f"Hãng khác (không phải chính hãng {p['brand']}):")
     more = f'\n(còn {left} phụ kiện khác, xem tiếp bằng page={page + 1})' if left > 0 else ''
+    if charging.get('text'):
+        header = f"{charging['text']}\n" + header
     return header + '\n' + '\n'.join(lines) + more
+
+def _charging(phone: dict) -> dict:
+    """Công suất sạc theo thông số máy (chỉ dòng có thông số, hiện là iPhone):
+    wired: bộ tiếp hợp tối thiểu để sạc nhanh qua cáp USB-C; wireless: sạc không dây MagSafe tối đa."""
+    specs = (phone.get('attributes') or {}).get('specs') or {}
+    text = ' '.join(specs.values())
+    wired = re.search(r'Sạc lên đến (\d+%) trong (?:khoảng )?(\d+ phút) với bộ tiếp hợp (\d+)\s*W trở lên'
+                      r'[^.]{0,30}?sử dụng cáp sạc USB', text)
+    wireless = re.search(r'Sạc không dây MagSafe lên đến (\d+)\s*W', text)
+    out: dict = {}
+    parts = []
+    if wired:
+        out['wired'] = int(wired.group(3))
+        parts.append(f"sạc nhanh {wired.group(1)} trong {wired.group(2)} cần bộ tiếp hợp từ {out['wired']}W trở lên "
+                     "(qua cáp USB-C)")
+    if wireless:
+        out['wireless'] = int(wireless.group(1))
+        parts.append(f"sạc không dây MagSafe tối đa {out['wireless']}W")
+    if parts:
+        out['text'] = (f"Công suất sạc của {phone['name']} (theo thông số): " + '; '.join(parts) + '.'
+                       + (' Nói rõ củ sạc nào phù hợp theo ghi chú từng dòng.' if wired else ''))
+    return out
+
+def _charger_fit(acc: dict, charging: dict) -> str:
+    # Ghi chú củ sạc có đủ công suất sạc nhanh cho máy không (máy không có thông số sạc thì không ghi)
+    if acc['kind'] != 'charger' or not charging:
+        return ''
+    name = acc['name'].lower()
+    if re.search(NOT_WALL_CHARGER, name):
+        return f" | sạc không dây tối đa {charging['wireless']}W trên máy này" \
+            if charging.get('wireless') and re.search(r'magsafe|qi2|không dây', name) else ''
+    watts = [int(w) for w in re.findall(r'(\d+)\s*w\b', name)]
+    need = charging.get('wired')
+    if not watts or not need:
+        return ''
+    if max(watts) >= need:
+        return f' | đủ công suất sạc nhanh cho máy (từ {need}W)'
+    return f' | dưới {need}W: sạc được nhưng không đạt sạc nhanh'
 
 @tool
 def find_cheaper_alternatives(product: str, state: Annotated[dict, InjectedState],
@@ -457,10 +501,12 @@ def web_search(query: str) -> dict[str, Any] | str:
 
 # ---------------------------------------------------------------- giỏ hàng (chỉ graph.py có state 'cart')
 
-def _cart_reply(tool_call_id: str, text: str, cart: list | None = None) -> Command:
+def _cart_reply(tool_call_id: str, text: str, change: dict | None = None) -> Command:
+    # change: thao tác trên giỏ ({'add': món} / {'remove': [variant_id]}), không phải cả giỏ: 2 tool giỏ hàng chạy
+    # song song trong 1 bước thì conversation.cart_update áp lần lượt cả hai
     update = {'messages': [ToolMessage(text, tool_call_id=tool_call_id)]}
-    if cart is not None:
-        update['cart'] = cart
+    if change is not None:
+        update['cart'] = change
     return Command(update=update)
 
 def _cart_extra(p: dict) -> dict:
@@ -507,15 +553,12 @@ def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_i
     if v['stock'] < new_qty:
         return _cart_reply(tool_call_id, f"{p['name']} {v['storage'] or ''} {v['color'] or ''} "
                            f"{'hết hàng' if v['stock'] <= 0 else 'không đủ số lượng'}. Gợi ý phiên bản khác.")
-    if item:
-        item['quantity'] = new_qty
-    else:
-        cart.append({'variant_id': v['variant_id'], 'name': p['name'], 'category': p['category'],
-                     'storage': v['storage'], 'color': v['color'], 'price': v['price'], 'quantity': quantity,
-                     **_cart_extra(p)})
+    added = {'variant_id': v['variant_id'], 'name': p['name'], 'category': p['category'],
+             'storage': v['storage'], 'color': v['color'], 'price': v['price'], 'quantity': quantity, **_cart_extra(p)}
+    cart = cart_update(cart, {'add': added})
     total = sum(i['price'] * i['quantity'] for i in cart)
     return _cart_reply(tool_call_id, f"Đã thêm {quantity} x {p['name']} {v['storage'] or ''} {v['color'] or ''} "
-                       f"({_price(v['price'])}). Giỏ có {len(cart)} sản phẩm, tổng {_price(total)}.", cart)
+                       f"({_price(v['price'])}). Giỏ có {len(cart)} sản phẩm, tổng {_price(total)}.", {'add': added})
 
 @tool
 def remove_from_cart(product: str, state: Annotated[dict, InjectedState],
@@ -527,8 +570,9 @@ def remove_from_cart(product: str, state: Annotated[dict, InjectedState],
     if len(keep) == len(cart):
         return _cart_reply(tool_call_id, f"Không có '{product}' trong giỏ hàng.")
     total = sum(i['price'] * i['quantity'] for i in keep)
+    removed = [i['variant_id'] for i in cart if i not in keep]
     return _cart_reply(tool_call_id, f'Đã bỏ {len(cart) - len(keep)} sản phẩm. Giỏ còn {len(keep)} sản phẩm, '
-                       f'tổng {_price(total)}.', keep)
+                       f'tổng {_price(total)}.', {'remove': removed})
 
 @tool
 def show_order_form(state: Annotated[dict, InjectedState],

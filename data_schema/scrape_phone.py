@@ -490,6 +490,10 @@ def build_accessories(apple_acc, samsung_acc, phones):
     iphones = {p["name"].lower(): p for p in phones if p["brand"] == "Apple"}
     galaxy_by_slug = {p["product_id"].removeprefix("samsung-"): p for p in phones if p["brand"] == "Samsung"}
     all_phone_ids = [p["product_id"] for p in phones]
+    # Củ sạc chỉ gắn cho máy cùng hãng: củ sạc Apple cắm vào Galaxy vẫn sạc được nhưng không có sạc siêu nhanh của
+    # Samsung (và ngược lại), gợi ý chéo hãng là không đúng máy. Cáp USB-C, sạc dự phòng dùng chung cho mọi máy
+    iphone_ids = [p["product_id"] for p in phones if p["brand"] == "Apple"]
+    galaxy_ids = [p["product_id"] for p in phones if p["brand"] == "Samsung"]
     magsafe_ids = [p["product_id"] for p in iphones.values() if p["attributes"].get("magsafe")]
 
     def add(pid, name, brand, sku, price, url, compatible, in_stock=True, color=None):
@@ -512,7 +516,7 @@ def build_accessories(apple_acc, samsung_acc, phones):
         elif re.search(r"magsafe|qi2|maggo", name, re.I):
             compatible = magsafe_ids
         elif re.search(r"usb-c|usb‑c|sạc|tiếp hợp|thunderbolt", name, re.I):
-            compatible = all_phone_ids
+            compatible = iphone_ids if accessory_type(name) == "charger" else all_phone_ids
         else:
             compatible = []
         color = name.rsplit(" - ", 1)[1] if " - " in name else None
@@ -545,7 +549,7 @@ def build_accessories(apple_acc, samsung_acc, phones):
         elif "holder" in slug or "wireless" in slug:
             compatible = wireless_galaxy  # sạc không dây, giá đỡ: dòng A không hỗ trợ
         elif re.search(r"power-adapter|battery-pack|charger", slug):
-            compatible = all_phone_ids
+            compatible = galaxy_ids if accessory_type(a["name"]) == "charger" else all_phone_ids
         else:
             compatible = []
         add("acc-samsung-" + a["sku"].lower(), a["name"], "Samsung", a["sku"], a["price"], a["url"],

@@ -71,8 +71,10 @@ def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
     # Không truyền khi chạy qua `langgraph dev` vì server tự quản lý bộ nhớ.
     primary = llm.open_llm
     models = [primary, *llm.FALLBACK_LLMS] if fallback else [primary]
-    # parallel_tool_calls chỉ truyền cho OpenRouter; model dự phòng dùng mặc định của hãng
-    bound = {id(m): m.bind_tools(TOOLS, parallel_tool_calls=False) if m is primary else m.bind_tools(TOOLS)
+    # OpenRouter được gọi nhiều tool song song trong 1 bước (vd thêm máy và củ sạc cùng lúc, tra giá 2 máy khi so
+    # sánh): state chịu được nhiều cập nhật cùng bước (cart_update, last, append_unique trong conversation.py).
+    # parallel_tool_calls chỉ truyền cho OpenRouter; model dự phòng dùng mặc định của hãng (cũng là song song)
+    bound = {id(m): m.bind_tools(TOOLS, parallel_tool_calls=True) if m is primary else m.bind_tools(TOOLS)
              for m in models}
     chain = FallbackMiddleware(*models[1:]) if fallback else None
 

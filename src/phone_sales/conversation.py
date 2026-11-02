@@ -31,18 +31,43 @@ def steps(old: list | None, new: list | None) -> list:
     # None: làm lại từ đầu (đơn đã đặt/đã hủy, giỏ trống -> lần mua sau bán kèm lại từ bước 1)
     return [] if new is None else append_unique(old, new)
 
+def cart_update(old: list | None, new: list | dict | None) -> list:
+    """Giỏ hàng. list: thay cả giỏ (api.py làm trống sau khi đặt/hủy đơn). dict: thao tác của tool giỏ hàng,
+    {'add': món (quantity = số lượng thêm)} hoặc {'remove': [variant_id]}. Model dự phòng có thể gọi 2 tool giỏ hàng
+    song song trong 1 bước (vd thêm máy và củ sạc): mỗi thao tác áp lên kết quả trước, không món nào bị mất
+    (khóa không có reducer thì LangGraph báo InvalidUpdateError: Can receive only one value per step)."""
+    if new is None:
+        return list(old or [])
+    if isinstance(new, list):
+        return [dict(i) for i in new]
+    cart = [dict(i) for i in (old or [])]
+    if 'add' in new:
+        item = new['add']
+        same = next((i for i in cart if i['variant_id'] == item['variant_id']), None)
+        if same:
+            same['quantity'] += item['quantity']
+        else:
+            cart.append(dict(item))
+    if 'remove' in new:
+        cart = [i for i in cart if i['variant_id'] not in set(new['remove'])]
+    return cart
+
+def last(old, new):
+    # Lấy giá trị mới nhất; khác khóa thường ở chỗ cho phép ghi nhiều lần trong 1 bước (tool chạy song song)
+    return new
+
 class AgentState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]  # lịch sử tin nhắn (nối thêm, không ghi đè)
     stage: Stage                                          # đang ở bước nào của quy trình bán hàng
     slots: Annotated[dict, merge_slots]                   # nhu cầu đã thu: budget_max, brand, purposes, storage...
     shown_products: Annotated[list[str], append_unique]   # sản phẩm đã giới thiệu
-    cart: list[dict]                                      # giỏ hàng (tool giỏ hàng trả về cả giỏ mới)
+    cart: Annotated[list[dict], cart_update]              # giỏ hàng (tool trả thao tác thêm/bỏ, xem cart_update)
     objections: Annotated[list[str], append_unique]       # khách đang chê/lo ngại gì
     sentiment_history: Annotated[list[str], append]       # cảm xúc của khách qua từng lượt
     handoff: bool                                         # có cần chuyển nhân viên không (đã bật thì giữ)
     cross_sell: Annotated[list[str], steps]               # bước bán kèm đã làm: 'charger', 'accessories', 'confirm'
     declined: bool                                        # tin nhắn mới nhất của khách là từ chối ("không cần")
-    order_form: bool                                      # lượt này hiện form đặt hàng (show_order_form)
+    order_form: Annotated[bool, last]                     # lượt này hiện form đặt hàng (show_order_form)
     orders: Annotated[list[str], append]                  # mã các đơn đã đặt trong cuộc trò chuyện (api.py: /order)
     objection: str | None                                 # phản đối trong tin nhắn lượt này: price, competitor, hesitation
     objection_type: str | None                            # loại phản đối đang xử lý (đổi loại thì làm lại từ bước đầu)
@@ -384,7 +409,8 @@ def cross_sell_hint(state: dict) -> str | None:
         if phone.get('cable_in_box'):
             # Hộp đã có cáp: chỉ mời củ sạc (tool bỏ loại kèm cáp), vài lựa chọn từ rẻ tới đắt
             call, box = 'củ sạc', f"Hộp {name} đã có cáp sạc nhưng chưa kèm củ sạc.\n"
-            group = "củ sạc chính hãng (2-3 món, từ rẻ tới đắt; tool chỉ có 1 thì mời 1; không mời cáp):\n"
+            group = ("củ sạc chính hãng (2-3 món, từ rẻ tới đắt; tool chỉ có 1 thì mời 1; không mời cáp; dòng tool "
+                     "có ghi công suất thì nói ngắn củ nào đủ sạc nhanh, củ nào chỉ sạc thường):\n")
         else:
             call, box = 'sạc, cáp', f"{name} không kèm củ sạc trong hộp (nói đúng như dòng 'Trong hộp').\n"
             group = "củ sạc, cáp chính hãng (1 củ sạc + 1 cáp; củ sạc đã kèm cáp thì không cần cáp):\n"
