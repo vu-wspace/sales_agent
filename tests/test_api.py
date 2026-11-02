@@ -292,10 +292,10 @@ class CartAgent(FakeAgent):
 @pytest.fixture
 def fake_orders(monkeypatch):
     saved = []
-    def create_order(cart, *args, thread_id=None):
+    def create_order(cart, *args, thread_id=None, email=None):
         if not cart:
             raise api.orders.OrderError('Giỏ hàng đang trống')
-        saved.append((cart, args, thread_id))
+        saved.append((cart, args, thread_id) + ((email,) if email else ()))
         return 'DH0000000C'
     monkeypatch.setattr(api.orders, 'create_order', create_order)
     monkeypatch.setattr(api.orders, 'get_order', lambda order_id: {'order_id': order_id})
@@ -320,13 +320,23 @@ def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
     assert fake_orders == [(CART, ('Nguyễn Văn A', '0912345678', '12 Lê Lợi, Quy Nhơn', 'delivery', 'cod'), 't1')]
     thread, values, node = agent.updates[0]
     assert thread == 't1' and node == 'track_reply'
-    assert values['cart'] == [] and values['orders'] == ['DH0000000C'] and values['messages'][1].text == r.json()['answer']
+    assert values['cart'] == [] and values['cross_sell'] is None and values['orders'] == ['DH0000000C'] and values['messages'][1].text == r.json()['answer']
 
 
 def test_order_empty_cart_returns_409(fake_orders):
     api.app.state.agent = CartAgent([])
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
     assert r.status_code == 409 and r.json()['detail'] == 'Giỏ hàng đang trống'
+
+
+def test_order_email_optional_and_validated(fake_orders):
+    api.app.state.agent = CartAgent(CART)
+    client = TestClient(api.app)
+    assert client.post('/order', json={**ORDER_FORM, 'email': '  '}).status_code == 200      # để trống = không có
+    assert client.post('/order', json={**ORDER_FORM, 'email': ' a@b.vn '}).status_code == 200
+    assert [s[3:] for s in fake_orders] == [(), ('a@b.vn',)]
+    r = client.post('/order', json={**ORDER_FORM, 'email': 'abc'})
+    assert r.status_code == 422 and 'Email chưa đúng định dạng' in r.text
 
 
 @pytest.mark.parametrize('change', [{'phone': '12345'}, {'name': 'A'}, {'address': 'ngắn'}, {'payment': 'installment'}])
@@ -353,7 +363,7 @@ def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
     assert r.json()['answer'].startswith('Thật tiếc') and 'hỗ trợ hay tư vấn gì thêm' in r.json()['answer']
     assert fake_orders == []                                              # không tạo đơn
     thread, values, node = agent.updates[0]
-    assert thread == 't1' and node == 'track_reply' and values['cart'] == [] and values['order_form'] is False
+    assert thread == 't1' and node == 'track_reply' and values['cart'] == [] and values['order_form'] is False and values['cross_sell'] is None
     assert [m.text for m in values['messages']] == ['Hủy đặt hàng', api.orders.CANCEL_MESSAGE]
 
 

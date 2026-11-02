@@ -298,3 +298,19 @@ def test_web_search_handles_backend_error(monkeypatch):
 def test_agent_main_has_all_tools():
     assert [t.name for t in tools.get_agent_tools('agent_main')] == [
         'search_products', 'get_product_details', 'find_accessories', 'search_policy', 'web_search']
+
+
+def test_find_accessories_genuine_only(monkeypatch):
+    # Bán kèm chỉ mời hàng chính hãng: Belkin, củ sạc Apple bị bỏ khỏi danh sách cho Galaxy
+    rows = [{'name': 'Củ Sạc Không Kèm Cáp 60W', 'brand': 'Samsung', 'kind': 'charger', 'price': 1089720, 'stock': 10},
+            {'name': 'Bộ Sạc Gắn Tường Belkin (42W)', 'brand': 'Apple', 'kind': 'charger', 'price': 951000, 'stock': 10},
+            {'name': 'Bộ Tiếp Hợp Nguồn 35W', 'brand': 'Apple', 'kind': 'charger', 'price': 1471000, 'stock': 10}]
+    phone = {'product_id': 'samsung-galaxy-s26', 'name': 'Galaxy S26', 'brand': 'Samsung', 'attributes': {}}
+    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
+    out = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc', 'genuine_only': True})
+    assert 'Phụ kiện chính hãng tương thích với Galaxy S26:' in out and '60W' in out
+    assert 'Belkin' not in out and '35W' not in out and 'Hãng khác' not in out
+    assert 'Belkin' in tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc'})
+    rows[:] = rows[1:]
+    out = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc', 'genuine_only': True})
+    assert out == 'Chưa có phụ kiện củ sạc chính hãng tương thích với Galaxy S26.'

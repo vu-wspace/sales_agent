@@ -42,9 +42,10 @@ def ensure_tables() -> None:
         conn.execute(SCHEMA.read_text(encoding='utf-8'))
 
 def create_order(cart: list[dict], name: str, phone: str, address: str, fulfillment_type: str,
-                 payment: str, thread_id: str | None = None) -> str:
+                 payment: str, thread_id: str | None = None, email: str | None = None) -> str:
     """Lưu đơn trong 1 transaction: trừ tồn kho (đủ hàng mới trừ), ghi khách hàng (khách cũ nhận theo số
-    điện thoại), đơn và từng sản phẩm. Thiếu hàng thì không ghi gì cả. Trả về mã đơn."""
+    điện thoại), đơn và từng sản phẩm. Thiếu hàng thì không ghi gì cả. Trả về mã đơn.
+    email (không bắt buộc) luôn ghi vào đơn; chỉ ghi vào khách hàng khi chưa thuộc khách khác (uq_customers_email)."""
     if not cart:
         raise OrderError('Giỏ hàng đang trống, anh/chị chọn sản phẩm trước khi đặt hàng nhé.')
     total = sum(i['price'] * i['quantity'] for i in cart)
@@ -58,19 +59,29 @@ def create_order(cart: list[dict], name: str, phone: str, address: str, fulfillm
         # Khách cũ (cùng số điện thoại) thì cập nhật tên, địa chỉ mới nhất
         found = conn.execute('SELECT customer_id FROM customers WHERE phone = %s ORDER BY created_at LIMIT 1',
                              (phone,)).fetchone()
+        customer_email = email
+        if email:
+            # Email đã thuộc khách khác (số điện thoại khác): ghi vào khách sẽ vi phạm uq_customers_email và hỏng
+            # cả đơn -> chỉ ghi vào đơn, khách giữ email cũ
+            owner = conn.execute('SELECT customer_id FROM customers WHERE lower(email) = lower(%s) LIMIT 1',
+                                 (email,)).fetchone()
+            if owner and not (found and owner['customer_id'] == found['customer_id']):
+                log.info('Email đơn mới đã thuộc khách %s, không gán cho khách đặt đơn này', owner['customer_id'])
+                customer_email = None
         if found:
             customer_id = found['customer_id']
-            conn.execute('UPDATE customers SET name = %s, default_address = %s, updated_at = now() '
-                         'WHERE customer_id = %s', (name, address, customer_id))
+            # Không nhập email thì giữ email cũ của khách
+            conn.execute('UPDATE customers SET name = %s, default_address = %s, email = COALESCE(%s, email), '
+                         'updated_at = now() WHERE customer_id = %s', (name, address, customer_email, customer_id))
         else:
             customer_id = _new_id('KH')
-            conn.execute('INSERT INTO customers (customer_id, name, phone, default_address) VALUES (%s, %s, %s, %s)',
-                         (customer_id, name, phone, address))
+            conn.execute('INSERT INTO customers (customer_id, name, phone, default_address, email) '
+                         'VALUES (%s, %s, %s, %s, %s)', (customer_id, name, phone, address, customer_email))
         conn.execute(
-            """INSERT INTO orders (order_id, customer_id, thread_id, recipient_name, recipient_phone, address,
-                                   fulfillment_type, payment, total)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (order_id, customer_id, thread_id, name, phone, address, fulfillment_type, payment, total))
+            """INSERT INTO orders (order_id, customer_id, thread_id, recipient_name, recipient_phone, recipient_email,
+                                   address, fulfillment_type, payment, total)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (order_id, customer_id, thread_id, name, phone, email, address, fulfillment_type, payment, total))
         with conn.cursor() as cur:
             cur.executemany('INSERT INTO order_items (order_id, variant_id, qty, unit_price) VALUES (%s, %s, %s, %s)',
                             [(order_id, i['variant_id'], i['quantity'], i['price']) for i in cart])
@@ -81,8 +92,8 @@ def get_order(order_id: str) -> dict:
         # Người nhận lấy từ chính đơn: customers chỉ giữ tên mới nhất theo số điện thoại, đơn sau cùng số
         # với tên khác sẽ ghi đè (đơn cũ hiện sai tên nếu đọc từ customers)
         order = conn.execute(
-            """SELECT order_id, recipient_name AS name, recipient_phone AS phone, address, fulfillment_type,
-                      payment, total, status
+            """SELECT order_id, recipient_name AS name, recipient_phone AS phone, recipient_email AS email, address,
+                      fulfillment_type, payment, total, status
                FROM orders WHERE order_id = %s""", (order_id,)).fetchone()
         items = conn.execute(
             """SELECT p.name, v.storage, v.color, oi.unit_price, oi.qty
@@ -97,16 +108,27 @@ def _price(v: int) -> str:
 def _item_name(i: dict) -> str:
     return ' '.join(filter(None, [i['name'], i.get('storage'), i.get('color')]))
 
+def _phone(p: str) -> str:
+    # 0912345678 -> 0912 345 678 (giống thẻ xác nhận trên giao diện)
+    return f'{p[:4]} {p[4:7]} {p[7:]}' if len(p) == 10 and p.isdigit() else p
+
 def summary(order: dict) -> str:
-    items = '\n'.join(f"- {i['qty']} x {_item_name(i)}: {_price(i['unit_price'] * i['qty'])}" for i in order['items'])
+    """Tóm tắt đơn dạng chữ (ghi vào lịch sử hội thoại), cùng bố cục thẻ xác nhận .receipt trên giao diện."""
+    items = [f"- {i['qty']} x {_item_name(i)}: {_price(i['unit_price'] * i['qty'])}" for i in order['items']]
     return '\n'.join([
-        f"Đơn hàng **#{order['order_id']}** đã được tạo.",
-        f"Khách hàng: {order['name']}",
-        f"Số điện thoại: {order['phone']}",
-        f"Địa chỉ giao hàng: {order['address']}",
-        f"Cách nhận hàng: {FULFILLMENT.get(order['fulfillment_type'], order['fulfillment_type'])}",
-        f"Thanh toán: {PAYMENT.get(order['payment'], order['payment'])}",
-        f"Sản phẩm:\n{items}",
+        f"Đặt hàng thành công. Mã đơn: **#{order['order_id']}**",
+        '',
+        'Thông tin nhận hàng:',
+        f"- Người nhận: {order['name']}",
+        f"- Điện thoại: {_phone(order['phone'])}",
+        *([f"- Email: {order['email']}"] if order.get('email') else []),
+        f"- Địa chỉ: {order['address']}",
+        f"- Nhận hàng: {FULFILLMENT.get(order['fulfillment_type'], order['fulfillment_type'])}",
+        f"- Thanh toán: {PAYMENT.get(order['payment'], order['payment'])}",
+        '',
+        f"Sản phẩm ({len(order['items'])}):",
+        *items,
+        '',
         f"Tổng cộng: **{_price(order['total'])}**",
         CALLBACK_NOTE,
     ])
@@ -114,7 +136,8 @@ def summary(order: dict) -> str:
 def view(order: dict) -> dict:
     """Dữ liệu đơn cho thẻ xác nhận trên giao diện (cùng nguồn database với summary)."""
     return {
-        'order_id': order['order_id'], 'name': order['name'], 'phone': order['phone'], 'address': order['address'],
+        'order_id': order['order_id'], 'name': order['name'], 'phone': order['phone'], 'email': order.get('email'),
+        'address': order['address'],
         'fulfillment': FULFILLMENT.get(order['fulfillment_type'], order['fulfillment_type']),
         'payment': PAYMENT.get(order['payment'], order['payment']),
         'items': [{'name': i['name'], 'variant': ' · '.join(filter(None, [i['storage'], i['color']])),

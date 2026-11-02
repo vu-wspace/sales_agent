@@ -37,7 +37,7 @@ def test_normalize_composes_decomposed_accents():
 
 
 def test_clean_answer_strips_thinking_and_blank_lines():
-    assert clean_answer('<think>tính giá</think>\n\nDạ   \n\n\n\nem gửi ạ') == 'Dạ\n\nem gửi ạ'
+    assert clean_answer('<think>tính giá</think>\n\nDạ   \n\n\n\nem gửi nhé') == 'Dạ\n\nem gửi nhé'
 
 
 # ---------------------------------------------------------------- số liệu không rõ nguồn
@@ -89,7 +89,7 @@ def test_graph_rewrites_answer_with_ungrounded_price(monkeypatch):
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('iphone 17 giá bn')]}, {'configurable': {'thread_id': 'g'}})
     texts = [m.text for m in res['messages']]
-    assert texts == ['iphone 17 giá bn', 'Dạ em chưa tra giá, anh/chị chờ em chút ạ.']  # bản nháp sai không lưu
+    assert texts == ['iphone 17 giá bn', 'Dạ em chưa tra giá, anh/chị chờ em chút.']  # bản nháp sai không lưu
 
 
 def test_graph_keeps_grounded_answer(monkeypatch):
@@ -98,4 +98,9 @@ def test_graph_keeps_grounded_answer(monkeypatch):
     from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('tầm 20tr')]}, {'configurable': {'thread_id': 'g'}})
-    assert res['messages'][-1].text == 'Dạ anh/chị cho em biết ngân sách khoảng 20 triệu đúng không ạ?'
+    assert res['messages'][-1].text == 'Dạ anh/chị cho em biết ngân sách khoảng 20 triệu đúng không?'  # bỏ chữ "ạ"
+
+
+def test_clean_answer_removes_a_particle():
+    # Cửa hàng không dùng "ạ"; "Dạ", "lạ" giữ nguyên
+    assert clean_answer('Dạ, anh/chị chọn màu nào ạ? Vâng ạ. Máy lạ ạ!') == 'Dạ, anh/chị chọn màu nào? Vâng. Máy lạ!'

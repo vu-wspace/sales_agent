@@ -5,7 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Checkpointer
 from phone_sales import llm
-from phone_sales.conversation import (AgentState, append_unique, cross_sell_offers, decide_stage, describe,
+from phone_sales.conversation import (AgentState, append_unique, cross_sell_step, decide_stage, describe,
                                     needs_handoff, products_mentioned, track_tool_results, track_user_message)
 from phone_sales.fallback import FallbackMiddleware
 from phone_sales.grounding import correction, sources_of, ungrounded
@@ -50,11 +50,13 @@ def track_tools(state: AgentState) -> dict:
     return {**track_tool_results(state.get('messages', [])), 'stage': _stage_now(state)}
 
 def track_reply(state: AgentState) -> dict:
-    # Sau câu trả lời cuối của lượt: ghi các sản phẩm đã thật sự giới thiệu cho khách và bước bán kèm đã mời
+    # Sau câu trả lời cuối của lượt: ghi các sản phẩm đã thật sự giới thiệu cho khách và bước bán kèm đã làm
     messages = state.get('messages', [])
     shown = products_mentioned(messages)
     after = {**state, 'shown_products': append_unique(state.get('shown_products'), shown)}
-    return {'shown_products': shown, 'cross_sell': cross_sell_offers(messages), 'stage': _stage_now(after)}
+    # Bước bán kèm của lượt này (đã đưa vào prompt) coi như đã làm, lượt sau sang bước kế tiếp
+    step = cross_sell_step(state)
+    return {'shown_products': shown, 'cross_sell': [step] if step else [], 'stage': _stage_now(after)}
 
 def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
     # checkpointer (vd InMemorySaver) lưu cả trạng thái hội thoại theo thread_id - api.py dùng cách này.

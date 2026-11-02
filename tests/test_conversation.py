@@ -111,51 +111,57 @@ PHONE_IN_CART = {'name': 'Galaxy S26', 'category': 'phone', 'storage': '256GB', 
                  'quantity': 1, 'charger_in_box': False}
 
 
-def _find_acc(kind: str) -> list:
-    return [HumanMessage('ok'),
-            AIMessage('', tool_calls=[{'name': 'find_accessories', 'args': {'phone': 'S26', 'accessory_type': kind},
-                                       'id': 'f'}]),
-            ToolMessage('Phụ kiện tương thích với Galaxy S26:\n- Ốp: 490.320đ | còn hàng', tool_call_id='f')]
+CASE = {'name': 'Ốp lưng', 'category': 'accessory', 'accessory_type': 'case', 'price': 1, 'quantity': 1}
+CHARGER = {'name': 'Củ sạc', 'category': 'accessory', 'accessory_type': 'charger', 'price': 1, 'quantity': 1}
 
 
-def test_cross_sell_charger_first_then_accessories_then_stop():
+def test_cross_sell_steps():
     state = {'stage': 'closing', 'cart': [PHONE_IN_CART]}
     hint = conv.cross_sell_hint
-    # Máy không kèm củ sạc: bước 1 mời sạc + cáp
-    assert hint(state).startswith('Bán kèm (bước 1)') and "accessory_type='sạc, cáp'" in hint(state)
-    # Đã mời sạc: bước 2 ốp lưng, cường lực; khách vừa từ chối sạc thì mời nhẹ
-    assert hint({**state, 'cross_sell': ['charger']}).startswith('Bán kèm (bước 2)')
-    assert 'mời nhẹ' in hint({**state, 'cross_sell': ['charger'], 'declined': True})
-    # Khách từ chối tiếp: không mời nữa, hỏi chốt đơn; không từ chối thì im lặng
-    assert 'hỏi khách có chốt đơn' in hint({**state, 'cross_sell': ['charger', 'accessories'], 'declined': True})
-    assert hint({**state, 'cross_sell': ['charger', 'accessories']}) is None
+    # Bước 1 (lượt chọn máy): mời củ sạc và ốp lưng, cường lực cùng lúc
+    assert conv.cross_sell_step(state) == 'bundle'
+    text = hint(state)
+    assert text.startswith('Bán kèm (bước 1') and "accessory_type='sạc, cáp'" in text
+    assert "accessory_type='ốp lưng, cường lực'" in text and 'Chưa gọi show_order_form' in text
+    # Bước 2: khách lấy củ sạc hoặc không lấy gì -> mời lại ốp lưng, cường lực
+    for cart in ([PHONE_IN_CART], [PHONE_IN_CART, CHARGER]):
+        after = {**state, 'cart': cart, 'cross_sell': ['bundle']}
+        assert conv.cross_sell_step(after) == 'again' and 'mời lại nhẹ' in hint(after)
+    # Bước 3: khách lấy phụ kiện (bỏ qua bước 2) hoặc không lấy -> xác nhận đơn, không mời thêm
+    assert conv.cross_sell_step({**state, 'cart': [PHONE_IN_CART, CASE], 'cross_sell': ['bundle']}) == 'confirm'
+    third = {**state, 'cross_sell': ['bundle', 'again']}
+    assert conv.cross_sell_step(third) == 'confirm' and 'Đơn hàng của anh/chị:' in hint(third)
+    assert 'không mời thêm phụ kiện' in hint(third)
+    assert hint({**state, 'cross_sell': ['bundle', 'again', 'confirm']}) is None
 
 
 def test_cross_sell_only_chargers_when_cable_in_box():
     text = conv.cross_sell_hint({'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'cable_in_box': True}]})
-    assert "accessory_type='củ sạc'" in text and '2-3 củ sạc chính hãng' in text and 'rẻ tới đắt' in text
-    assert 'đã có cáp sạc' in text and 'Không mời cáp' in text
+    assert "accessory_type='củ sạc', genuine_only=True" in text and 'Củ sạc chính hãng (2-3 món' in text
+    assert 'rẻ tới đắt' in text
+    assert 'đã có cáp sạc' in text and 'không mời cáp' in text and "accessory_type='ốp lưng, cường lực'" in text
 
 
 def test_cross_sell_skips_charger_when_in_box_or_already_in_cart():
-    state = {'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'charger_in_box': True}]}
-    assert conv.cross_sell_hint(state).startswith('Bán kèm (bước 2)')
-    with_charger = [PHONE_IN_CART, {'name': 'Củ sạc', 'category': 'accessory', 'accessory_type': 'charger'}]
-    assert conv.cross_sell_hint({'stage': 'closing', 'cart': with_charger}).startswith('Bán kèm (bước 2)')
+    for cart in ([{**PHONE_IN_CART, 'charger_in_box': True}], [PHONE_IN_CART, CHARGER]):
+        text = conv.cross_sell_hint({'stage': 'closing', 'cart': cart})
+        assert "accessory_type='ốp lưng, cường lực'" in text and 'củ sạc' not in text
 
 
-def test_cross_sell_not_offered_outside_closing_twice_in_turn_or_when_unhappy():
+def test_cross_sell_not_offered_outside_closing_or_when_unhappy():
     state = {'stage': 'closing', 'cart': [PHONE_IN_CART]}
     assert conv.cross_sell_hint({**state, 'stage': 'recommending'}) is None
-    assert conv.cross_sell_hint({**state, 'messages': _find_acc('sạc, cáp')}) is None   # lượt này đã mời
-    assert 'Bán kèm' in conv.describe(state)
-    assert 'Bán kèm' not in conv.describe({**state, 'sentiment_history': ['negative']})
+    assert 'Bán kèm (bước' in conv.describe(state)
+    assert 'Bán kèm (bước' not in conv.describe({**state, 'sentiment_history': ['negative']})
+    assert conv.cross_sell_step({**state, 'sentiment_history': ['negative']}) is None  # không tính là đã mời
 
 
-def test_cross_sell_offers_and_decline_detection():
-    assert conv.cross_sell_offers(_find_acc('sạc, cáp')) == ['charger']
-    assert conv.cross_sell_offers(_find_acc('ốp lưng, cường lực')) == ['accessories']
-    assert conv.cross_sell_offers(_find_acc('')) == ['accessories']
+def test_cross_sell_steps_reset_after_order():
+    assert conv.steps(['bundle'], ['again']) == ['bundle', 'again']
+    assert conv.steps(['bundle', 'again'], None) == []
+
+
+def test_decline_detection():
     assert conv.track_user_message('thôi không cần sạc đâu em')['declined']
     assert not conv.track_user_message('ok lấy luôn thôi')['declined']
 
@@ -243,12 +249,12 @@ def test_graph_keeps_state_across_turns(monkeypatch, fake_catalog):
     assert s2['cart'][0]['variant_id'] == 'S26-256-DEN'
     assert s2['slots']['budget_max'] == 30_000_000                    # nhu cầu lượt trước vẫn giữ
     assert s2['sentiment_history'] == ['neutral', 'positive']
-    assert s2['messages'][-1].text == 'Dạ em đã thêm Galaxy S26 vào giỏ ạ.'
+    assert s2['messages'][-1].text == 'Dạ em đã thêm Galaxy S26 vào giỏ.'  # bỏ chữ "ạ"
 
 
 def test_show_order_form_needs_cart():
     cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
-                                        'args': {'state': {'cart': [PHONE_IN_CART], 'cross_sell': ['accessories']}}})
+                                        'args': {'state': {'cart': [PHONE_IN_CART], 'cross_sell': ['bundle', 'again']}}})
     assert cmd.update['order_form'] is True and 'Đã hiện form đặt hàng cho 1 sản phẩm' in cmd.update['messages'][0].content
     empty = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c2', 'args': {'state': {}}})
     assert 'order_form' not in empty.update and 'Giỏ hàng đang trống' in empty.update['messages'][0].content
@@ -267,19 +273,19 @@ def test_show_order_form_not_in_same_turn_as_add_to_cart():
                     AIMessage('', tool_calls=[{'name': 'show_order_form', 'args': {}, 'id': 'c2'}])]
     cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c2',
                                         'args': {'state': {'cart': [PHONE_IN_CART], 'messages': later,
-                                                           'cross_sell': ['charger', 'accessories']}}})
+                                                           'cross_sell': ['bundle', 'again']}}})
     assert cmd.update['order_form'] is True
 
 
-def test_show_order_form_offers_cases_first():
-    # "Không cần sạc, xác nhận đặt hàng giúp mình": chưa mời ốp lưng, cường lực thì mời 1 lần trước khi mở form
+def test_show_order_form_waits_for_cross_sell():
+    # "Không cần sạc, xác nhận đặt hàng giúp mình" ở bước 1, 2: chưa mở form, mời ốp lưng, cường lực trước
     def form(state):
         return tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
-                                             'args': {'state': state}}).update
-    upd = form({'cart': [PHONE_IN_CART], 'cross_sell': ['charger'], 'declined': True})
-    assert 'order_form' not in upd and "accessory_type='ốp lưng, cường lực'" in upd['messages'][0].content
-    assert form({'cart': [PHONE_IN_CART], 'cross_sell': ['charger', 'accessories']})['order_form'] is True
-    case = {'name': 'Ốp lưng', 'category': 'accessory', 'accessory_type': 'case', 'price': 1, 'quantity': 1}
-    assert form({'cart': [PHONE_IN_CART, case], 'cross_sell': ['charger']})['order_form'] is True  # đã mua ốp
-    acc_only = {**case, 'name': 'Cáp', 'accessory_type': 'cable'}
-    assert form({'cart': [acc_only]})['order_form'] is True                                      # giỏ không có máy
+                                             'args': {'state': {'stage': 'closing', **state}}}).update
+    for done in ([], ['bundle']):
+        upd = form({'cart': [PHONE_IN_CART], 'cross_sell': done})
+        assert 'order_form' not in upd and 'Chưa mở form: chưa xong bước bán kèm' in upd['messages'][0].content
+    assert form({'cart': [PHONE_IN_CART], 'cross_sell': ['bundle', 'again']})['order_form'] is True  # bước 3
+    assert form({'cart': [PHONE_IN_CART, CASE], 'cross_sell': ['bundle']})['order_form'] is True    # đã lấy ốp
+    acc_only = {**CASE, 'name': 'Cáp', 'accessory_type': 'cable'}
+    assert form({'cart': [acc_only]})['order_form'] is True                                          # giỏ không có máy

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -76,6 +77,7 @@ class OrderRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     phone: str = Field(pattern=r'^(0|\+84)\d{9}$')
     address: str = Field(min_length=10, max_length=300)
+    email: str | None = Field(default=None, max_length=254)  # không bắt buộc
     # Form hiện chỉ hỗ trợ giao tận nơi, thanh toán khi nhận hàng
     fulfillment_type: Literal['delivery'] = 'delivery'
     payment: Literal['cod'] = 'cod'
@@ -84,6 +86,17 @@ class OrderRequest(BaseModel):
     @classmethod
     def strip(cls, v):
         return v.strip() if isinstance(v, str) else v
+
+    @field_validator('email', mode='before')
+    @classmethod
+    def check_email(cls, v):
+        # Bỏ trống -> None; có nhập thì phải đúng dạng (giống kiểm tra trên form)
+        if not isinstance(v, str) or not v.strip():
+            return None
+        v = v.strip()
+        if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', v):
+            raise ValueError('Email chưa đúng định dạng')
+        return v
 
     @field_validator('phone', mode='before')
     @classmethod
@@ -246,7 +259,7 @@ def order(req: OrderRequest, request: Request):
     cart = agent.get_state(config).values.get('cart') or []
     try:
         order_id = orders.create_order(cart, req.name, req.phone, req.address, req.fulfillment_type, req.payment,
-                                       thread_id=req.thread_id)
+                                       thread_id=req.thread_id, email=req.email)
         saved = orders.get_order(order_id)
     except orders.OrderError as e:
         raise HTTPException(409, str(e))
@@ -257,7 +270,8 @@ def order(req: OrderRequest, request: Request):
     answer = f'{orders.summary(saved)}\n\n{thanks}'
     # Lượt sau agent biết đơn đã đặt; giỏ hàng làm trống để khách mua tiếp không bị cộng dồn
     agent.update_state(config, {'messages': [HumanMessage('Đã gửi thông tin đặt hàng'), AIMessage(answer)],
-                                'cart': [], 'order_form': False, 'orders': [order_id]}, as_node='track_reply')
+                                'cart': [], 'order_form': False, 'orders': [order_id], 'cross_sell': None},
+                       as_node='track_reply')
     return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
                          thanks=thanks)
 
@@ -268,5 +282,5 @@ def cancel_order(req: CancelRequest, request: Request):
     agent = request.app.state.agent
     config = {'configurable': {'thread_id': req.thread_id}}
     agent.update_state(config, {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(orders.CANCEL_MESSAGE)],
-                                'cart': [], 'order_form': False}, as_node='track_reply')
+                                'cart': [], 'order_form': False, 'cross_sell': None}, as_node='track_reply')
     return CancelResponse(thread_id=req.thread_id, answer=orders.CANCEL_MESSAGE)

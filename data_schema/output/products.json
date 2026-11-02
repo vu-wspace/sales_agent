@@ -1331,6 +1331,30 @@
     }
   },
   {
+    "product_id": "acc-apple-hrgx2zm",
+    "name": "Cáp Sạc mophie USB-C sang USB-C 240W (3M) - Đen",
+    "brand": "Apple",
+    "category": "accessory",
+    "description": "Cáp Sạc mophie USB-C sang USB-C 240W (3M) - Đen",
+    "attributes": {
+      "accessory_type": "cable",
+      "sku": "HRGX2ZM/A",
+      "source_url": "https://www.apple.com/vn/shop/product/hrgx2zm/a/c%C3%A1p-s%E1%BA%A1c-mophie-usb-c-sang-usb-c-240w-3m-%C4%91en"
+    }
+  },
+  {
+    "product_id": "acc-apple-hrww2zm",
+    "name": "Bộ Sạc Anker Cube 3 trong 1 Chuẩn Qi2 – Xám",
+    "brand": "Apple",
+    "category": "accessory",
+    "description": "Bộ Sạc Anker Cube 3 trong 1 Chuẩn Qi2 – Xám",
+    "attributes": {
+      "accessory_type": "charger",
+      "sku": "HRWW2ZM/A",
+      "source_url": "https://www.apple.com/vn/shop/product/hrww2zm/a/anker-3-in-1-cube-with-qi2-gray"
+    }
+  },
+  {
     "product_id": "acc-apple-hq452zm",
     "name": "Bộ sạc trên ô tô mophie Dual (USB-C/USB-A) 32W PD",
     "brand": "Apple",
@@ -1379,42 +1403,6 @@
     }
   },
   {
-    "product_id": "acc-apple-hrgx2zm",
-    "name": "Cáp Sạc mophie USB-C sang USB-C 240W (3M) - Đen",
-    "brand": "Apple",
-    "category": "accessory",
-    "description": "Cáp Sạc mophie USB-C sang USB-C 240W (3M) - Đen",
-    "attributes": {
-      "accessory_type": "cable",
-      "sku": "HRGX2ZM/A",
-      "source_url": "https://www.apple.com/vn/shop/product/hrgx2zm/a/c%C3%A1p-s%E1%BA%A1c-mophie-usb-c-sang-usb-c-240w-3m-%C4%91en"
-    }
-  },
-  {
-    "product_id": "acc-apple-hrww2zm",
-    "name": "Bộ Sạc Anker Cube 3 trong 1 Chuẩn Qi2 – Xám",
-    "brand": "Apple",
-    "category": "accessory",
-    "description": "Bộ Sạc Anker Cube 3 trong 1 Chuẩn Qi2 – Xám",
-    "attributes": {
-      "accessory_type": "charger",
-      "sku": "HRWW2ZM/A",
-      "source_url": "https://www.apple.com/vn/shop/product/hrww2zm/a/anker-3-in-1-cube-with-qi2-gray"
-    }
-  },
-  {
-    "product_id": "acc-apple-hrgs2zm",
-    "name": "Cáp Sạc mophie USB-A sang USB-C (1M) - Đen",
-    "brand": "Apple",
-    "category": "accessory",
-    "description": "Cáp Sạc mophie USB-A sang USB-C (1M) - Đen",
-    "attributes": {
-      "accessory_type": "cable",
-      "sku": "HRGS2ZM/A",
-      "source_url": "https://www.apple.com/vn/shop/product/hrgs2zm/a/c%C3%A1p-s%E1%BA%A1c-mophie-usb-a-sang-usb-c-1m-%C4%91en"
-    }
-  },
-  {
     "product_id": "acc-apple-hrgg2zm",
     "name": "Bộ Sạc Gắn Tường 2 Cổng Belkin BoostCharge (42W)",
     "brand": "Apple",
@@ -1424,6 +1412,18 @@
       "accessory_type": "charger",
       "sku": "HRGG2ZM/A",
       "source_url": "https://www.apple.com/vn/shop/product/hrgg2zm/a/b%E1%BB%99-s%E1%BA%A1c-g%E1%BA%AFn-t%C6%B0%E1%BB%9Dng-2-c%E1%BB%95ng-belkin-boostcharge-42w"
+    }
+  },
+  {
+    "product_id": "acc-apple-hs5b2zm",
+    "name": "Cáp Sạc mophie USB-A sang USB-C (1m) - Xanh Mòng Két",
+    "brand": "Apple",
+    "category": "accessory",
+    "description": "Cáp Sạc mophie USB-A sang USB-C (1m) - Xanh Mòng Két",
+    "attributes": {
+      "accessory_type": "cable",
+      "sku": "HS5B2ZM/A",
+      "source_url": "https://www.apple.com/vn/shop/product/hs5b2zm/a/c%C3%A1p-s%E1%BA%A1c-mophie-usb-a-sang-usb-c-1m-xanh-m%C3%B2ng-k%C3%A9t"
     }
   },
   {
@@ -1439,27 +1439,15 @@
     }
   },
   {
-    "product_id": "acc-apple-md3j4za",
-    "name": "Bộ sạc USB-C 20W",
-    "brand": "Apple",
-    "category": "accessory",
-    "description": "Bộ sạc USB-C 20W",
-    "attributes": {
-      "accessory_type": "charger",
-      "sku": "MD3J4ZA/A",
-      "source_url": "https://www.apple.com/vn/shop/product/md3j4za/a/b%E1%BB%99-s%E1%BA%A1c-usb-c-20w"
-    }
-  },
-  {
     "product_id": "acc-apple-mw2k3za",
-    "name": "Bộ Tiếp Hợp Nguồn Cổng USB-C Kép 35W",
+    "name": "Bộ Tiếp Hợp Nguồn Cổng Kép 35W",
     "brand": "Apple",
     "category": "accessory",
-    "description": "Bộ Tiếp Hợp Nguồn Cổng USB-C Kép 35W",
+    "description": "Bộ Tiếp Hợp Nguồn Cổng Kép 35W",
     "attributes": {
       "accessory_type": "charger",
       "sku": "MW2K3ZA/A",
-      "source_url": "https://www.apple.com/vn/shop/product/mw2k3za/a/b%E1%BB%99-ti%E1%BA%BFp-h%E1%BB%A3p-ngu%E1%BB%93n-c%E1%BB%95ng-usb-c-k%C3%A9p-35w"
+      "source_url": "https://www.apple.com/vn/shop/product/mw2k3za/a/b%E1%BB%99-ti%E1%BA%BFp-h%E1%BB%A3p-ngu%E1%BB%93n-c%E1%BB%95ng-k%C3%A9p-35w"
     }
   },
   {
@@ -1568,6 +1556,18 @@
       "accessory_type": "case",
       "sku": "GP-FFF776CUCTW",
       "source_url": "https://www.samsung.com/vn/mobile-accessories/galaxy-z-flip8-flipsuit-card-with-case-lucky-clover-green-gp-fff776cuctw/"
+    }
+  },
+  {
+    "product_id": "acc-samsung-gp-teu026bsabw",
+    "name": "Vòng Giá Đỡ Kim Loại Đôi Galaxy",
+    "brand": "Samsung",
+    "category": "accessory",
+    "description": "Vòng Giá Đỡ Kim Loại Đôi Galaxy",
+    "attributes": {
+      "accessory_type": "holder",
+      "sku": "GP-TEU026BSABW",
+      "source_url": "https://www.samsung.com/vn/mobile-accessories/dual-magnet-holder-slim-black-gp-teu026bsabw/"
     }
   },
   {
@@ -2423,6 +2423,18 @@
     }
   },
   {
+    "product_id": "acc-samsung-gp-tou026pgbbw",
+    "name": "Ví Đựng Thẻ Kép Nam Châm Magnet Valentinus S",
+    "brand": "Samsung",
+    "category": "accessory",
+    "description": "Ví Đựng Thẻ Kép Nam Châm Magnet Valentinus S",
+    "attributes": {
+      "accessory_type": "wallet",
+      "sku": "GP-TOU026PGBBW",
+      "source_url": "https://www.samsung.com/vn/mobile-accessories/valentinus-s-black-gp-tou026pgbbw/"
+    }
+  },
+  {
     "product_id": "acc-samsung-gp-tou026hialw",
     "name": "Ví Đựng Thẻ Nam Châm Magnet",
     "brand": "Samsung",
@@ -2432,18 +2444,6 @@
       "accessory_type": "wallet",
       "sku": "GP-TOU026HIALW",
       "source_url": "https://www.samsung.com/vn/mobile-accessories/magnet-card-wallet-ice-blue-gp-tou026hialw/"
-    }
-  },
-  {
-    "product_id": "acc-samsung-gp-tou026pgabw",
-    "name": "Vòng Giá Đỡ Kim Loại Kép Nam Châm Magnet",
-    "brand": "Samsung",
-    "category": "accessory",
-    "description": "Vòng Giá Đỡ Kim Loại Kép Nam Châm Magnet",
-    "attributes": {
-      "accessory_type": "holder",
-      "sku": "GP-TOU026PGABW",
-      "source_url": "https://www.samsung.com/vn/mobile-accessories/dual-magnet-holder-black-gp-tou026pgabw/"
     }
   },
   {

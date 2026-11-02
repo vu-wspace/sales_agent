@@ -8,7 +8,7 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
-from phone_sales.conversation import added_to_cart_this_turn, cross_sell_offers
+from phone_sales.conversation import added_to_cart_this_turn, cross_sell_step
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_sales.vector_db import get_vector_store
@@ -232,14 +232,15 @@ def _bigger_storages(chosen: list[dict], bigger: list[dict]) -> str:
     return 'Dung lượng lớn hơn còn hàng: ' + ', '.join(parts)
 
 @tool
-def find_accessories(phone: str, accessory_type: str = '', page: int = 1) -> str:
+def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuine_only: bool = False) -> str:
     """Tìm phụ kiện tương thích với 1 điện thoại: ốp lưng, miếng dán màn hình, củ sạc, cáp, sạc dự phòng,
     S Pen, ví, giá đỡ. phone: tên máy (vd 'iPhone 17', 'Galaxy S26 Ultra').
     accessory_type: loại phụ kiện (vd 'ốp lưng', 'sạc', 'củ sạc', 'cáp', 'cường lực'), nhiều loại cách nhau dấu phẩy
     (vd 'sạc, cáp' hoặc 'ốp lưng, cường lực': mỗi loại 2 món), để trống để xem tất cả loại.
     'củ sạc' chỉ lấy củ sạc cắm tường (bỏ sạc không dây, MagSafe, ô tô; hộp máy đã có cáp thì bỏ loại kèm cáp).
     Mỗi lần trả 5 phụ kiện (còn hàng trước, chính hãng trước, rẻ trước); tìm sạc/cáp thì kèm máy có sẵn gì trong hộp.
-    Khách muốn xem thêm thì gọi lại với page=2, 3..."""
+    Khách muốn xem thêm thì gọi lại với page=2, 3...
+    genuine_only=True: chỉ lấy hàng chính hãng (cùng hãng với máy), dùng khi mời bán kèm."""
     # Nhiều loại cách nhau dấu phẩy ("sạc, cáp", "ốp lưng, cường lực"): mỗi loại lấy vài món, không bị 1 loại chiếm hết
     asked = [s.strip() for s in re.split(r',|\+|\bvà\b', accessory_type) if s.strip()]
     kinds = list(dict.fromkeys(_accessory_type(s) for s in asked))
@@ -268,11 +269,15 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1) -> str
         # Hộp máy đã có cáp thì bỏ bộ củ sạc kèm cáp, chỉ lấy củ sạc
         skip = NOT_WALL_CHARGER + (r'|(?<!không )kèm cáp' if box and box['cable'] else '')
         rows = [r for r in rows if not (r['kind'] == 'charger' and re.search(skip, r['name'].lower()))]
-    header = f"Phụ kiện tương thích với {p['name']}:"
+    if genuine_only:
+        # Bán kèm chỉ mời hàng chính hãng: lọc ở đây, prompt dặn thì model vẫn hay lấy hàng hãng khác cho đủ số món
+        rows = [r for r in rows if _genuine(r, p['brand'])]
+    header = f"Phụ kiện {'chính hãng ' * genuine_only}tương thích với {p['name']}:"
     if box and {'charger', 'cable'} & set(kinds):
         header = f"Trong hộp {p['name']}: {box['text']}.\n" + header
     if not rows:
-        return f"Chưa có phụ kiện {accessory_type or ''} tương thích với {p['name']}.".replace('  ', ' ')
+        return (f"Chưa có phụ kiện {accessory_type or ''} {'chính hãng ' * genuine_only}tương thích với {p['name']}."
+                .replace('  ', ' '))
     # Còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây/ô tô (máy thiếu là thiếu củ sạc), rẻ trước
     rows.sort(key=lambda r: (r['stock'] <= 0, not _genuine(r, p['brand']),
                              r['kind'] == 'charger' and bool(re.search(NOT_WALL_CHARGER, r['name'].lower())), r['price']))
@@ -440,16 +445,10 @@ def show_order_form(state: Annotated[dict, InjectedState],
         return _cart_reply(tool_call_id, 'Chưa mở form: khách vừa thêm hàng vào giỏ ở lượt này. Làm theo mục "Bán kèm" '
                            'trong trạng thái (nếu có) rồi hỏi khách có xác nhận đặt hàng không; khách xác nhận ở '
                            'lượt sau thì mới gọi show_order_form.')
-    phone = next((i for i in cart if i.get('category', 'phone') == 'phone'), None)
-    offered = {*(state.get('cross_sell') or []), *cross_sell_offers(state.get('messages') or [])}
-    in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
-    if phone and 'accessories' not in offered and not in_cart & {'case', 'screen-protector'}:
+    if cross_sell_step(state) in ('bundle', 'again'):
         # "Không cần sạc, xác nhận đặt hàng" cùng 1 tin: model hay mở form luôn, bỏ qua bước mời ốp lưng, cường lực
-        return _cart_reply(tool_call_id, f"Chưa mở form: chưa mời ốp lưng, cường lực cho {phone['name']}. Gọi "
-                           f"find_accessories cho {phone['name']} với accessory_type='ốp lưng, cường lực', mời nhẹ "
-                           '2-3 món, mỗi món 1 gạch đầu dòng kèm giá (không nhắc lại sạc khách đã từ chối), rồi hỏi '
-                           'khách lấy thêm món nào hay xác nhận đặt hàng luôn. Khách xác nhận ở lượt sau thì mới gọi '
-                           'show_order_form.')
+        return _cart_reply(tool_call_id, 'Chưa mở form: chưa xong bước bán kèm. Làm theo mục "Bán kèm" trong trạng '
+                           'thái hội thoại (mời ốp lưng, cường lực), rồi hỏi khách lấy thêm hay xác nhận đặt hàng.')
     total = sum(i['price'] * i['quantity'] for i in cart)
     # Giao diện đọc order_form trong state để hiện form; khách gửi form thì api.py (POST /order) tạo đơn
     return Command(update={'order_form': True, 'messages': [ToolMessage(

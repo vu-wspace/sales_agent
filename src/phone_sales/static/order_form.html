@@ -27,11 +27,11 @@
 *{box-sizing:border-box}
 body{margin:0;padding:16px;background:var(--surface-0);color:var(--text-primary)}
 input,textarea,button{font:inherit;color:inherit}
-input[type=text],input[type=tel],textarea{
+input[type=text],input[type=tel],input[type=email],textarea{
   width:100%;padding:8px 10px;border:0.5px solid var(--border-strong);
   border-radius:var(--radius);background:var(--surface-2);
 }
-input[type=text],input[type=tel]{height:36px}
+input[type=text],input[type=tel],input[type=email]{height:36px}
 input::placeholder,textarea::placeholder{color:var(--text-muted)}
 input:focus,textarea:focus{outline:none;border-color:var(--border-accent);box-shadow:0 0 0 2px var(--bg-accent)}
 textarea:disabled{opacity:.6;cursor:not-allowed;resize:none}
@@ -40,6 +40,12 @@ button{
   border:0.5px solid var(--border-strong);border-radius:var(--radius);background:transparent;
 }
 button:hover{background:var(--surface-1)}
+.actions{display:flex;gap:8px;margin-top:14px}
+.actions button{margin-top:0}
+.actions .cancel{width:auto;flex:0 0 auto;padding:0 16px}
+.actions .primary{flex:1;background:var(--text-accent);border-color:var(--text-accent);color:var(--surface-2)}
+.actions .primary:hover{opacity:.9;background:var(--text-accent)}
+.total{display:flex;justify-content:space-between;font-size:14px;font-weight:500;padding:8px 0;border-bottom:0.5px solid var(--border)}
 .chat{max-width:440px;margin:0 auto;background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:16px}
 .head{display:flex;align-items:center;gap:8px;padding-bottom:10px;border-bottom:0.5px solid var(--border);margin-bottom:12px;font-weight:500}
 .head i{font-size:20px;color:var(--text-accent)}
@@ -67,11 +73,12 @@ button:hover{background:var(--surface-1)}
 <div class="chat">
   <div class="head"><i class="ti ti-device-mobile" aria-hidden="true"></i>PhoneShop Demo</div>
 
-  <div class="bub user">Ok em lấy S24 màu xanh nhé</div>
-  <div class="bub bot">Dạ vâng ạ. Anh/chị điền giúp em thông tin nhận hàng bên dưới nhé.</div>
+  <div class="bub user">Xác nhận đặt hàng</div>
+  <div class="bub bot">Anh/chị vui lòng điền form đặt hàng bên dưới nhé.</div>
 
   <form id="orderForm" class="card" novalidate>
-    <div class="product"><span>Galaxy S24 · Xanh · 256GB</span><b>20.990.000đ</b></div>
+    <div class="product"><span>1 x Galaxy S26 · 256GB · Đen Classic</span><b>29.990.001đ</b></div>
+    <div class="total"><span>Tổng cộng</span><span>29.990.001đ</span></div>
 
     <label class="lbl" for="fname">Họ tên người nhận</label>
     <input type="text" id="fname" name="name" placeholder="Nguyễn Văn A" autocomplete="name">
@@ -80,6 +87,10 @@ button:hover{background:var(--surface-1)}
     <label class="lbl" for="fphone">Số điện thoại</label>
     <input type="tel" id="fphone" name="phone" placeholder="0123456789" autocomplete="tel">
     <p class="err" id="e-phone"></p>
+
+    <label class="lbl" for="femail">Email (không bắt buộc)</label>
+    <input type="email" id="femail" name="email" placeholder="ten@example.com" autocomplete="email">
+    <p class="err" id="e-email"></p>
 
     <span class="lbl">Cách nhận hàng</span>
     <div class="opts">
@@ -102,7 +113,11 @@ button:hover{background:var(--surface-1)}
     </div>
     <textarea id="fnote" name="note" rows="2" disabled placeholder="Giao giờ hành chính, gọi trước khi giao..."></textarea>
 
-    <button type="submit">Xác nhận đặt hàng</button>
+    <p class="err" id="e-submit"></p>
+    <div class="actions">
+      <button type="button" class="cancel" id="cancelBtn">Hủy đặt hàng</button>
+      <button type="submit" class="primary">Xác nhận đặt hàng</button>
+    </div>
   </form>
 
   <div id="result"></div>
@@ -110,7 +125,7 @@ button:hover{background:var(--surface-1)}
 
 <script>
 const $ = id => document.getElementById(id);
-const fields = { fname: "e-name", fphone: "e-phone", faddr: "e-addr" };
+const fields = { fname: "e-name", fphone: "e-phone", femail: "e-email", faddr: "e-addr" };
 
 Object.entries(fields).forEach(([input, err]) =>
   $(input).addEventListener("input", () => { $(err).textContent = ""; })
@@ -124,36 +139,52 @@ $("orderForm").addEventListener("submit", async (e) => {
   const name = $("fname").value.trim();
   const phone = $("fphone").value.replace(/[\s.\-]/g, "");
   const address = $("faddr").value.trim();
+  const email = $("femail").value.trim();
   let ok = true;
 
   if (name.length < 2) { $("e-name").textContent = "Nhập họ tên người nhận"; ok = false; }
   if (!/^(0|\+84)\d{9}$/.test(phone)) { $("e-phone").textContent = "Số điện thoại chưa đúng định dạng"; ok = false; }
   if (address.length < 10) { $("e-addr").textContent = "Nhập địa chỉ đầy đủ hơn"; ok = false; }
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $("e-email").textContent = "Email chưa đúng định dạng"; ok = false; }
   if (!ok) return;
 
+  // Giỏ hàng không gửi từ trình duyệt: server lấy giỏ của hội thoại theo thread_id (index.html làm như vậy)
   const payload = {
-    variant_id: "S24_BLUE_256",
+    thread_id: "THREAD_ID",
     name, phone, address,
+    email: email || null,  // không bắt buộc; lưu vào orders.recipient_email (và customers.email nếu chưa thuộc khách khác)
     fulfillment_type: "delivery",
     payment: "cod"
   };
 
-  // Nối với backend của bạn tại đây, ví dụ:
-  // const res = await fetch("/api/order-form", {
+  // App thật (api.py): POST /order -> {order_id, order, thanks, answer}; lỗi 409 hết hàng/giỏ trống, 422 sai thông tin
+  // const res = await fetch("/order", {
   //   method: "POST",
   //   headers: { "Content-Type": "application/json" },
   //   body: JSON.stringify(payload)
   // });
   // const { order_id } = await res.json();
-  const order_id = "DH1024";
+  const order_id = "DH3F9A1C2B";
 
-  const masked = phone.slice(0, 3) + "****" + phone.slice(-3);
+  // Tóm tắt theo cùng mẫu orders.summary (bản thật dựng thẻ .receipt từ dữ liệu database)
+  const pretty = /^0\d{9}$/.test(phone) ? phone.replace(/^(\d{4})(\d{3})(\d{3})$/, "$1 $2 $3") : phone;
   $("orderForm").style.display = "none";
   $("result").innerHTML =
-    '<div class="bub user">Đã gửi thông tin</div>' +
-    '<div class="bub bot"><i class="ti ti-check ok" aria-hidden="true"></i> Đơn #' + escapeHtml(order_id) +
-    ' đã được tạo. Em sẽ gọi xác nhận qua số ' + masked +
-    ' và giao tới địa chỉ anh/chị đã cung cấp. Thanh toán khi nhận hàng.</div>';
+    '<div class="bub user">Đã gửi thông tin đặt hàng</div>' +
+    '<div class="bub bot">Đặt hàng thành công. Mã đơn: <b>#' + escapeHtml(order_id) + '</b><br>' +
+    'Người nhận: ' + escapeHtml(name) + '<br>Điện thoại: ' + escapeHtml(pretty) + '<br>' +
+    (email ? 'Email: ' + escapeHtml(email) + '<br>' : '') +
+    'Địa chỉ: ' + escapeHtml(address) + '<br>Nhận hàng: Giao tận nơi<br>Thanh toán: Thanh toán khi nhận hàng<br>' +
+    'Tổng cộng: <b>29.990.001đ</b><br>Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao.</div>';
+});
+
+// Hủy: không tạo đơn. App thật gọi POST /order/cancel {thread_id} -> {answer} (câu cố định CANCEL_MESSAGE trong orders.py)
+$("cancelBtn").addEventListener("click", () => {
+  $("orderForm").style.display = "none";
+  $("result").innerHTML =
+    '<div class="bub user">Hủy đặt hàng</div>' +
+    '<div class="bub bot">Thật tiếc, em đã hủy yêu cầu đặt hàng của anh/chị. ' +
+    'Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?</div>';
 });
 </script>
 </body>

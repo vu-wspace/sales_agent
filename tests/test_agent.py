@@ -129,4 +129,4 @@ def test_all_models_cooling_down_still_tries_everything():
 def test_graph_uses_same_chain(chain):
     from phone_sales.graph import build_graph
     res = build_graph().invoke({'messages': [{'role': 'user', 'content': 'chào'}]})
-    assert res['messages'][-1].text == 'Dạ, em là model dự phòng cuối ạ.'
+    assert res['messages'][-1].text == 'Dạ, em là model dự phòng cuối.'  # bỏ chữ "ạ"

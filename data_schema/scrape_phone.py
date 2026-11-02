@@ -529,7 +529,8 @@ def build_accessories(apple_acc, samsung_acc, phones):
             compatible = [galaxy_by_slug[target]["product_id"]]
         elif slug.startswith("galaxy-"):
             compatible = []  # phụ kiện cho model không còn bán trong DB
-        elif slug.startswith("magnet-") or "holder" in slug or "wireless" in slug:
+        elif slug.startswith("magnet-") or "holder" in slug or "wireless" in slug or "magnet" in a["name"].lower():
+            # Tên có "Nam Châm Magnet" nhưng slug không bắt đầu bằng magnet- (vd ví Valentinus S)
             compatible = wireless_galaxy  # sạc không dây / nam châm: dòng A không hỗ trợ
         elif re.search(r"power-adapter|battery-pack|charger", slug):
             compatible = all_phone_ids
@@ -553,22 +554,49 @@ def sql_lit(v) -> str:
 
 
 def write_sql(products, variants, compat, path: Path):
+    # Không TRUNCATE variants/products: order_items (đơn hàng) có khóa ngoại tới variants, Postgres không cho
+    # TRUNCATE bảng đang bị tham chiếu. Ghi đè từng dòng (upsert), rồi xóa dòng không còn bán; phiên bản đã nằm
+    # trong đơn hàng thì giữ lại cho đơn cũ, đặt tồn kho 0 để không bán nữa.
+    variant_ids = "ARRAY[" + ", ".join(sql_lit(v["variant_id"]) for v in variants) + "]::text[]"
+    product_ids = "ARRAY[" + ", ".join(sql_lit(p["product_id"]) for p in products) + "]::text[]"
     lines = [
         "-- Seed dữ liệu cho database phone (sinh tự động bởi scrape_phone.py)",
-        "-- Nạp: psql -U postgres -d phone -f output/phone_seed.sql",
+        "-- Nạp: psql -U postgres -d phone -f output/phone_seed.sql (chạy lại nhiều lần được, giữ đơn hàng)",
         "SET client_encoding = 'UTF8';",
         "BEGIN;",
-        "TRUNCATE public.compatibility, public.variants, public.products;",
+        "TRUNCATE public.compatibility;",
     ]
     for p in products:
         vals = ", ".join(sql_lit(p[k]) for k in ("product_id", "name", "brand", "category", "description", "attributes"))
-        lines.append(f"INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ({vals});")
+        lines.append(f"INSERT INTO public.products (product_id, name, brand, category, description, attributes) VALUES ({vals}) "
+                     "ON CONFLICT (product_id) DO UPDATE SET name = EXCLUDED.name, brand = EXCLUDED.brand, "
+                     "category = EXCLUDED.category, description = EXCLUDED.description, attributes = EXCLUDED.attributes;")
     for v in variants:
         vals = ", ".join(sql_lit(v[k]) for k in ("variant_id", "product_id", "color", "storage", "price", "stock"))
-        lines.append(f"INSERT INTO public.variants (variant_id, product_id, color, storage, price, stock) VALUES ({vals});")
+        lines.append(f"INSERT INTO public.variants (variant_id, product_id, color, storage, price, stock) VALUES ({vals}) "
+                     "ON CONFLICT (variant_id) DO UPDATE SET product_id = EXCLUDED.product_id, color = EXCLUDED.color, "
+                     "storage = EXCLUDED.storage, price = EXCLUDED.price, stock = EXCLUDED.stock;")
     for c in compat:
         lines.append(f"INSERT INTO public.compatibility (accessory_id, phone_id) VALUES ({sql_lit(c['accessory_id'])}, {sql_lit(c['phone_id'])});")
-    lines.append("COMMIT;")
+    # Bảng order_items chỉ có khi web app đã chạy (orders.sql): kiểm tra trước, PL/pgSQL chỉ dịch câu lệnh khi chạy tới
+    lines += [
+        "DO $seed$",
+        "DECLARE has_orders boolean := to_regclass('public.order_items') IS NOT NULL;",
+        "BEGIN",
+        "  IF has_orders THEN",
+        f"    UPDATE public.variants v SET stock = 0 WHERE NOT (v.variant_id = ANY({variant_ids}))",
+        "      AND EXISTS (SELECT 1 FROM public.order_items oi WHERE oi.variant_id = v.variant_id);",
+        f"    DELETE FROM public.variants v WHERE NOT (v.variant_id = ANY({variant_ids}))",
+        "      AND NOT EXISTS (SELECT 1 FROM public.order_items oi WHERE oi.variant_id = v.variant_id);",
+        "  ELSE",
+        f"    DELETE FROM public.variants v WHERE NOT (v.variant_id = ANY({variant_ids}));",
+        "  END IF;",
+        f"  DELETE FROM public.products p WHERE NOT (p.product_id = ANY({product_ids}))",
+        "    AND NOT EXISTS (SELECT 1 FROM public.variants v WHERE v.product_id = p.product_id);",
+        "END",
+        "$seed$;",
+        "COMMIT;",
+    ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

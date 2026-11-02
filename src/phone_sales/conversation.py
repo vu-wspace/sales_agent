@@ -27,6 +27,10 @@ def append_unique(old: list | None, new: list | None) -> list:
 def append(old: list | None, new: list | None) -> list:
     return [*(old or []), *(new or [])]
 
+def steps(old: list | None, new: list | None) -> list:
+    # None: làm lại từ đầu (đơn đã đặt/đã hủy, giỏ trống -> lần mua sau bán kèm lại từ bước 1)
+    return [] if new is None else append_unique(old, new)
+
 class AgentState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]  # lịch sử tin nhắn (nối thêm, không ghi đè)
     stage: Stage                                          # đang ở bước nào của quy trình bán hàng
@@ -36,7 +40,7 @@ class AgentState(TypedDict, total=False):
     objections: Annotated[list[str], append_unique]       # khách đang chê/lo ngại gì
     sentiment_history: Annotated[list[str], append]       # cảm xúc của khách qua từng lượt
     handoff: bool                                         # có cần chuyển nhân viên không (đã bật thì giữ)
-    cross_sell: Annotated[list[str], append_unique]       # bước bán kèm đã mời: 'charger' (sạc, cáp), 'accessories'
+    cross_sell: Annotated[list[str], steps]               # bước bán kèm đã làm: 'bundle', 'again', 'confirm'
     declined: bool                                        # tin nhắn mới nhất của khách là từ chối ("không cần")
     order_form: bool                                      # lượt này hiện form đặt hàng (show_order_form)
     orders: Annotated[list[str], append]                  # mã các đơn đã đặt trong cuộc trò chuyện (api.py: /order)
@@ -154,15 +158,6 @@ def track_tool_results(messages: list[AnyMessage]) -> dict:
                 slots.setdefault('brand', args['brand'])
     return {'slots': slots}
 
-def cross_sell_offers(messages: list[AnyMessage]) -> list[str]:
-    """Bước bán kèm đã mời trong lượt này, suy từ loại phụ kiện model tìm: sạc/cáp -> 'charger', còn lại -> 'accessories'."""
-    offers = []
-    for call, _ in _tool_results(messages):
-        if call['name'] == 'find_accessories':
-            kind = (call['args'].get('accessory_type') or '').lower()
-            offers.append('charger' if re.search(r'sạc|cáp|sac|cap', kind) else 'accessories')
-    return list(dict.fromkeys(offers))
-
 def _candidate_products(messages: list[AnyMessage]) -> list[str]:
     # Tên sản phẩm xuất hiện trong kết quả tool của lượt này: danh sách search_products ("- Tên (Hãng): ..."),
     # dòng đầu get_product_details ("Tên (Hãng)"), dòng phụ kiện find_accessories ("- Tên: giá | kho")
@@ -212,8 +207,8 @@ STAGE_GUIDE = {
     'recommending': 'Đã giới thiệu sản phẩm. Trả lời câu hỏi về máy đó; khách có vẻ ưng thì hỏi màu/dung lượng và mời thêm vào giỏ.',
     'comparing': 'Khách đang phân vân giữa các máy. So sánh ngắn theo đúng nhu cầu đã biết, đưa ra 1 gợi ý rõ ràng kèm lý do.',
     # Không kèm phí/thời gian giao, kỳ hạn trả góp: model tự bịa ("trả góp 3-24 tháng", chính sách là tối đa 12 tháng)
-    'closing': 'Khách đã chọn hàng. Xác nhận giỏ hàng và tổng tiền, hỏi khách có chốt đơn không. Khách xác nhận đặt '
-               'hàng thì gọi show_order_form (form hỏi tên, số điện thoại, địa chỉ, thanh toán), không hỏi các thông tin '
+    'closing': 'Khách đã chọn hàng. Làm theo mục "Bán kèm" bên dưới nếu có; không có thì xác nhận giỏ hàng và tổng '
+               'tiền, hỏi khách có chốt đơn không. Khách xác nhận đặt hàng thì gọi show_order_form (form hỏi tên, số điện thoại, địa chỉ, thanh toán), không hỏi các thông tin '
                'đó bằng chữ. Không tự nêu phí, thời gian giao, kỳ hạn hay đối tác trả góp; '
                'khách hỏi chi tiết thì gọi search_policy.',
     'handoff': 'Cần chuyển nhân viên. Xin lỗi nếu khách không hài lòng, nêu bước cần làm theo chính sách (nếu có), '
@@ -255,37 +250,82 @@ def describe(state: dict) -> str:
         lines.append(hint)
     return '\n'.join(lines)
 
-def cross_sell_hint(state: dict) -> str | None:
-    """Bước bán kèm tiếp theo khi khách đã cho điện thoại vào giỏ (bước closing), mỗi lượt tối đa 1 lời mời:
-    1. Máy không kèm củ sạc: mời sạc + cáp chính hãng; hộp đã có cáp thì chỉ mời 2-3 củ sạc chính hãng.
-    2. Ốp lưng, cường lực (2-3 món). Khách vừa từ chối sạc thì mời nhẹ.
-    3. Khách từ chối tiếp: không mời nữa, hỏi khách có chốt đơn không."""
-    cart = state.get('cart') or []
+CROSS_SELL_ACCESSORIES = {'case', 'screen-protector'}
+
+def _phone_in_cart(cart: list[dict]) -> dict | None:
     # Giỏ tạo trước khi có trường category thì coi là điện thoại
-    phone = next((i for i in cart if i.get('category', 'phone') == 'phone'), None)
-    if state.get('stage') != 'closing' or not phone:
+    return next((i for i in cart if i.get('category', 'phone') == 'phone'), None)
+
+def cross_sell_step(state: dict) -> str | None:
+    """Bước bán kèm của lượt này khi giỏ có điện thoại (bước closing), mỗi bước đúng 1 lượt:
+    'bundle': lượt chọn máy, mời cùng lúc củ sạc (máy không kèm) và ốp lưng, cường lực.
+    'again': khách lấy củ sạc hoặc không lấy gì -> mời lại nhẹ ốp lưng, cường lực (đã lấy ốp/cường lực thì bỏ qua).
+    'confirm': khách lấy phụ kiện hoặc không -> xác nhận đơn (giỏ hàng, tổng tiền), không mời thêm.
+    Bước đã làm lưu trong state['cross_sell'] (graph.track_reply ghi cuối mỗi lượt)."""
+    cart = state.get('cart') or []
+    phone = _phone_in_cart(cart)
+    unhappy = (state.get('sentiment_history') or [])[-1:] == ['negative']
+    if state.get('stage') != 'closing' or not phone or unhappy:
         return None
-    if cross_sell_offers(state.get('messages') or []):
-        return None  # lượt này đã mời rồi, bước kế tiếp để lượt sau
-    offered = set(state.get('cross_sell') or [])
+    done = set(state.get('cross_sell') or [])
     in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
-    name = phone['name']
-    declined = bool(state.get('declined'))
-    if phone.get('charger_in_box') is False and 'charger' not in offered and 'charger' not in in_cart:
-        if phone.get('cable_in_box'):
-            # Hộp đã có cáp: chỉ mời củ sạc, vài lựa chọn chính hãng từ rẻ tới đắt
-            return (f"Bán kèm (bước 1): hộp {name} đã có cáp sạc nhưng không kèm củ sạc; nói rõ điều này với khách. "
-                    f"Gọi find_accessories cho {name} với accessory_type='củ sạc', liệt kê 2-3 củ sạc "
-                    "chính hãng (dòng có 'chính hãng'; chỉ có 1 thì mời 1, không lấy món ở mục 'Hãng khác'), mỗi món 1 gạch đầu dòng kèm giá, xếp từ rẻ tới đắt. "
-                    "Không mời cáp. Lượt này chưa mời ốp lưng, cường lực.")
-        return (f"Bán kèm (bước 1): {name} không kèm củ sạc trong hộp. Gọi find_accessories cho {name} với "
-                "accessory_type='sạc, cáp', mời 1 củ sạc chính hãng và 1 cáp sạc chính hãng (củ sạc đã kèm cáp thì "
-                "không cần mời cáp) kèm giá, nói đúng như dòng 'Trong hộp'. Lượt này chưa mời ốp lưng, cường lực.")
-    if 'accessories' not in offered and not in_cart & {'case', 'screen-protector'}:
-        light = ' Khách vừa không lấy sạc: chỉ mời nhẹ 1 câu, không nhắc lại sạc.' if 'charger' in offered and declined else ''
-        return (f"Bán kèm (bước 2): gọi find_accessories cho {name} với accessory_type='ốp lưng, cường lực', "
-                f"mời 2-3 món kèm giá trong 1-2 câu ngắn.{light}")
-    if declined and offered:
-        return ('Bán kèm: khách không cần thêm phụ kiện. Không mời thêm, không ép; '
-                'hỏi khách có chốt đơn với giỏ hàng hiện tại không.')
+    if 'bundle' not in done:
+        return 'bundle'
+    if 'again' not in done and not in_cart & CROSS_SELL_ACCESSORIES:
+        return 'again'
+    if 'confirm' not in done:
+        return 'confirm'
     return None
+
+def cross_sell_hint(state: dict) -> str | None:
+    """Hướng dẫn + mẫu câu trả lời cho bước bán kèm của lượt này (xem cross_sell_step)."""
+    step = cross_sell_step(state)
+    if step is None:
+        return None
+    cart = state.get('cart') or []
+    name = _phone_in_cart(cart)['name']
+    if step == 'bundle':
+        return _bundle_hint(cart)
+    if step == 'again':
+        return ("Bán kèm (bước 2/3): khách chọn món nào trong tin nhắn (củ sạc, ốp lưng, cường lực) thì add_to_cart món "
+                "đó. Khách chưa lấy ốp lưng, cường lực thì mời lại nhẹ (dùng các món đã mời ở lượt trước, không nhắc lại "
+                "củ sạc). Chưa gọi show_order_form, kể cả khi khách nói xác nhận. Trả lời theo mẫu:\n"
+                "[1 câu: đã thêm món khách chọn và tổng giỏ; khách không lấy gì thì bỏ câu này]\n"
+                f"Anh/chị có muốn thêm ốp lưng hoặc cường lực để bảo vệ {name} không?\n"
+                "- [tên món]: [giá]\n"
+                "Nếu không cần thêm, anh/chị xác nhận đặt hàng giúp em nhé.")
+    return ("Bán kèm đã xong (bước 3/3), không mời thêm phụ kiện. Khách chọn món nào trong tin nhắn thì add_to_cart món "
+            "đó. Khách đã nói xác nhận/chốt đơn trong tin nhắn này mà không thêm món mới thì gọi show_order_form. "
+            "Còn lại trả lời theo mẫu (giỏ hàng, tổng tiền lấy từ trạng thái hoặc kết quả tool):\n"
+            "Đơn hàng của anh/chị:\n"
+            "- [số lượng] x [tên, dung lượng, màu]: [giá]\n"
+            "Tổng cộng: [tổng tiền]\n"
+            "Anh/chị xác nhận đặt hàng để em mở form điền thông tin nhận hàng nhé?")
+
+def _bundle_hint(cart: list[dict]) -> str:
+    phone = _phone_in_cart(cart)
+    name = phone['name']
+    in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
+    need_charger = phone.get('charger_in_box') is False and 'charger' not in in_cart
+    calls = [f"find_accessories(phone='{name}', accessory_type='ốp lưng, cường lực', genuine_only=True)"]
+    box = ''
+    if need_charger:
+        if phone.get('cable_in_box'):
+            # Hộp đã có cáp: chỉ mời củ sạc (tool bỏ loại kèm cáp), vài lựa chọn từ rẻ tới đắt
+            calls.insert(0, f"find_accessories(phone='{name}', accessory_type='củ sạc', genuine_only=True)")
+            box = f"Hộp {name} đã có cáp sạc nhưng chưa kèm củ sạc.\n"
+            charger = "Củ sạc chính hãng (2-3 món, từ rẻ tới đắt; tool chỉ có 1 thì mời 1; không mời cáp):\n"
+        else:
+            calls.insert(0, f"find_accessories(phone='{name}', accessory_type='sạc, cáp', genuine_only=True)")
+            box = f"{name} không kèm củ sạc trong hộp (nói đúng như dòng 'Trong hộp').\n"
+            charger = "Củ sạc, cáp chính hãng (1 củ sạc + 1 cáp; củ sạc đã kèm cáp thì không cần cáp):\n"
+        charger += "- [tên món]: [giá]\n"
+    else:
+        charger = ''
+    return ("Bán kèm (bước 1/3, ngay lượt này): mời cùng lúc"
+            + (" củ sạc và" if need_charger else '') + " ốp lưng, cường lực. Gọi " + ' và '.join(calls)
+            + ". Chỉ dùng món có trong kết quả tool; nhóm nào tool không có món thì bỏ nhóm đó. "
+            "Chưa gọi show_order_form. Trả lời theo mẫu:\n"
+            "Em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ.\n" + box + charger
+            + "Ốp lưng, cường lực chính hãng (2-3 món):\n- [tên món]: [giá]\n"
+            "Anh/chị muốn lấy thêm món nào không?")

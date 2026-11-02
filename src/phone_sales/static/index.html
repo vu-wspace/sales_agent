@@ -51,7 +51,7 @@
   .order .item, .order .total { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
   .order .total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; font-weight: 600; }
   .order .lbl { display: block; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
-  .order input[type=text], .order input[type=tel], .order textarea {
+  .order input[type=text], .order input[type=tel], .order input[type=email], .order textarea {
     width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 8px; resize: none; }
   .order input:focus, .order textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -112,6 +112,9 @@
       <label class="lbl">Số điện thoại
         <input type="tel" name="phone" maxlength="20" placeholder="0123456789" autocomplete="tel"></label>
       <p class="ferr" data-for="phone"></p>
+      <label class="lbl">Email (không bắt buộc)
+        <input type="email" name="email" maxlength="254" placeholder="ten@example.com" autocomplete="email"></label>
+      <p class="ferr" data-for="email"></p>
       <span class="lbl">Cách nhận hàng</span>
       <div class="opts">
         <div class="opt on">Giao tận nơi</div>
@@ -137,7 +140,7 @@
     </form>
   </template>
   <form id="form">
-    <textarea id="input" rows="2" maxlength="1000" placeholder="Anh/chị đang tìm máy nào ạ?" required></textarea>
+    <textarea id="input" rows="2" maxlength="1000" placeholder="Anh/chị đang tìm máy nào?" required></textarea>
     <button id="send">Gửi</button>
   </form>
 </main>
@@ -263,10 +266,12 @@
       const name = f.elements.name.value.trim();
       const phone = f.elements.phone.value.replace(/[\s.\-]/g, '');
       const address = f.elements.address.value.trim();
+      const email = f.elements.email.value.trim();
       let ok = true;
       if (name.length < 2) { err('name').textContent = 'Nhập họ tên người nhận'; ok = false; }
       if (!/^(0|\+84)\d{9}$/.test(phone)) { err('phone').textContent = 'Số điện thoại chưa đúng định dạng'; ok = false; }
       if (address.length < 10) { err('address').textContent = 'Nhập địa chỉ đầy đủ hơn'; ok = false; }
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err('email').textContent = 'Email chưa đúng định dạng'; ok = false; }
       if (!ok) return;
       const button = f.querySelector('button[type=submit]');
       f.querySelector('.cancel').disabled = true;
@@ -278,7 +283,7 @@
         const r = await fetch('/order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ thread_id: threadId, name, phone, address,
+          body: JSON.stringify({ thread_id: threadId, name, phone, address, email: email || null,
                                  fulfillment_type: 'delivery', payment: 'cod' }),
         });
         data = await r.json().catch(() => ({}));
@@ -356,8 +361,9 @@
 
     const info = el('section');
     const dl = el('dl');
-    for (const [k, v] of [['Người nhận', o.name], ['Điện thoại', prettyPhone(o.phone)], ['Địa chỉ', o.address],
-                          ['Nhận hàng', o.fulfillment], ['Thanh toán', o.payment]]) {
+    const rows = [['Người nhận', o.name], ['Điện thoại', prettyPhone(o.phone)], ['Email', o.email],
+                  ['Địa chỉ', o.address], ['Nhận hàng', o.fulfillment], ['Thanh toán', o.payment]];
+    for (const [k, v] of rows.filter(([, v]) => v)) {  // không nhập email thì không có dòng Email
       dl.append(el('dt', '', k), el('dd', '', v));
     }
     info.append(el('h3', '', 'Thông tin nhận hàng'), dl);
@@ -385,7 +391,7 @@
   function greet() {
     log.replaceChildren();
     threadId = null;
-    add('Dạ em chào anh/chị. Em có thể tư vấn iPhone, Samsung Galaxy, phụ kiện tương thích, giá và tình trạng hàng, cùng các chính sách đổi trả, giao hàng, trả góp và bảo hành ạ.');
+    add('Dạ em chào anh/chị. Em có thể tư vấn iPhone, Samsung Galaxy, phụ kiện tương thích, giá và tình trạng hàng, cùng các chính sách đổi trả, giao hàng, trả góp và bảo hành.');
   }
 
   form.addEventListener('submit', async (e) => {

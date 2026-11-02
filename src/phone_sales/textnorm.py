@@ -48,9 +48,14 @@ def normalize_user_text(text: str) -> str:
 def _keep_case(src: str, dst: str) -> str:
     return dst.upper() if src.isupper() else dst[0].upper() + dst[1:] if src[0].isupper() else dst
 
+# Chữ "ạ" đứng riêng ("không ạ?", "vâng ạ"), không đụng "Dạ", "lạ", "hạ"
+A_PARTICLE_RE = re.compile(r'[ \t]*(?<!\w)ạ(?!\w)', re.I)
+
 def clean_answer(text: str) -> str:
     # Một số model (Nemotron, Qwen) để lộ phần suy nghĩ <think>...</think> trong câu trả lời
     text = re.sub(r'<think>.*?</think>', '', nfc(text), flags=re.S | re.I)
     text = INVISIBLE.sub('', text)
+    # Cửa hàng không dùng "ạ" (prompt đã dặn, đây là chốt chặn khi model vẫn viết)
+    text = A_PARTICLE_RE.sub('', text)
     text = re.sub(r'[ \t]+\n', '\n', text)
     return re.sub(r'\n{3,}', '\n\n', text).strip()
