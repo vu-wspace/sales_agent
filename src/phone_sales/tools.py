@@ -445,7 +445,7 @@ def show_order_form(state: Annotated[dict, InjectedState],
         return _cart_reply(tool_call_id, 'Chưa mở form: khách vừa thêm hàng vào giỏ ở lượt này. Làm theo mục "Bán kèm" '
                            'trong trạng thái (nếu có) rồi hỏi khách có xác nhận đặt hàng không; khách xác nhận ở '
                            'lượt sau thì mới gọi show_order_form.')
-    if cross_sell_step(state) in ('bundle', 'again'):
+    if cross_sell_step(state) in ('charger', 'accessories'):
         # "Không cần sạc, xác nhận đặt hàng" cùng 1 tin: model hay mở form luôn, bỏ qua bước mời ốp lưng, cường lực
         return _cart_reply(tool_call_id, 'Chưa mở form: chưa xong bước bán kèm. Làm theo mục "Bán kèm" trong trạng '
                            'thái hội thoại (mời ốp lưng, cường lực), rồi hỏi khách lấy thêm hay xác nhận đặt hàng.')

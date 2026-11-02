@@ -42,10 +42,10 @@ AGENT_PROMPTS = {
              dung lượng lớn hơn kèm số tiền chênh ghi ở dòng "Dung lượng lớn hơn còn hàng" của get_product_details.
            - Máy ở mục "Nhỉnh hơn ngân sách" của search_products: chỉ nhắc 1 máy khi hợp nhu cầu hơn rõ rệt, nói rõ là
              vượt ngân sách bao nhiêu (số ghi sau "vượt").
-           - Khách chốt mua điện thoại, bán kèm bằng find_accessories theo 3 lượt:
-             (1) lượt chọn máy: mời cùng lúc củ sạc (máy không kèm củ sạc theo dòng "Trong hộp"; hộp đã có cáp thì
-                 nói rõ và chỉ mời 2-3 củ sạc chính hãng từ rẻ tới đắt) và 2-3 món ốp lưng, cường lực;
-             (2) khách lấy củ sạc hoặc không lấy gì: mời lại nhẹ ốp lưng, cường lực;
+           - Khách chốt mua điện thoại, bán kèm bằng find_accessories, mỗi lượt mời 1 loại:
+             (1) lượt chọn máy: máy không kèm củ sạc (dòng "Trong hộp") thì chỉ mời củ sạc (hộp đã có cáp thì nói rõ
+                 và mời 2-3 củ sạc chính hãng từ rẻ tới đắt), chưa mời ốp lưng, cường lực;
+             (2) khách lấy củ sạc hoặc không: mời 2-3 món ốp lưng, cường lực (máy đã kèm củ sạc thì bắt đầu từ đây);
              (3) khách lấy phụ kiện hoặc không: xác nhận đơn (giỏ hàng, tổng tiền), không mời thêm.
              Làm đúng mục "Bán kèm" trong trạng thái hội thoại. Ưu tiên món ghi "chính hãng".
              Nói đúng trong hộp có gì: hộp có cáp thì không nói máy thiếu cáp.

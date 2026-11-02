@@ -215,7 +215,7 @@ flowchart LR
 ### Đặt hàng
 
 1. Khách nêu tên máy mà chưa nói phiên bản ("Tui muốn mua iPhone 17", "cho tui coi Galaxy S26"): agent gọi `get_product_details`, liệt kê mỗi dung lượng 1 dòng (giá, màu, còn hàng) và hỏi khách chọn phiên bản. Khách nói đủ máy, dung lượng, màu thì sang bước 2 luôn.
-2. Lượt khách chọn máy ("chốt S26 256GB đen"): agent `add_to_cart` rồi bán kèm 3 lượt (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)): mời cùng lúc củ sạc và ốp lưng, cường lực → mời lại ốp lưng, cường lực → xác nhận đơn. `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ và khi bán kèm chưa xong.
+2. Lượt khách chọn máy ("chốt S26 256GB đen"): agent `add_to_cart` rồi bán kèm 3 lượt (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)): mời củ sạc (máy không kèm) → mời ốp lưng, cường lực → xác nhận đơn, mỗi lượt 1 loại. `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ và khi bán kèm chưa xong.
 3. Khách xác nhận ("xác nhận đặt hàng", "chốt đơn"): agent gọi `show_order_form`, giao diện hiện form (`index.html`, theo thiết kế `static/order_form.html`) với giỏ hàng và tổng tiền.
 4. Khách gửi form → `POST /order` (`orders.py`), trong 1 transaction:
    - trừ tồn kho, thiếu hàng thì hủy cả đơn;
@@ -241,7 +241,7 @@ flowchart LR
 | `objections` | Lo ngại của khách (giá, pin, nhiệt độ, camera…) |
 | `sentiment_history` | Cảm xúc từng lượt |
 | `handoff` | Cần chuyển nhân viên |
-| `cross_sell` | Các bước bán kèm đã làm: `bundle`, `again`, `confirm`; đặt hàng hoặc hủy đơn thì làm lại từ đầu |
+| `cross_sell` | Các bước bán kèm đã làm: `charger`, `accessories`, `confirm`; đặt hàng hoặc hủy đơn thì làm lại từ đầu |
 | `declined` | Tin nhắn mới nhất của khách là từ chối ("không cần", "khỏi"…) |
 | `order_form` | Lượt này hiện form đặt hàng |
 | `orders` | Mã các đơn đã đặt trong hội thoại |
@@ -260,19 +260,19 @@ Tool trả sẵn dữ liệu để model gợi ý bằng số liệu thật, kh�
 
 Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 
-**Bán kèm phụ kiện** (`cross_sell_step`, `cross_sell_hint` trong `conversation.py`): 3 bước, mỗi bước đúng 1 lượt chat, không mời khi khách đang bực. Cuối mỗi lượt `track_reply` ghi bước vừa làm vào `cross_sell`, lượt sau sang bước kế tiếp.
+**Bán kèm phụ kiện** (`cross_sell_step`, `cross_sell_hint` trong `conversation.py`): tối đa 3 bước, mỗi lượt chat mời 1 loại, không mời khi khách đang bực. Cuối mỗi lượt `track_reply` ghi bước vừa làm vào `cross_sell`, lượt sau sang bước kế tiếp.
 
 | Bước | Khi nào | Model làm gì |
 |---|---|---|
-| 1. `bundle` | Lượt khách chọn máy (giỏ vừa có điện thoại) | Mời **cùng lúc** củ sạc và ốp lưng, cường lực: gọi `find_accessories` 2 lần, trả lời 2 nhóm "Củ sạc" và "Ốp lưng, cường lực", mỗi món 1 gạch đầu dòng kèm giá. Hộp đã có cáp: nói rõ, chỉ mời 2–3 củ sạc chính hãng không kèm cáp, từ rẻ tới đắt. Hộp không có cáp: củ sạc và cáp. Máy đã kèm củ sạc hoặc giỏ đã có củ sạc: chỉ mời ốp lưng, cường lực |
-| 2. `again` | Khách lấy củ sạc hoặc không lấy gì | Thêm món khách chọn vào giỏ, mời lại nhẹ ốp lưng, cường lực (không nhắc lại củ sạc). Khách đã lấy ốp/cường lực thì bỏ qua bước này |
+| 1. `charger` | Lượt khách chọn máy, máy không kèm củ sạc và giỏ chưa có củ sạc | Chỉ mời củ sạc, chưa mời ốp lưng, cường lực. Hộp đã có cáp: nói rõ, mời 2–3 củ sạc chính hãng không kèm cáp, từ rẻ tới đắt. Hộp không có cáp: 1 củ sạc + 1 cáp |
+| 2. `accessories` | Khách lấy củ sạc hoặc không (máy đã kèm củ sạc thì đây là bước đầu, ngay lượt chọn máy) | Thêm củ sạc nếu khách chọn, mời 2–3 món ốp lưng, cường lực chính hãng (không nhắc lại củ sạc). Khách đã tự lấy ốp/cường lực thì bỏ qua bước này |
 | 3. `confirm` | Khách lấy phụ kiện hoặc không | Thêm món khách chọn, không mời thêm; xác nhận đơn: liệt kê giỏ hàng, tổng tiền, hỏi khách xác nhận đặt hàng. Khách đã nói xác nhận trong tin này thì mở form luôn |
 
 `show_order_form` không mở form khi đang ở bước 1 hoặc 2, kể cả khi khách nói "không cần, xác nhận đặt hàng" (model hay mở form luôn, bỏ qua bước mời ốp lưng, cường lực). Đặt hàng (`POST /order`) hoặc hủy (`POST /order/cancel`) thì `cross_sell` về rỗng, lần mua sau bán kèm lại từ bước 1.
 
 - **Hộp máy có gì:** iPhone đọc từ mục "Trong Hộp Sản Phẩm" (cáp USB-C, không có củ sạc). Web Samsung không có mục này, nên `IN_BOX_BY_BRAND` trong `tools.py` **giả định** Galaxy chỉ kèm cáp, không kèm củ sạc; cần kiểm tra lại với từng model. Máy không rõ thông tin thì bỏ qua bước 1.
 - **Chính hãng:** phụ kiện cùng hãng với máy; hàng Beats, mophie, Belkin, Anker do cửa hàng Apple bán không tính là chính hãng. `find_accessories` xếp còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây hoặc sạc ô tô, rồi rẻ trước, và nhận nhiều loại một lúc (`'sạc, cáp'`: mỗi loại 2 món). `'củ sạc'` chỉ trả củ sạc cắm tường, bỏ sạc không dây, MagSafe, sạc ô tô; nếu hộp máy đã có cáp thì bỏ cả bộ củ sạc kèm cáp (khách không mua thêm cáp lần hai). Bước 1 dùng loại này khi hộp đã có cáp, nên Galaxy hiện chỉ có 1 củ sạc chính hãng để mời (60W). Danh sách 1 loại tách riêng mục "Hãng khác" sau hàng chính hãng. Bước bán kèm gọi `find_accessories(..., genuine_only=True)`: tool bỏ hẳn hàng hãng khác (chỉ dặn trong prompt thì model vẫn lấy củ sạc Apple, Belkin cho Galaxy cho đủ số món), có 1 món thì mời 1, không có món nào thì bỏ nhóm đó.
-- **Mẫu câu trả lời:** mỗi bước có mẫu riêng trong `cross_sell_hint` (`_bundle_hint` cho bước 1): bước 1 "Em đã thêm … vào giỏ" + dòng hộp máy có gì + nhóm "Củ sạc chính hãng" + nhóm "Ốp lưng, cường lực chính hãng" + "Anh/chị muốn lấy thêm món nào không?"; bước 2 mời lại ốp lưng, cường lực + "Nếu không cần thêm, anh/chị xác nhận đặt hàng giúp em nhé."; bước 3 "Đơn hàng của anh/chị:" + từng món + "Tổng cộng" + hỏi xác nhận.
+- **Mẫu câu trả lời:** mỗi bước có mẫu riêng trong `cross_sell_hint`: bước củ sạc "Em đã thêm … vào giỏ" + dòng hộp máy có gì + "Củ sạc chính hãng" + "Anh/chị có muốn lấy thêm củ sạc không?"; bước ốp lưng, cường lực "Anh/chị có muốn thêm ốp lưng hoặc cường lực để bảo vệ … không?" + danh sách + "Nếu không cần thêm, anh/chị xác nhận đặt hàng giúp em nhé."; bước xác nhận "Đơn hàng của anh/chị:" + từng món + "Tổng cộng" + hỏi xác nhận.
 - **Nhận diện từ chối** (`DECLINE` trong `conversation.py`) dùng từ khóa: "không cần", "khỏi", "không lấy", "chưa cần", "để sau", "thôi không", "vậy thôi"… Các bước bán kèm không phụ thuộc vào việc nhận ra từ chối (khách lấy hay không đều sang bước kế tiếp), nhưng cách nói lạ ("để em tính", viết không dấu "ko can") vẫn có thể ảnh hưởng tới cảm xúc và bước bán hàng. Chữ "thôi" đứng một mình không tính là từ chối vì hay dùng khi chốt ("lấy luôn thôi").
 
 ### Chuẩn hóa tin nhắn và chống bịa số liệu
@@ -436,7 +436,7 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 | `out_of_scope` | 2 | 2/2 | – | 2/2 | 2/2 | 5,00 |
 | **Tổng** | **37** | **31/33** | **24/24** | **6/6** | **37/37** | **4,81** |
 
-9 câu thêm/sửa ngày 02/11/2026 chưa có trong bảng: `spec-01`, `spec-02`, `upsell-01`, `upsell-02`, `cross-01` (bán kèm 3 bước: củ sạc + ốp lưng, cường lực cùng 1 lượt), `variants-01`, `variants-02` (khách nêu tên máy thì liệt kê phiên bản), `ground-01` (không nêu thông số không có trong dữ liệu), `norm-01` (tin nhắn viết tắt). Chạy khi OpenRouter còn quota: `uv run python evals/run_eval.py --target graph --only spec-01,spec-02,upsell,cross_sell,variants-01,variants-02,ground-01,norm-01`.
+9 câu thêm/sửa ngày 02/11/2026 chưa có trong bảng: `spec-01`, `spec-02`, `upsell-01`, `upsell-02`, `cross-01` (bán kèm lượt đầu: chỉ củ sạc chính hãng), `variants-01`, `variants-02` (khách nêu tên máy thì liệt kê phiên bản), `ground-01` (không nêu thông số không có trong dữ liệu), `norm-01` (tin nhắn viết tắt). Chạy khi OpenRouter còn quota: `uv run python evals/run_eval.py --target graph --only spec-01,spec-02,upsell,cross_sell,variants-01,variants-02,ground-01,norm-01`.
 
 Độ trễ trung bình 15,8 giây mỗi câu do model chính là model suy luận. Kết quả chi tiết lưu ở `evals/results/` (không commit).
 
