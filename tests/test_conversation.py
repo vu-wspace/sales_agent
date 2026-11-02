@@ -248,7 +248,7 @@ def test_graph_keeps_state_across_turns(monkeypatch, fake_catalog):
 
 def test_show_order_form_needs_cart():
     cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
-                                        'args': {'state': {'cart': [PHONE_IN_CART]}}})
+                                        'args': {'state': {'cart': [PHONE_IN_CART], 'cross_sell': ['accessories']}}})
     assert cmd.update['order_form'] is True and 'Đã hiện form đặt hàng cho 1 sản phẩm' in cmd.update['messages'][0].content
     empty = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c2', 'args': {'state': {}}})
     assert 'order_form' not in empty.update and 'Giỏ hàng đang trống' in empty.update['messages'][0].content
@@ -266,5 +266,20 @@ def test_show_order_form_not_in_same_turn_as_add_to_cart():
     later = turn + [AIMessage('Anh/chị xác nhận đặt hàng không?'), HumanMessage('xác nhận'),
                     AIMessage('', tool_calls=[{'name': 'show_order_form', 'args': {}, 'id': 'c2'}])]
     cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c2',
-                                        'args': {'state': {'cart': [PHONE_IN_CART], 'messages': later}}})
+                                        'args': {'state': {'cart': [PHONE_IN_CART], 'messages': later,
+                                                           'cross_sell': ['charger', 'accessories']}}})
     assert cmd.update['order_form'] is True
+
+
+def test_show_order_form_offers_cases_first():
+    # "Không cần sạc, xác nhận đặt hàng giúp mình": chưa mời ốp lưng, cường lực thì mời 1 lần trước khi mở form
+    def form(state):
+        return tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
+                                             'args': {'state': state}}).update
+    upd = form({'cart': [PHONE_IN_CART], 'cross_sell': ['charger'], 'declined': True})
+    assert 'order_form' not in upd and "accessory_type='ốp lưng, cường lực'" in upd['messages'][0].content
+    assert form({'cart': [PHONE_IN_CART], 'cross_sell': ['charger', 'accessories']})['order_form'] is True
+    case = {'name': 'Ốp lưng', 'category': 'accessory', 'accessory_type': 'case', 'price': 1, 'quantity': 1}
+    assert form({'cart': [PHONE_IN_CART, case], 'cross_sell': ['charger']})['order_form'] is True  # đã mua ốp
+    acc_only = {**case, 'name': 'Cáp', 'accessory_type': 'cable'}
+    assert form({'cart': [acc_only]})['order_form'] is True                                      # giỏ không có máy

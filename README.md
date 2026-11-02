@@ -178,7 +178,7 @@ Em cảm ơn anh Nguyễn Văn A…"}
 // request
 {"thread_id": "5f0c…"}
 // response: câu cố định CANCEL_MESSAGE trong orders.py, không gọi LLM
-{"thread_id": "5f0c…", "answer": "Thật tiếc, em đã hủy yêu cầu đặt hàng của anh/chị. Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không ạ?"}
+{"thread_id": "5f0c…", "answer": "Thật tiếc, em đã hủy yêu cầu đặt hàng của anh/chị. Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?"}
 ```
 
 Không tạo đơn, không đụng database. Ghi vào lịch sử hội thoại "Hủy đặt hàng" + `answer`, và làm trống giỏ hàng để agent không tiếp tục mời chốt đơn hay bán kèm cho giỏ đã hủy (khách muốn mua lại thì chọn máy lại). Thiếu `thread_id` trả `422`.
@@ -221,7 +221,7 @@ flowchart LR
    - ghi `orders` (mã `DH…`) và `order_items`.
 5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
 6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
-7. Khách bấm **Hủy đặt hàng** trên form → `POST /order/cancel`: bỏ form, hiện câu "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không ạ?", giỏ hàng làm trống, không tạo đơn.
+7. Khách bấm **Hủy đặt hàng** trên form → `POST /order/cancel`: bỏ form, hiện câu "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?", giỏ hàng làm trống, không tạo đơn.
 
 `agent.py` dựng bằng `create_agent`, dùng chung LLM, tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng.
 

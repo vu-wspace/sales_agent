@@ -8,7 +8,7 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
-from phone_sales.conversation import added_to_cart_this_turn
+from phone_sales.conversation import added_to_cart_this_turn, cross_sell_offers
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_sales.vector_db import get_vector_store
@@ -440,6 +440,16 @@ def show_order_form(state: Annotated[dict, InjectedState],
         return _cart_reply(tool_call_id, 'Chưa mở form: khách vừa thêm hàng vào giỏ ở lượt này. Làm theo mục "Bán kèm" '
                            'trong trạng thái (nếu có) rồi hỏi khách có xác nhận đặt hàng không; khách xác nhận ở '
                            'lượt sau thì mới gọi show_order_form.')
+    phone = next((i for i in cart if i.get('category', 'phone') == 'phone'), None)
+    offered = {*(state.get('cross_sell') or []), *cross_sell_offers(state.get('messages') or [])}
+    in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
+    if phone and 'accessories' not in offered and not in_cart & {'case', 'screen-protector'}:
+        # "Không cần sạc, xác nhận đặt hàng" cùng 1 tin: model hay mở form luôn, bỏ qua bước mời ốp lưng, cường lực
+        return _cart_reply(tool_call_id, f"Chưa mở form: chưa mời ốp lưng, cường lực cho {phone['name']}. Gọi "
+                           f"find_accessories cho {phone['name']} với accessory_type='ốp lưng, cường lực', mời nhẹ "
+                           '2-3 món, mỗi món 1 gạch đầu dòng kèm giá (không nhắc lại sạc khách đã từ chối), rồi hỏi '
+                           'khách lấy thêm món nào hay xác nhận đặt hàng luôn. Khách xác nhận ở lượt sau thì mới gọi '
+                           'show_order_form.')
     total = sum(i['price'] * i['quantity'] for i in cart)
     # Giao diện đọc order_form trong state để hiện form; khách gửi form thì api.py (POST /order) tạo đơn
     return Command(update={'order_form': True, 'messages': [ToolMessage(
