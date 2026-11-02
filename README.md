@@ -199,14 +199,15 @@ flowchart LR
 
 ### Đặt hàng
 
-1. Lượt khách chọn máy ("chốt S26 256GB đen"): agent `add_to_cart`, mời bán kèm, hỏi khách có xác nhận đặt hàng không. `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ.
-2. Khách xác nhận ("xác nhận đặt hàng", "chốt đơn"): agent gọi `show_order_form`, giao diện hiện form (`index.html`, theo thiết kế `static/order_form.html`) với giỏ hàng và tổng tiền.
-3. Khách gửi form → `POST /order` (`orders.py`), trong 1 transaction:
+1. Khách nêu tên máy mà chưa nói phiên bản ("Tui muốn mua iPhone 17", "cho tui coi Galaxy S26"): agent gọi `get_product_details`, liệt kê mỗi dung lượng 1 dòng (giá, màu, còn hàng) và hỏi khách chọn phiên bản. Khách nói đủ máy, dung lượng, màu thì sang bước 2 luôn.
+2. Lượt khách chọn máy ("chốt S26 256GB đen"): agent `add_to_cart`, mời bán kèm, hỏi khách có xác nhận đặt hàng không. `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ.
+3. Khách xác nhận ("xác nhận đặt hàng", "chốt đơn"): agent gọi `show_order_form`, giao diện hiện form (`index.html`, theo thiết kế `static/order_form.html`) với giỏ hàng và tổng tiền.
+4. Khách gửi form → `POST /order` (`orders.py`), trong 1 transaction:
    - trừ tồn kho, thiếu hàng thì hủy cả đơn;
    - khách cũ nhận theo số điện thoại (cập nhật tên, địa chỉ), khách mới thì tạo `customers` (mã `KH…`);
    - ghi `orders` (mã `DH…`) và `order_items`.
-4. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định.
-5. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
+5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
+6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
 
 `agent.py` dựng bằng `create_agent`, dùng chung LLM, tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng.
 
@@ -306,7 +307,7 @@ Database `phone` (schema `data_schema/phone.sql`, dữ liệu `data_schema/outpu
 | `orders` | Đơn hàng: mã `DH…`, khách, người nhận, địa chỉ, cách nhận, thanh toán, tổng tiền, trạng thái (`pending`) |
 | `order_items` | Sản phẩm trong đơn: phiên bản, số lượng, đơn giá lúc đặt |
 
-Schema đơn hàng ở `data_schema/orders.sql` (`CREATE TABLE IF NOT EXISTS`), web app chạy file này mỗi lần khởi động. `order_items.variant_id` có khóa ngoại tới `variants`: khi đã có đơn, `db-seed` (`TRUNCATE variants`) sẽ báo lỗi.
+Schema đơn hàng ở `data_schema/orders.sql` (`CREATE TABLE IF NOT EXISTS`), web app chạy file này mỗi lần khởi động. `order_items.variant_id` có khóa ngoại tới `variants`: khi đã có bảng `order_items` (web app tạo lúc khởi động), `db-seed` (`TRUNCATE variants`) sẽ báo lỗi, kể cả khi chưa có đơn nào.
 
 Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_schema/scrape_phone.py`. Lưu ý:
 
@@ -410,6 +411,10 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 | `/chat` trả 429 hoặc 502 | Mọi LLM đều hết quota hoặc lỗi; xem `docker compose logs api \| grep LLM` |
 | `/health` trả 503 | Kiểm tra Qdrant và `QDRANT_URL` |
 | Sửa code nhưng web app không đổi | `docker compose up -d --build api` |
+| Sửa `index.html` nhưng trình duyệt vẫn hiện bản cũ | Build lại `api`, rồi tải lại trang bằng Ctrl+F5 |
+| Thẻ xác nhận đơn hoặc form đặt hàng bị cắt, mất nội dung | Giữ `#log > * { flex-shrink: 0; }` trong `index.html`: thiếu dòng này, khung chat đầy sẽ ép dẹp các thẻ có `overflow: hidden` |
+| `db-seed` báo `cannot truncate a table referenced in a foreign key constraint` | `order_items` có khóa ngoại tới `variants`, Postgres không cho TRUNCATE `variants` (kể cả khi chưa có đơn). Chưa có cách nạp lại mà giữ đơn hàng; `docker compose down -v` sẽ xóa cả đơn |
+| Bot chỉ đưa khoảng giá khi khách nêu tên máy | Xem log tool: phải là `get_product_details`; kiểm tra quy tắc 2 trong `prompts.py` |
 | `uvicorn` báo cổng 8000 đang dùng | Container `phone_sales_api` đang chạy; dùng `--port 8001` |
 | Trong Docker báo `CERTIFICATE_VERIFY_FAILED` | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
 
