@@ -10,6 +10,7 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 - Nhớ trạng thái hội thoại bán hàng (nhu cầu, máy đã giới thiệu, lo ngại, cảm xúc) và quản lý giỏ hàng.
 - Bán thêm: gợi ý dung lượng lớn hơn khi nhu cầu cần (kèm số tiền chênh), máy nhỉnh hơn ngân sách; khi khách chốt mua thì mời sạc chính hãng nếu máy không kèm sạc, rồi ốp lưng, cường lực.
 - Đặt hàng ngay trong khung chat: khách xác nhận thì hiện form (tên, số điện thoại, địa chỉ), đơn lưu vào Postgres, tóm tắt đơn lấy từ database.
+- Chuẩn hóa tin nhắn (Unicode, dấu kiểu cũ, viết tắt "ko", "dc", "20tr"…) và kiểm tra câu trả lời không bịa số liệu (giá, thông số, chính sách).
 - Chuyển nhân viên khi khách khiếu nại, đơn có vấn đề hoặc khách bực bội.
 - Stream trạng thái và câu trả lời theo thời gian thực.
 - Tự chuyển sang LLM dự phòng khi model chính lỗi hoặc hết quota.
@@ -110,6 +111,7 @@ Trong Docker, compose tự đặt `DATABASE_URL` và `QDRANT_URL` trỏ tới c�
 | `POST` | `/chat` | Gửi tin nhắn, nhận câu trả lời đầy đủ |
 | `POST` | `/chat/stream` | Như `/chat`, trả Server-Sent Events |
 | `POST` | `/order` | Gửi form đặt hàng, tạo đơn từ giỏ hàng của hội thoại |
+| `POST` | `/order/cancel` | Khách bấm "Hủy đặt hàng" trên form |
 | `GET` | `/health` | Trạng thái Qdrant và số đoạn chính sách |
 
 ### `POST /chat`
@@ -170,6 +172,17 @@ Em cảm ơn anh Nguyễn Văn A…"}
 - Kiểm tra giống form: tên ≥ 2 ký tự, số điện thoại `0`/`+84` + 9 số (bỏ dấu cách, chấm, gạch), địa chỉ ≥ 10 ký tự. Hiện chỉ nhận `delivery` và `cod`.
 - Mã lỗi: `422` thông tin sai, `409` giỏ trống hoặc hết hàng, `503` không ghi được database.
 
+### `POST /order/cancel`
+
+```jsonc
+// request
+{"thread_id": "5f0c…"}
+// response: câu cố định CANCEL_MESSAGE trong orders.py, không gọi LLM
+{"thread_id": "5f0c…", "answer": "Thật tiếc, em đã hủy yêu cầu đặt hàng của anh/chị. Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không ạ?"}
+```
+
+Không tạo đơn, không đụng database. Ghi vào lịch sử hội thoại "Hủy đặt hàng" + `answer`, và làm trống giỏ hàng để agent không tiếp tục mời chốt đơn hay bán kèm cho giỏ đã hủy (khách muốn mua lại thì chọn máy lại). Thiếu `thread_id` trả `422`.
+
 ## Kiến trúc
 
 ```mermaid
@@ -208,6 +221,7 @@ flowchart LR
    - ghi `orders` (mã `DH…`) và `order_items`.
 5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
 6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
+7. Khách bấm **Hủy đặt hàng** trên form → `POST /order/cancel`: bỏ form, hiện câu "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không ạ?", giỏ hàng làm trống, không tạo đơn.
 
 `agent.py` dựng bằng `create_agent`, dùng chung LLM, tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng.
 
@@ -254,6 +268,31 @@ Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 - **Hộp máy có gì:** iPhone đọc từ mục "Trong Hộp Sản Phẩm" (cáp USB-C, không có củ sạc). Web Samsung không có mục này, nên `IN_BOX_BY_BRAND` trong `tools.py` **giả định** Galaxy chỉ kèm cáp, không kèm củ sạc; cần kiểm tra lại với từng model. Máy không rõ thông tin thì bỏ qua bước 1.
 - **Chính hãng:** phụ kiện cùng hãng với máy; hàng Beats, mophie, Belkin, Anker do cửa hàng Apple bán không tính là chính hãng. `find_accessories` xếp còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây hoặc sạc ô tô, rồi rẻ trước, và nhận nhiều loại một lúc (`'sạc, cáp'`: mỗi loại 2 món). `'củ sạc'` chỉ trả củ sạc cắm tường, bỏ sạc không dây, MagSafe, sạc ô tô; nếu hộp máy đã có cáp thì bỏ cả bộ củ sạc kèm cáp (khách không mua thêm cáp lần hai). Bước 1 dùng loại này khi hộp đã có cáp, nên Galaxy hiện chỉ có 1 củ sạc chính hãng để mời (60W). Danh sách 1 loại tách riêng mục "Hãng khác" sau hàng chính hãng; bước bán kèm chỉ mời hàng chính hãng, có 1 món thì mời 1.
 - **Nhận diện từ chối** (`DECLINE` trong `conversation.py`) dùng từ khóa: "không cần", "khỏi", "không lấy", "chưa cần", "để sau", "thôi không", "vậy thôi"… Cách nói lạ ("để em tính", "cái đó em có rồi", viết không dấu "ko can", trả lời im lặng sang chủ đề khác) có thể bị bỏ sót, khi đó agent có thể mời tiếp bước sau thay vì mời nhẹ hoặc dừng. Chữ "thôi" đứng một mình không tính là từ chối vì hay dùng khi chốt ("lấy luôn thôi").
+
+### Chuẩn hóa tin nhắn và chống bịa số liệu
+
+**Chuẩn hóa tin nhắn** (`textnorm.py`, chạy trong `ChatRequest` của `api.py` và trong `track_user` của `graph.py`), để luật từ khóa, model và lịch sử cùng đọc một dạng:
+
+| Bước | Ví dụ |
+|---|---|
+| Unicode NFC: bàn phím iOS/macOS, vài bộ gõ gửi dấu rời, regex có dấu không khớp | `không` (o + 2 dấu rời) → `không` |
+| Bỏ ký tự vô hình (zero-width, BOM), gộp khoảng trắng | |
+| Dấu kiểu cũ → kiểu mới ở cuối từ | `huỷ` → `hủy`, `khoẻ` → `khỏe`, `hoà` → `hòa` (`Hoàng` giữ nguyên) |
+| Ký tự lặp | `đẹppppp` → `đẹp` |
+| Viết tắt, teencode (`ABBREVIATIONS`) | `ko`/`k`/`hok` → `không`, `dc` → `được`, `mik` → `mình`, `bn` → `bao nhiêu`, `e` → `em`, `20tr` → `20 triệu` |
+
+Viết tắt chỉ thay cả từ và không thay ngay sau số (`100 k` là tiền). Không thay `v`/`z` (trùng Z Fold, Z Flip), `ip`/`ss` (tên máy do `tools.py` xử lý). Độ dài tin nhắn (1–1000 ký tự) kiểm tra trên chuỗi gốc, chuẩn hóa xong mà rỗng thì trả `422`.
+
+**Chống bịa số liệu** (`grounding.py`, trong `call_model` của `graph.py`), bằng luật, không gọi thêm LLM:
+
+1. Lấy mọi số kèm đơn vị trong câu trả lời cuối: giá (`đ`, `triệu`), `mAh`, `MP`, `inch`, `Hz`, `W`, `GB`/`TB`, `giờ`/`ngày`/`tháng`/`năm`, `%`.
+2. Mỗi số phải có trong nguồn: kết quả tool, trạng thái hội thoại (giỏ hàng, tổng tiền, ngân sách) hoặc tin nhắn của khách. So bằng dãy chữ số (`4.900 mAh` = `4900mAh`); số `triệu` được làm tròn từ giá (lệch dưới 1 triệu).
+3. Không tính làm nguồn: câu trả lời cũ của model (số bịa ở lượt trước không thành có nguồn) và kết quả `web_search` (giá, thông số, chính sách chỉ theo dữ liệu cửa hàng).
+4. Có số không rõ nguồn: ghi log `Câu trả lời có số liệu không rõ nguồn [...]`, gửi lại model bản nháp kèm yêu cầu viết lại (chỉ dùng số từ công cụ, cần thì gọi tool, không có thì nói chưa có thông tin). Chỉ viết lại 1 lần; bản nháp sai không lưu vào lịch sử. Viết lại vẫn sai thì ghi log và giữ bản viết lại.
+
+Câu trả lời cuối được dọn: bỏ phần `<think>…</think>` một số model để lộ, bỏ dòng trống thừa.
+
+Ví dụ: Galaxy S26 chưa có thông số trong dữ liệu, model tra web rồi trả lời "camera chính 200 MP" → bị yêu cầu viết lại → "dữ liệu cửa hàng chưa có thông số camera của Galaxy S26".
 
 ### Tools
 
@@ -339,6 +378,8 @@ sales_agent/
 │   ├── graph.py                # Agent StateGraph (mặc định)
 │   ├── agent.py                # Agent create_agent
 │   ├── history.py              # Cắt gọn lịch sử trước khi gửi LLM
+│   ├── textnorm.py             # Chuẩn hóa tin nhắn của khách, dọn câu trả lời
+│   ├── grounding.py            # Kiểm tra số liệu trong câu trả lời có nguồn
 │   ├── data_prep.py            # Tách chính sách thành đoạn
 │   ├── vector_db.py            # Embedding và Qdrant
 │   ├── orders.py               # Lưu đơn đặt hàng, tóm tắt đơn
@@ -360,7 +401,7 @@ sales_agent/
 uv run pytest
 ```
 
-144 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+167 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
@@ -396,7 +437,8 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 
 - State hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker.
 - Form đặt hàng chỉ hỗ trợ giao tận nơi và thanh toán khi nhận hàng; chưa có trang quản lý đơn, đơn chỉ nằm trong database.
-- Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt lạ), kể cả câu từ chối phụ kiện bán kèm.
+- Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`), kể cả câu từ chối phụ kiện bán kèm.
+- Kiểm tra bịa số liệu chỉ xét số kèm đơn vị và chỉ trong `graph.py`: không bắt được câu bịa không có số ("máy chống nước tốt", sai tên màu), số trùng ngẫu nhiên với một số có trong nguồn, hay câu trả lời của `agent.py`.
 - API chưa có xác thực và giới hạn request.
 - Bộ eval nhỏ, chưa có câu hỏi nhiều lượt; judge là LLM nên có thể chấm sai.
 

@@ -23,6 +23,7 @@ from phone_sales.agent import build_agent
 from phone_sales.config import AGENT_IMPL, AUTO_INGEST
 from phone_sales.graph import build_graph
 from phone_sales.llm import is_rate_limited
+from phone_sales.textnorm import normalize_user_text
 from phone_sales.vector_db import count_documents, get_vector_store, ingest, is_up_to_date
 
 log = logging.getLogger('uvicorn.error')
@@ -49,6 +50,16 @@ THINKING_STATUS = 'Em đang cân nhắc…'
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     thread_id: str | None = Field(default=None, max_length=100)
+
+    @field_validator('message')
+    @classmethod
+    def normalize(cls, v):
+        # NFC, dấu kiểu cũ, viết tắt ("ko", "dc", "20tr"...): luật từ khóa, model và lịch sử cùng đọc 1 dạng.
+        # Chạy sau kiểm tra độ dài trên chuỗi gốc ("x" * 1001 rút gọn ký tự lặp sẽ thành "x")
+        v = normalize_user_text(v)
+        if not v:
+            raise ValueError('Tin nhắn trống')
+        return v
 
 class ChatResponse(BaseModel):
     thread_id: str
@@ -79,6 +90,13 @@ class OrderRequest(BaseModel):
     def normalize_phone(cls, v):
         # "0912 345.678" -> "0912345678", giống kiểm tra trên form
         return ''.join(c for c in v if c not in ' .-') if isinstance(v, str) else v
+
+class CancelRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=100)
+
+class CancelResponse(BaseModel):
+    thread_id: str
+    answer: str
 
 class OrderResponse(BaseModel):
     thread_id: str
@@ -242,3 +260,13 @@ def order(req: OrderRequest, request: Request):
                                 'cart': [], 'order_form': False, 'orders': [order_id]}, as_node='track_reply')
     return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
                          thanks=thanks)
+
+@app.post('/order/cancel', response_model=CancelResponse)
+def cancel_order(req: CancelRequest, request: Request):
+    """Khách bấm "Hủy đặt hàng" trên form: không tạo đơn, ghi vào lịch sử hội thoại câu trả lời cố định
+    (không gọi LLM) và làm trống giỏ hàng để agent không mời chốt đơn / bán kèm tiếp cho giỏ đã hủy."""
+    agent = request.app.state.agent
+    config = {'configurable': {'thread_id': req.thread_id}}
+    agent.update_state(config, {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(orders.CANCEL_MESSAGE)],
+                                'cart': [], 'order_form': False}, as_node='track_reply')
+    return CancelResponse(thread_id=req.thread_id, answer=orders.CANCEL_MESSAGE)

@@ -86,6 +86,12 @@ def test_chat_new_thread(client):
     assert data['tools'] == ['get_product_details']
 
 
+def test_chat_normalizes_message(client):
+    # Viết tắt, dấu kiểu cũ được chuẩn hóa trước khi tới agent (FakeAgent trả lời lại đúng tin nhận được)
+    r = client.post('/chat', json={'message': '  mik mún huỷ, giá bn ko '})
+    assert r.json()['answer'] == 'Trả lời: mình muốn hủy, giá bao nhiêu không'
+
+
 def test_chat_stream_events(client):
     r = client.post('/chat/stream', json={'message': 'giá iphone 17'})
     assert r.status_code == 200 and r.headers['content-type'].startswith('text/event-stream')
@@ -152,7 +158,7 @@ def test_chat_same_thread_only_reports_tools_of_current_turn(client):
     assert len(api.app.state.agent.threads[tid]) == 8
 
 
-@pytest.mark.parametrize('body', [{'message': ''}, {'message': 'x' * 1001}, {}, {'message': 'hi', 'thread_id': 'x' * 101}])
+@pytest.mark.parametrize('body', [{'message': ''}, {'message': ' ​ '}, {'message': 'x' * 1001}, {}, {'message': 'hi', 'thread_id': 'x' * 101}])
 def test_chat_validation(client, body):
     assert client.post('/chat', json=body).status_code == 422
 
@@ -337,3 +343,20 @@ def test_order_database_error_returns_503(monkeypatch):
     api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
     assert r.status_code == 503 and 'Chưa lưu được đơn hàng' in r.json()['detail']
+
+
+def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
+    agent = api.app.state.agent = CartAgent(CART)
+    r = TestClient(api.app).post('/order/cancel', json={'thread_id': 't1'})
+    assert r.status_code == 200
+    assert r.json() == {'thread_id': 't1', 'answer': api.orders.CANCEL_MESSAGE}
+    assert r.json()['answer'].startswith('Thật tiếc') and 'hỗ trợ hay tư vấn gì thêm' in r.json()['answer']
+    assert fake_orders == []                                              # không tạo đơn
+    thread, values, node = agent.updates[0]
+    assert thread == 't1' and node == 'track_reply' and values['cart'] == [] and values['order_form'] is False
+    assert [m.text for m in values['messages']] == ['Hủy đặt hàng', api.orders.CANCEL_MESSAGE]
+
+
+def test_order_cancel_needs_thread(fake_orders):
+    api.app.state.agent = CartAgent(CART)
+    assert TestClient(api.app).post('/order/cancel', json={}).status_code == 422

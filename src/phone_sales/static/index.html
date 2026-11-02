@@ -67,7 +67,10 @@
                 background: var(--bg); }
   .order .row { display: flex; align-items: center; }
   .order .row .lbl { margin-bottom: 4px; }
-  .order button { margin-top: 14px; height: 40px; border: 0; background: var(--accent); color: #fff; }
+  .order .actions { display: flex; gap: 8px; margin-top: 14px; }
+  .order button { flex: 1; height: 40px; border: 0; background: var(--accent); color: #fff; }
+  .order button.cancel { flex: 0 0 auto; padding: 0 16px; background: none; color: var(--text);
+                         border: 1px solid var(--line); }
   .order button:disabled { opacity: .6; cursor: wait; }
   /* Thẻ xác nhận đơn sau khi gửi form: dữ liệu đọc từ database (POST /order trả về order) */
   .receipt { max-width: 85%; width: 420px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
@@ -127,7 +130,10 @@
       <div class="row"><span class="lbl">Ghi chú</span><span class="tag">Chưa hỗ trợ</span></div>
       <textarea name="note" rows="2" disabled placeholder="Giao giờ hành chính, gọi trước khi giao..."></textarea>
       <p class="ferr" data-for="submit"></p>
-      <button type="submit">Xác nhận đặt hàng</button>
+      <div class="actions">
+        <button type="button" class="cancel">Hủy đặt hàng</button>
+        <button type="submit">Xác nhận đặt hàng</button>
+      </div>
     </form>
   </template>
   <form id="form">
@@ -262,7 +268,8 @@
       if (!/^(0|\+84)\d{9}$/.test(phone)) { err('phone').textContent = 'Số điện thoại chưa đúng định dạng'; ok = false; }
       if (address.length < 10) { err('address').textContent = 'Nhập địa chỉ đầy đủ hơn'; ok = false; }
       if (!ok) return;
-      const button = f.querySelector('button');
+      const button = f.querySelector('button[type=submit]');
+      f.querySelector('.cancel').disabled = true;
       button.disabled = true;
       button.textContent = 'Đang gửi…';
       err('submit').textContent = '';
@@ -283,6 +290,7 @@
         err('submit').textContent = ex.message || 'Không kết nối được máy chủ.';
         button.disabled = false;
         button.textContent = 'Xác nhận đặt hàng';
+        f.querySelector('.cancel').disabled = false;
         return;
       }
       // Đơn đã tạo: bỏ form, hiện thẻ xác nhận; dựng thẻ lỗi thì vẫn hiện tóm tắt dạng chữ, không để trống
@@ -295,6 +303,32 @@
         console.error('Không dựng được thẻ xác nhận đơn', ex);
         log.querySelector('.receipt:last-child')?.remove();
         add(data.answer || 'Đơn hàng đã được tạo.');
+      }
+    });
+
+    // Hủy: không tạo đơn, máy chủ ghi vào lịch sử hội thoại câu xác nhận cố định và làm trống giỏ hàng
+    f.querySelector('.cancel').addEventListener('click', async (e) => {
+      const cancel = e.currentTarget;
+      const submit = f.querySelector('button[type=submit]');
+      cancel.disabled = submit.disabled = true;
+      cancel.textContent = 'Đang hủy…';
+      err('submit').textContent = '';
+      try {
+        const r = await fetch('/order/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thread_id: threadId }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Chưa hủy được, anh/chị thử lại giúp em.');
+        f.remove();
+        add('Hủy đặt hàng', 'me');
+        add(data.answer);
+        input.focus();
+      } catch (ex) {
+        err('submit').textContent = ex.message || 'Không kết nối được máy chủ.';
+        cancel.disabled = submit.disabled = false;
+        cancel.textContent = 'Hủy đặt hàng';
       }
     });
     log.appendChild(f);

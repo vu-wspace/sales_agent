@@ -1,5 +1,6 @@
 import phone_sales  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
-from langchain_core.messages import HumanMessage, SystemMessage
+import logging
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Checkpointer
@@ -7,9 +8,13 @@ from phone_sales import llm
 from phone_sales.conversation import (AgentState, append_unique, cross_sell_offers, decide_stage, describe,
                                     needs_handoff, products_mentioned, track_tool_results, track_user_message)
 from phone_sales.fallback import FallbackMiddleware
+from phone_sales.grounding import correction, sources_of, ungrounded
 from phone_sales.history import trim_history
 from phone_sales.prompts import get_system_prompt
+from phone_sales.textnorm import clean_answer, normalize_user_text
 from phone_sales.tools import get_agent_tools
+
+log = logging.getLogger(__name__)
 
 # Agent tự dựng bằng StateGraph, có trạng thái hội thoại bán hàng (conversation.py) và giỏ hàng:
 #   START -> track_user -> model -> (có tool_call) tools -> track_tools -> model ... -> track_reply -> END
@@ -18,7 +23,8 @@ SYSTEM_PROMPT = get_system_prompt('agent_graph')
 
 def _last_user_text(state: AgentState) -> str:
     human = [m for m in state.get('messages', []) if isinstance(m, HumanMessage)]
-    return human[-1].text if human else ''
+    # api.py đã chuẩn hóa; chuẩn hóa lại cho trường hợp gọi graph trực tiếp (langgraph dev, eval)
+    return normalize_user_text(human[-1].text) if human else ''
 
 def track_user(state: AgentState) -> dict:
     # Đọc tin nhắn mới của khách: nhu cầu, lo ngại, cảm xúc, có đòi gặp nhân viên không
@@ -60,12 +66,30 @@ def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
              for m in models}
     chain = FallbackMiddleware(*models[1:]) if fallback else None
 
-    def call_model(state: AgentState) -> dict:
-        system = SystemMessage(content=f'{SYSTEM_PROMPT}\n\nTrạng thái hội thoại:\n{describe(state)}')
-        messages = [system] + trim_history(state['messages'])
+    def invoke(messages: list) -> AIMessage:
         if chain is None:
-            return {'messages': [bound[id(primary)].invoke(messages)]}
-        return {'messages': [chain.call(primary, lambda m: bound[id(m)].invoke(messages))]}
+            return bound[id(primary)].invoke(messages)
+        return chain.call(primary, lambda m: bound[id(m)].invoke(messages))
+
+    def call_model(state: AgentState) -> dict:
+        status = describe(state)
+        system = SystemMessage(content=f'{SYSTEM_PROMPT}\n\nTrạng thái hội thoại:\n{status}')
+        messages = [system] + trim_history(state['messages'])
+        reply = invoke(messages)
+        if reply.tool_calls:
+            return {'messages': [reply]}
+        # Câu trả lời cuối: số liệu (giá, pin, bảo hành...) phải có trong kết quả tool, trạng thái hoặc tin của khách.
+        # Có số không rõ nguồn thì cho model viết lại 1 lần; bản nháp sai không lưu vào lịch sử.
+        sources = sources_of(state['messages'], status)
+        bad = ungrounded(reply.text, sources)
+        if bad:
+            log.warning('Câu trả lời có số liệu không rõ nguồn %s, yêu cầu model viết lại', bad)
+            reply = invoke([*messages, reply, HumanMessage(correction(bad))])
+            if reply.tool_calls:
+                return {'messages': [reply]}  # model đi tra cứu thêm: tool chạy rồi model trả lời lại từ đầu
+            if still := ungrounded(reply.text, sources):
+                log.warning('Viết lại vẫn còn số liệu không rõ nguồn %s', still)
+        return {'messages': [reply.model_copy(update={'content': clean_answer(reply.text)})]}
 
     builder = StateGraph(AgentState)
     builder.add_node('track_user', track_user)

@@ -18,6 +18,8 @@ SCHEMA = ROOT / 'data_schema' / 'orders.sql'
 FULFILLMENT = {'delivery': 'Giao tận nơi', 'pickup': 'Nhận tại cửa hàng'}
 PAYMENT = {'cod': 'Thanh toán khi nhận hàng', 'bank_transfer': 'Chuyển khoản', 'installment': 'Trả góp'}
 CALLBACK_NOTE = 'Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao.'
+CANCEL_MESSAGE = ('Thật tiếc, em đã hủy yêu cầu đặt hàng của anh/chị. '
+                  'Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không ạ?')
 THANKS_FALLBACK ='Cảm ơn anh/chị đã tin tưởng lựa chọn cửa hàng. Chúc anh/chị một ngày vui vẻ!'
 THANKS_PROMPT = dedent("""
     Bạn là nhân viên bán hàng của cửa hàng điện thoại. Khách vừa đặt hàng xong, phần tóm tắt đơn đã gửi cho khách.
