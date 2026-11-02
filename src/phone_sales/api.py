@@ -83,7 +83,9 @@ class OrderRequest(BaseModel):
 class OrderResponse(BaseModel):
     thread_id: str
     order_id: str
-    answer: str
+    answer: str          # tóm tắt dạng chữ + lời cảm ơn (cũng là tin nhắn ghi vào lịch sử hội thoại)
+    order: dict          # dữ liệu đơn đọc từ database, giao diện hiện thành thẻ xác nhận
+    thanks: str          # lời cảm ơn do LLM viết
 
 def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
     # Qdrant có thể khởi động chậm hơn API khi chạy bằng docker compose -> thử lại vài lần
@@ -226,14 +228,16 @@ def order(req: OrderRequest, request: Request):
     try:
         order_id = orders.create_order(cart, req.name, req.phone, req.address, req.fulfillment_type, req.payment,
                                        thread_id=req.thread_id)
-        text = orders.summary(orders.get_order(order_id))
+        saved = orders.get_order(order_id)
     except orders.OrderError as e:
         raise HTTPException(409, str(e))
     except psycopg.Error as e:
         log.error('Lỗi khi lưu đơn hàng', exc_info=e)
         raise HTTPException(503, 'Chưa lưu được đơn hàng, anh/chị vui lòng thử lại sau ít phút.')
-    answer = f'{text}\n\n{orders.thank_you(req.name)}'
+    thanks = orders.thank_you(req.name)
+    answer = f'{orders.summary(saved)}\n\n{thanks}'
     # Lượt sau agent biết đơn đã đặt; giỏ hàng làm trống để khách mua tiếp không bị cộng dồn
     agent.update_state(config, {'messages': [HumanMessage('Đã gửi thông tin đặt hàng'), AIMessage(answer)],
                                 'cart': [], 'order_form': False, 'orders': [order_id]}, as_node='track_reply')
-    return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer)
+    return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
+                         thanks=thanks)

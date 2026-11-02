@@ -67,6 +67,29 @@
   .order .row .lbl { margin-bottom: 4px; }
   .order button { margin-top: 14px; height: 40px; border: 0; background: var(--accent); color: #fff; }
   .order button:disabled { opacity: .6; cursor: wait; }
+  /* Thẻ xác nhận đơn sau khi gửi form: dữ liệu đọc từ database (POST /order trả về order) */
+  .receipt { max-width: 85%; width: 420px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+             background: var(--card); font-size: 14px; }
+  .receipt .head { display: flex; align-items: center; gap: 12px; padding: 14px; background: var(--me); }
+  .receipt .tick { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+                   background: var(--accent); color: #fff; font-weight: 700; }
+  .receipt .title { font-weight: 600; font-size: 15px; }
+  .receipt .code { color: var(--muted); font-size: 13px; }
+  .receipt .code b { color: var(--text); font-family: ui-monospace, Consolas, monospace; letter-spacing: .5px; }
+  .receipt section { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .receipt h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+                color: var(--muted); }
+  .receipt dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; }
+  .receipt dt { color: var(--muted); }
+  .receipt dd { margin: 0; overflow-wrap: anywhere; }
+  .receipt .line { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
+  .receipt .line + .line { border-top: 1px dashed var(--line); }
+  .receipt .variant, .receipt .qty { color: var(--muted); font-size: 13px; }
+  .receipt .amount { text-align: right; white-space: nowrap; }
+  .receipt .total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 14px;
+                    border-top: 1px solid var(--line); font-weight: 600; }
+  .receipt .total span:last-child { color: var(--accent); font-size: 18px; }
+  .receipt .note { padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -257,7 +280,8 @@
         }
         f.remove();
         add('Đã gửi thông tin đặt hàng', 'me');
-        add(data.answer);
+        addReceipt(data.order);
+        add(data.thanks);
       } catch (ex) {
         err('submit').textContent = ex.message || 'Không kết nối được máy chủ.';
         button.disabled = false;
@@ -267,6 +291,54 @@
     log.appendChild(f);
     log.scrollTop = log.scrollHeight;
     f.elements.name.focus();
+  }
+
+  // Tạo thẻ với class và chữ (textContent: dữ liệu khách nhập không bị hiểu thành HTML)
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  // 0912345678 -> 0912 345 678 cho dễ đọc
+  const prettyPhone = p => /^0\d{9}$/.test(p) ? p.replace(/^(\d{4})(\d{3})(\d{3})$/, '$1 $2 $3') : p;
+
+  function addReceipt(o) {
+    const card = el('div', 'receipt');
+    const head = el('div', 'head');
+    const titles = el('div');
+    const code = el('div', 'code', 'Mã đơn ');
+    code.appendChild(el('b', '', '#' + o.order_id));
+    titles.append(el('div', 'title', 'Đặt hàng thành công'), code);
+    head.append(el('div', 'tick', '✓'), titles);
+
+    const info = el('section');
+    const dl = el('dl');
+    for (const [k, v] of [['Người nhận', o.name], ['Điện thoại', prettyPhone(o.phone)], ['Địa chỉ', o.address],
+                          ['Nhận hàng', o.fulfillment], ['Thanh toán', o.payment]]) {
+      dl.append(el('dt', '', k), el('dd', '', v));
+    }
+    info.append(el('h3', '', 'Thông tin nhận hàng'), dl);
+
+    const items = el('section');
+    items.appendChild(el('h3', '', `Sản phẩm (${o.items.reduce((s, i) => s + i.qty, 0)})`));
+    for (const i of o.items) {
+      const line = el('div', 'line');
+      const left = el('div');
+      left.appendChild(el('div', '', i.name));
+      if (i.variant) left.appendChild(el('div', 'variant', i.variant));
+      const right = el('div', 'amount');
+      right.append(el('div', '', money(i.unit_price * i.qty)), el('div', 'qty', `${i.qty} x ${money(i.unit_price)}`));
+      line.append(left, right);
+      items.appendChild(line);
+    }
+
+    const total = el('div', 'total');
+    total.append(el('span', '', 'Tổng cộng'), el('span', '', money(o.total)));
+    card.append(head, info, items, total, el('div', 'note', o.note));
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
   }
 
   function greet() {

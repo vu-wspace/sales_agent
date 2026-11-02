@@ -293,6 +293,7 @@ def fake_orders(monkeypatch):
     monkeypatch.setattr(api.orders, 'create_order', create_order)
     monkeypatch.setattr(api.orders, 'get_order', lambda order_id: {'order_id': order_id})
     monkeypatch.setattr(api.orders, 'summary', lambda order: f"Đơn #{order['order_id']}")
+    monkeypatch.setattr(api.orders, 'view', lambda order: {'order_id': order['order_id'], 'total': 1})
     monkeypatch.setattr(api.orders, 'thank_you', lambda name: f'Cảm ơn {name}!')
     return saved
 
@@ -307,7 +308,8 @@ def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
     agent = api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json={**ORDER_FORM, 'cart': [{'price': 0}]})  # giỏ client gửi bị bỏ qua
     assert r.status_code == 200
-    assert r.json() == {'thread_id': 't1', 'order_id': 'DH0000000C', 'answer': 'Đơn #DH0000000C\n\nCảm ơn Nguyễn Văn A!'}
+    assert r.json() == {'thread_id': 't1', 'order_id': 'DH0000000C', 'answer': 'Đơn #DH0000000C\n\nCảm ơn Nguyễn Văn A!',
+                        'order': {'order_id': 'DH0000000C', 'total': 1}, 'thanks': 'Cảm ơn Nguyễn Văn A!'}
     assert fake_orders == [(CART, ('Nguyễn Văn A', '0912345678', '12 Lê Lợi, Quy Nhơn', 'delivery', 'cod'), 't1')]
     thread, values, node = agent.updates[0]
     assert thread == 't1' and node == 'track_reply'

@@ -106,6 +106,12 @@ def test_summary_template_from_database_row():
         'Tổng cộng: **32.169.441đ**',
         'Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao.',
     ]
+    # Cùng dữ liệu cho thẻ xác nhận trên giao diện
+    card = orders.view(order)
+    assert card['fulfillment'] == 'Giao tận nơi' and card['payment'] == 'Thanh toán khi nhận hàng'
+    assert card['items'] == [{'name': 'Galaxy S26', 'variant': '256GB · Đen Classic', 'qty': 1, 'unit_price': 29990001},
+                             {'name': 'Củ Sạc 60W', 'variant': '', 'qty': 2, 'unit_price': 1089720}]
+    assert card['total'] == 32169441 and card['note'] == orders.CALLBACK_NOTE
 
 
 def test_thank_you_uses_llm_and_falls_back(monkeypatch):

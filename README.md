@@ -154,6 +154,11 @@ Kết quả tool và nội dung suy nghĩ của model không bao giờ được 
 
 // response
 {"thread_id": "5f0c…", "order_id": "DH3F9A1C2B",
+ "order": {"order_id": "DH3F9A1C2B", "name": "Nguyễn Văn A", "phone": "0912345678", "address": "…",
+           "fulfillment": "Giao tận nơi", "payment": "Thanh toán khi nhận hàng",
+           "items": [{"name": "Galaxy S26", "variant": "256GB · Đen Classic", "qty": 1, "unit_price": 29990001}],
+           "total": 29990001, "note": "Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao."},
+ "thanks": "Em cảm ơn anh Nguyễn Văn A…",
  "answer": "Đơn hàng **#DH3F9A1C2B** đã được tạo.
 Khách hàng: Nguyễn Văn A
 …
@@ -161,6 +166,7 @@ Khách hàng: Nguyễn Văn A
 Em cảm ơn anh Nguyễn Văn A…"}
 ```
 
+- `order` là dữ liệu đơn đọc lại từ database, trang chat hiện thành thẻ xác nhận (mã đơn, người nhận, sản phẩm, tổng tiền); `thanks` hiện thành bong bóng riêng. `answer` là bản chữ của cả hai, được ghi vào lịch sử hội thoại.
 - Kiểm tra giống form: tên ≥ 2 ký tự, số điện thoại `0`/`+84` + 9 số (bỏ dấu cách, chấm, gạch), địa chỉ ≥ 10 ký tự. Hiện chỉ nhận `delivery` và `cod`.
 - Mã lỗi: `422` thông tin sai, `409` giỏ trống hoặc hết hàng, `503` không ghi được database.
 

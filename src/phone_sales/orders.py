@@ -17,7 +17,8 @@ SCHEMA = ROOT / 'data_schema' / 'orders.sql'
 
 FULFILLMENT = {'delivery': 'Giao tận nơi', 'pickup': 'Nhận tại cửa hàng'}
 PAYMENT = {'cod': 'Thanh toán khi nhận hàng', 'bank_transfer': 'Chuyển khoản', 'installment': 'Trả góp'}
-THANKS_FALLBACK = 'Cảm ơn anh/chị đã tin tưởng lựa chọn cửa hàng. Chúc anh/chị một ngày vui vẻ!'
+CALLBACK_NOTE = 'Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao.'
+THANKS_FALLBACK ='Cảm ơn anh/chị đã tin tưởng lựa chọn cửa hàng. Chúc anh/chị một ngày vui vẻ!'
 THANKS_PROMPT = dedent("""
     Bạn là nhân viên bán hàng của cửa hàng điện thoại. Khách vừa đặt hàng xong, phần tóm tắt đơn đã gửi cho khách.
     Viết 1-2 câu tiếng Việt cảm ơn khách đã lựa chọn cửa hàng, xưng "em", gọi khách là "anh/chị" kèm tên.
@@ -103,8 +104,20 @@ def summary(order: dict) -> str:
         f"Thanh toán: {PAYMENT.get(order['payment'], order['payment'])}",
         f"Sản phẩm:\n{items}",
         f"Tổng cộng: **{_price(order['total'])}**",
-        'Nhân viên cửa hàng sẽ gọi điện xác nhận đơn trước khi giao.',
+        CALLBACK_NOTE,
     ])
+
+def view(order: dict) -> dict:
+    """Dữ liệu đơn cho thẻ xác nhận trên giao diện (cùng nguồn database với summary)."""
+    return {
+        'order_id': order['order_id'], 'name': order['name'], 'phone': order['phone'], 'address': order['address'],
+        'fulfillment': FULFILLMENT.get(order['fulfillment_type'], order['fulfillment_type']),
+        'payment': PAYMENT.get(order['payment'], order['payment']),
+        'items': [{'name': i['name'], 'variant': ' · '.join(filter(None, [i['storage'], i['color']])),
+                   'qty': i['qty'], 'unit_price': i['unit_price']} for i in order['items']],
+        'total': order['total'],
+        'note': CALLBACK_NOTE,
+    }
 
 _chain = FallbackMiddleware(*llm.FALLBACK_LLMS)
 
