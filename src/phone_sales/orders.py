@@ -76,10 +76,12 @@ def create_order(cart: list[dict], name: str, phone: str, address: str, fulfillm
 
 def get_order(order_id: str) -> dict:
     with _connect() as conn:
+        # Người nhận lấy từ chính đơn: customers chỉ giữ tên mới nhất theo số điện thoại, đơn sau cùng số
+        # với tên khác sẽ ghi đè (đơn cũ hiện sai tên nếu đọc từ customers)
         order = conn.execute(
-            """SELECT o.order_id, o.address, o.fulfillment_type, o.payment, o.total, o.status, c.name, c.phone
-               FROM orders o JOIN customers c ON c.customer_id = o.customer_id WHERE o.order_id = %s""",
-            (order_id,)).fetchone()
+            """SELECT order_id, recipient_name AS name, recipient_phone AS phone, address, fulfillment_type,
+                      payment, total, status
+               FROM orders WHERE order_id = %s""", (order_id,)).fetchone()
         items = conn.execute(
             """SELECT p.name, v.storage, v.color, oi.unit_price, oi.qty
                FROM order_items oi JOIN variants v ON v.variant_id = oi.variant_id

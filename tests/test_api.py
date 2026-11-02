@@ -74,6 +74,7 @@ def test_index_serves_chat_page(client):
     assert 'text/html' in r.headers['content-type']
     assert 'Tư vấn điện thoại' in r.text
     assert "fetch('/chat/stream'" in r.text  # giao diện dùng stream
+    assert r.headers['cache-control'] == 'no-cache'  # sửa giao diện xong trình duyệt không dùng bản cũ
 
 
 def test_chat_new_thread(client):

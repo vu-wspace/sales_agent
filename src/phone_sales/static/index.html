@@ -21,6 +21,8 @@
   button { font: inherit; cursor: pointer; border-radius: 8px; }
   #reset { background: none; border: 1px solid var(--line); color: var(--muted); padding: 4px 10px; }
   #log { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 10px; }
+  /* Khung chat đầy thì cuộn, không co từng tin: thẻ có overflow: hidden (.receipt) sẽ bị ép dẹp, mất nội dung */
+  #log > * { flex-shrink: 0; }
   /* Ẩn thanh cuộn nhưng vẫn cuộn được (chuột, bàn phím, cảm ứng) */
   #log, textarea { scrollbar-width: none; }
   #log::-webkit-scrollbar, textarea::-webkit-scrollbar { display: none; }
@@ -70,9 +72,7 @@
   /* Thẻ xác nhận đơn sau khi gửi form: dữ liệu đọc từ database (POST /order trả về order) */
   .receipt { max-width: 85%; width: 420px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
              background: var(--card); font-size: 14px; }
-  .receipt .head { display: flex; align-items: center; gap: 12px; padding: 14px; background: var(--me); }
-  .receipt .tick { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
-                   background: var(--accent); color: #fff; font-weight: 700; }
+  .receipt .head { padding: 14px; background: var(--me); }
   .receipt .title { font-weight: 600; font-size: 15px; }
   .receipt .code { color: var(--muted); font-size: 13px; }
   .receipt .code b { color: var(--text); font-family: ui-monospace, Consolas, monospace; letter-spacing: .5px; }
@@ -266,6 +266,7 @@
       button.disabled = true;
       button.textContent = 'Đang gửi…';
       err('submit').textContent = '';
+      let data;
       try {
         const r = await fetch('/order', {
           method: 'POST',
@@ -273,19 +274,27 @@
           body: JSON.stringify({ thread_id: threadId, name, phone, address,
                                  fulfillment_type: 'delivery', payment: 'cod' }),
         });
-        const data = await r.json().catch(() => ({}));
+        data = await r.json().catch(() => ({}));
         if (!r.ok) {
           throw new Error(typeof data.detail === 'string' ? data.detail
                           : 'Thông tin chưa hợp lệ, anh/chị kiểm tra lại giúp em.');
         }
-        f.remove();
-        add('Đã gửi thông tin đặt hàng', 'me');
-        addReceipt(data.order);
-        add(data.thanks);
       } catch (ex) {
         err('submit').textContent = ex.message || 'Không kết nối được máy chủ.';
         button.disabled = false;
         button.textContent = 'Xác nhận đặt hàng';
+        return;
+      }
+      // Đơn đã tạo: bỏ form, hiện thẻ xác nhận; dựng thẻ lỗi thì vẫn hiện tóm tắt dạng chữ, không để trống
+      f.remove();
+      add('Đã gửi thông tin đặt hàng', 'me');
+      try {
+        addReceipt(data.order);
+        add(data.thanks);
+      } catch (ex) {
+        console.error('Không dựng được thẻ xác nhận đơn', ex);
+        log.querySelector('.receipt:last-child')?.remove();
+        add(data.answer || 'Đơn hàng đã được tạo.');
       }
     });
     log.appendChild(f);
@@ -307,11 +316,9 @@
   function addReceipt(o) {
     const card = el('div', 'receipt');
     const head = el('div', 'head');
-    const titles = el('div');
     const code = el('div', 'code', 'Mã đơn ');
     code.appendChild(el('b', '', '#' + o.order_id));
-    titles.append(el('div', 'title', 'Đặt hàng thành công'), code);
-    head.append(el('div', 'tick', '✓'), titles);
+    head.append(el('div', 'title', 'Đặt hàng thành công'), code);
 
     const info = el('section');
     const dl = el('dl');

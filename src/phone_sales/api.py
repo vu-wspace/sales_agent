@@ -124,7 +124,8 @@ app = FastAPI(title='Phone Sales Agent', version='0.1.0', lifespan=lifespan)
 
 @app.get('/', include_in_schema=False)
 def index():
-    return FileResponse(STATIC / 'index.html')
+    # no-cache: trình duyệt luôn hỏi lại server, sửa giao diện xong không bị dùng bản cũ trong cache
+    return FileResponse(STATIC / 'index.html', headers={'Cache-Control': 'no-cache'})
 
 @app.get('/health')
 def health():
