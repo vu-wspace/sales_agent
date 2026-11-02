@@ -282,7 +282,7 @@ Bảng `promotions` (`promotions.py`):
 | `stage` | Bước bán hàng: `discovery` → `recommending` → `comparing` → `closing`, hoặc `handoff` |
 | `slots` | Nhu cầu: ngân sách, hãng, mục đích, dung lượng, màu |
 | `shown_products` | Sản phẩm đã giới thiệu |
-| `cart` | Giỏ hàng. Tool giỏ hàng trả thao tác (`{'add': món}`, `{'remove': [variant_id]}`), reducer `cart_update` áp lần lượt: model gọi 2 tool giỏ hàng song song trong 1 bước (vd thêm máy và củ sạc) vẫn giữ đủ, không lỗi `InvalidUpdateError`. `api.py` ghi `[]` để làm trống sau khi đặt/hủy đơn |
+| `cart` | Giỏ hàng (xem [Nhiều tool cập nhật state cùng lúc](#nhiều-tool-cập-nhật-state-cùng-lúc)) |
 | `objections` | Lo ngại của khách (giá, pin, nhiệt độ, camera…) |
 | `sentiment_history` | Cảm xúc từng lượt |
 | `handoff` | Cần chuyển nhân viên |
@@ -294,6 +294,24 @@ Bảng `promotions` (`promotions.py`):
 | `offered_alternatives` | Máy rẻ hơn đã gợi ý (không gợi ý lại) |
 
 Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `closing`: xác nhận giỏ và tổng tiền, hỏi khách có chốt đơn không, khách xác nhận thì mở form đặt hàng; không tự nêu phí giao hàng hay kỳ hạn trả góp.
+
+#### Nhiều tool cập nhật state cùng lúc
+
+Model có thể gọi nhiều tool song song trong 1 bước (vd "lấy S26 với củ sạc 60W" → 2 lần `add_to_cart`). Khóa state khai báo thường (`cart: list[dict]`) chỉ nhận 1 giá trị mỗi bước, 2 tool cùng ghi thì LangGraph báo `InvalidUpdateError: At key 'cart': Can receive only one value per step`. Khóa khai báo `Annotated[kiểu, reducer]` thì LangGraph gộp lần lượt: `giá trị = reducer(giá trị cũ, giá trị mới)`.
+
+Chỉ thêm `Annotated` là hết lỗi, nhưng reducer phải đúng nghĩa của dữ liệu. Với giỏ hàng, reducer "lấy giá trị mới nhất" sẽ làm mất món mà không báo lỗi: 2 tool cùng đọc giỏ trống ở đầu bước, tool 1 trả cả giỏ `[máy]`, tool 2 trả cả giỏ `[củ sạc]`, kết quả chỉ còn `[củ sạc]`. Vì vậy tool giỏ hàng trả **thao tác** thay vì cả giỏ, và `cart_update` áp lần lượt: `[]` → `[máy]` → `[máy, củ sạc]`.
+
+| Khóa | Reducer | Giá trị mới |
+|---|---|---|
+| `cart` | `cart_update` | `{'add': món}` thêm (trùng phiên bản thì cộng số lượng), `{'remove': [variant_id]}` bỏ; `list` thay cả giỏ (`api.py` ghi `[]` sau khi đặt/hủy đơn) |
+| `order_form` | `last` | Lấy giá trị mới nhất: chỉ là đúng/sai, gọi `show_order_form` 2 lần vẫn cùng kết quả |
+| `offered_alternatives`, `shown_products`, `objections` | `append_unique` | Nối thêm, bỏ trùng |
+| `sentiment_history`, `orders` | `append` | Nối thêm, giữ trùng (mỗi lượt / mỗi đơn 1 phần tử) |
+| `messages` | `add_messages` | Nối thêm tin nhắn (của LangGraph) |
+| `slots` | `merge_slots` | Gộp nhu cầu, giá trị mới ghi đè, danh sách thì cộng dồn |
+| `cross_sell` | `steps` | Nối bước bán kèm; `None` thì làm lại từ đầu |
+
+Khóa không có reducer (`stage`, `handoff`, `declined`, `objection`…) chỉ do node của graph ghi (mỗi bước 1 lần), tool không ghi. Thêm tool mới ghi vào state thì khóa đó phải có reducer. OpenRouter bật `parallel_tool_calls=True` (`graph.py`), model dự phòng mặc định cũng gọi song song. Test: `test_graph_parallel_add_to_cart_keeps_both`, `test_cart_update_applies_each_change` (`tests/test_conversation.py`).
 
 ### Bán thêm (up-sell, cross-sell)
 
@@ -565,6 +583,7 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 | Thẻ xác nhận đơn hoặc form đặt hàng bị cắt, mất nội dung | Giữ `#log > * { flex-shrink: 0; }` trong `index.html`: thiếu dòng này, khung chat đầy sẽ ép dẹp các thẻ có `overflow: hidden` |
 | `db-seed` báo `cannot truncate a table referenced in a foreign key constraint` | `phone_seed.sql` sinh từ bản `scrape_phone.py` cũ (TRUNCATE). Sinh lại: `cd data_schema && python scrape_phone.py --from-json`, rồi chạy lại `db-seed` (bản mới upsert, giữ đơn hàng) |
 | Bot chỉ đưa khoảng giá khi khách nêu tên máy | Xem log tool: phải là `get_product_details`; kiểm tra quy tắc 2 trong `prompts.py` |
+| `InvalidUpdateError: At key '…': Can receive only one value per step` | Nhiều tool ghi cùng khóa state trong 1 bước (gọi song song). Khóa đó cần `Annotated[kiểu, reducer]` với reducer đúng nghĩa, xem [Nhiều tool cập nhật state cùng lúc](#nhiều-tool-cập-nhật-state-cùng-lúc) |
 | `uvicorn` báo cổng 8000 đang dùng | Container `phone_sales_api` đang chạy; dùng `--port 8001` |
 | Trong Docker báo `CERTIFICATE_VERIFY_FAILED` | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
 
