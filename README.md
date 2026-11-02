@@ -242,7 +242,17 @@ flowchart LR
 5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền; số điện thoại, email đã che) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
 6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
 
-Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng là áp dụng): gọi `POST /order/quote`, hiện dòng giảm giá, tổng mới và mô tả khuyến mãi; mã sai thì hiện lý do và quay về giá không mã. Mở form là hỏi giá ngay để hiện khuyến mãi tự động (nếu có). Thẻ xác nhận đơn có thêm dòng tạm tính và giảm giá.
+Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng là áp dụng, không gửi cả form). Mở form là hỏi giá ngay (`POST /order/quote`) để hiện khuyến mãi tự động (nếu có). Thẻ xác nhận đơn có thêm dòng tạm tính và giảm giá.
+
+| Trạng thái nút | Hiển thị |
+|---|---|
+| Chưa nhập mã | "Áp dụng"; bấm khi ô trống thì báo "Nhập mã khuyến mãi" |
+| Đang kiểm tra | "Kiểm tra…", nút mờ, không bấm được |
+| Mã không dùng được | Hiện lý do dưới ô (không tồn tại, hết hạn, hết lượt…), giá quay về như không có mã |
+| Đã áp dụng | Ô mã khóa lại, tô màu nhấn; nút thành "Bỏ mã"; hiện dòng giảm giá, tổng mới và mô tả khuyến mãi |
+| Bấm "Bỏ mã" | Xóa mã, mở lại ô nhập, giá quay về như không có mã (vẫn giữ khuyến mãi tự động nếu có) |
+
+Ô mã và nút cùng chiều cao; nút rộng cố định 104px để đổi chữ không làm ô mã co giãn. Mã đã áp dụng chỉ là xem trước: `POST /order` kiểm tra lại đầy đủ khi đặt hàng.
 
 ### Khuyến mãi
 
