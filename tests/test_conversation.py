@@ -341,3 +341,46 @@ def test_openrouter_allows_parallel_tool_calls(monkeypatch):
     from phone_sales.graph import build_graph
     build_graph(fallback=False)
     assert seen == {'parallel_tool_calls': True}
+
+
+# ---------------------------------------------------------------- khách tự yêu cầu phụ kiện (wanted)
+
+@pytest.mark.parametrize('text, kinds', [
+    ('tui muốn đặt ip17, củ sạc 40W, ốp lưng silicon, kính cường lực belkin', ['charger', 'case', 'screen-protector']),
+    ('cho mình xin ốp lưng trong suốt', ['case']),
+    ('lấy thêm sạc dự phòng', ['power-bank']),        # sạc dự phòng không phải củ sạc
+    ('iphone 17 có củ sạc nào không', []),            # hỏi, chưa có ý mua
+    ('không cần củ sạc đâu', []),                     # từ chối
+])
+def test_wanted_of(text, kinds):
+    assert list(conv.wanted_of(text)) == kinds
+
+
+def test_wanted_update_reset_and_drop():
+    w = conv.wanted_update(None, {'charger': 'củ sạc 40W', 'case': 'ốp silicon'})
+    assert conv.wanted_update(w, {'drop': ['case']}) == {'charger': 'củ sạc 40W'}   # khách bỏ ốp khỏi giỏ
+    assert conv.wanted_update(w, None) == {}                                       # đặt/hủy đơn: làm lại
+
+
+def test_wanted_items_are_added_not_offered():
+    ask = 'tui muốn đặt ip17, củ sạc 40W, ốp lưng silicon, kính cường lực belkin'
+    state = {'stage': 'closing', 'cart': [PHONE_IN_CART], 'wanted': conv.wanted_of(ask)}
+    hint = conv.wanted_hint(state)
+    assert 'củ sạc, ốp lưng, cường lực/miếng dán' in hint and 'add_to_cart luôn' in hint and ask in hint
+    assert 'kể cả khi máy chưa đủ dung lượng, màu' in hint
+    # Bán kèm không mời lại loại khách đã yêu cầu: bỏ qua cả củ sạc lẫn ốp/cường lực -> xác nhận đơn
+    assert conv.cross_sell_step(state) == 'confirm'
+    # Đã có đủ trong giỏ thì không nhắc nữa
+    full = [PHONE_IN_CART, CHARGER, CASE, {**CASE, 'name': 'Kính', 'accessory_type': 'screen-protector'}]
+    assert conv.wanted_hint({**state, 'cart': full}) is None
+    # Chỉ yêu cầu củ sạc: vẫn mời nhẹ ốp lưng, cường lực
+    only_charger = {**state, 'wanted': {'charger': 'lấy củ sạc 40W'}}
+    assert conv.cross_sell_step(only_charger) == 'accessories'
+
+
+def test_remove_wanted_accessory_forgets_request(fake_catalog):
+    case = {'variant_id': 'OP', 'name': 'Ốp Lưng Trong Suốt Galaxy S26', 'category': 'accessory',
+            'accessory_type': 'case', 'storage': None, 'color': None, 'price': 1, 'quantity': 1}
+    cmd = tools.remove_from_cart.invoke({'type': 'tool_call', 'name': 'remove_from_cart', 'id': 'r1',
+                                         'args': {'product': 'ốp lưng s26', 'state': {'cart': [case]}}})
+    assert cmd.update['wanted'] == {'drop': ['case']} and cmd.update['cart'] == {'remove': ['OP']}

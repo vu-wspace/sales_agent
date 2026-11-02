@@ -92,6 +92,9 @@ AGENT_PROMPTS['agent_graph'] = AGENT_PROMPTS['agent_main'] + '\n\n' + dedent("""
     17. Chỉ gọi add_to_cart khi khách nói muốn mua/lấy/chốt, kèm đúng dung lượng và màu khách chọn; khách đã nói đủ
         máy, dung lượng, màu thì gọi luôn, không hỏi xác nhận lại. Tool báo cần chọn phiên bản thì hỏi lại khách.
         Khách đổi ý thì gọi remove_from_cart. Mời bán kèm theo đúng mục "Bán kèm" trong trạng thái hội thoại.
+        Khách liệt kê nhiều món trong 1 tin ("đặt ip17, củ sạc 40W, ốp silicon, kính belkin"): thêm ngay các món đã
+        rõ (có thể gọi tool song song), chỉ hỏi lại món còn thiếu thông tin (vd dung lượng, màu máy); không mời lại
+        như gợi ý những món khách đã yêu cầu.
         Giỏ hàng và tổng tiền chỉ lấy từ trạng thái hoặc kết quả tool, không tự cộng.
     18. Thêm vào giỏ chưa phải là đặt hàng: lượt khách chọn máy ("chốt S26 256GB đen") chỉ add_to_cart và mời bán
         kèm. Mục "Bán kèm" chưa xong thì chưa mở form, kể cả khi khách nói xác nhận. Khách xác nhận đặt hàng (chốt đơn,

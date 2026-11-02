@@ -299,7 +299,8 @@ def order(req: OrderRequest, request: Request):
     answer = f'{orders.summary(saved)}\n\n{thanks}'
     # Lượt sau agent biết đơn đã đặt; giỏ hàng làm trống để khách mua tiếp không bị cộng dồn
     agent.update_state(config, {'messages': [HumanMessage('Đã gửi thông tin đặt hàng'), AIMessage(answer)],
-                                'cart': [], 'order_form': False, 'orders': [order_id], 'cross_sell': None},
+                                'cart': [], 'order_form': False, 'orders': [order_id], 'cross_sell': None,
+                                'wanted': None},
                        as_node='track_reply')
     return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
                          thanks=thanks)
@@ -327,5 +328,6 @@ def cancel_order(req: CancelRequest, request: Request):
     agent = request.app.state.agent
     config = {'configurable': {'thread_id': req.thread_id}}
     agent.update_state(config, {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(orders.CANCEL_MESSAGE)],
-                                'cart': [], 'order_form': False, 'cross_sell': None}, as_node='track_reply')
+                                'cart': [], 'order_form': False, 'cross_sell': None, 'wanted': None},
+                       as_node='track_reply')
     return CancelResponse(thread_id=req.thread_id, answer=orders.CANCEL_MESSAGE)

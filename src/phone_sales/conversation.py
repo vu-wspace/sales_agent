@@ -27,6 +27,17 @@ def append_unique(old: list | None, new: list | None) -> list:
 def append(old: list | None, new: list | None) -> list:
     return [*(old or []), *(new or [])]
 
+def wanted_update(old: dict | None, new: dict | None) -> dict:
+    # Phụ kiện khách đã yêu cầu mua {loại: tin nhắn của khách}. None: làm lại từ đầu (đơn đã đặt/hủy);
+    # {'drop': [loại]}: khách bỏ món đó khỏi giỏ (remove_from_cart), không tự thêm lại
+    if new is None:
+        return {}
+    out = dict(old or {})
+    for kind in new.get('drop', []):
+        out.pop(kind, None)
+    out.update({k: v for k, v in new.items() if k != 'drop'})
+    return out
+
 def steps(old: list | None, new: list | None) -> list:
     # None: làm lại từ đầu (đơn đã đặt/đã hủy, giỏ trống -> lần mua sau bán kèm lại từ bước 1)
     return [] if new is None else append_unique(old, new)
@@ -73,6 +84,7 @@ class AgentState(TypedDict, total=False):
     objection_type: str | None                            # loại phản đối đang xử lý (đổi loại thì làm lại từ bước đầu)
     objection_step: int                                   # đã xử lý loại đó bao nhiêu lượt (bậc thang khi khách do dự)
     offered_alternatives: Annotated[list[str], append_unique]  # máy rẻ hơn đã gợi ý (find_cheaper_alternatives không lặp lại)
+    wanted: Annotated[dict, wanted_update]                # phụ kiện khách đã yêu cầu mua {loại: tin nhắn}, xem wanted_of
 
 # ---------------------------------------------------------------- trích từ tin nhắn của khách
 
@@ -163,7 +175,43 @@ def track_user_message(text: str) -> dict:
         'wants_close': _has(CLOSING, t),
         'declined': _has(DECLINE, t),
         'objection': objection_of(t),
+        'wanted': wanted_of(text),
     }
+
+# Khách liệt kê phụ kiện muốn mua ("đặt ip17, củ sạc 40W, ốp lưng silicon, kính cường lực belkin"): nhớ lại để
+# thêm thẳng vào giỏ và không mời lại như gợi ý bán kèm. Chỉ tính khi có ý mua: "iphone 17 có củ sạc nào" là hỏi
+BUY = r'mua|lấy|đặt|chốt|thêm|order|cho (?:tui|tôi|mình|em|anh|chị) (?:xin|luôn)?'
+WANTED_KINDS = {
+    'charger': r'củ sạc|cục sạc|bộ sạc|sạc nhanh|sạc \d+\s*w|adapter|tiếp hợp',
+    'case': r'ốp|bao da',
+    'screen-protector': r'cường lực|kính|miếng dán|dán màn',
+    'cable': r'cáp|dây sạc',
+    'power-bank': r'sạc dự phòng|pin dự phòng',
+}
+WANTED_LABELS = {'charger': 'củ sạc', 'case': 'ốp lưng', 'screen-protector': 'cường lực/miếng dán',
+                 'cable': 'cáp sạc', 'power-bank': 'sạc dự phòng'}
+
+def wanted_of(text: str) -> dict:
+    t = text.lower()
+    if not _has(BUY, t) or _has(DECLINE, t):
+        return {}
+    return {k: text.strip()[:300] for k, pat in WANTED_KINDS.items() if _has(pat, t)}
+
+def _cart_kinds(cart: list[dict]) -> set:
+    return {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
+
+def wanted_hint(state: dict) -> str | None:
+    """Phụ kiện khách đã yêu cầu mua mà giỏ chưa có: thêm thẳng, không hỏi lại như lời mời bán kèm."""
+    pending = {k: v for k, v in (state.get('wanted') or {}).items() if k not in _cart_kinds(state.get('cart') or [])}
+    if not pending:
+        return None
+    asked = '; '.join(dict.fromkeys(pending.values()))
+    labels = ', '.join(WANTED_LABELS.get(k, k) for k in pending)
+    return (f"Khách đã yêu cầu mua kèm: {labels} (khách nói: \"{asked}\"). Đây là yêu cầu của khách, không phải gợi ý: "
+            "gọi find_accessories cho máy khách chọn với đúng loại đó (có thể gọi song song), chọn món khớp mô tả của "
+            "khách (công suất, chất liệu, hãng...) rồi add_to_cart luôn, kể cả khi máy chưa đủ dung lượng, màu (khi đó "
+            "chỉ hỏi phiên bản máy). Chỉ hỏi lại khi có nhiều món khớp ngang nhau (vd nhiều màu) hoặc không có món nào "
+            "khớp (nói thật, gợi ý món gần nhất). Không mời lại các loại này như gợi ý bán kèm.")
 
 def objection_of(text: str) -> str | None:
     """Loại phản đối trong tin nhắn (đã viết thường): so với nơi khác > chê giá > do dự.
@@ -296,6 +344,9 @@ def describe(state: dict) -> str:
     unhappy = (state.get('sentiment_history') or [])[-1:] == ['negative']
     if unhappy:
         lines.append('Khách đang không vui: trả lời ngắn, xin lỗi, không quảng cáo thêm.')
+    wanted = wanted_hint(state)
+    if wanted:
+        lines.append(wanted)
     objection = objection_hint(state)
     if objection:
         lines.append(objection)
@@ -385,9 +436,11 @@ def cross_sell_step(state: dict) -> str | None:
         return None
     done = set(state.get('cross_sell') or [])
     in_cart = {i.get('accessory_type') for i in cart if i.get('category') == 'accessory'}
-    if not done & {'charger', 'accessories'} and _needs_charger(cart):
+    # Loại khách đã tự yêu cầu mua (wanted) thì không mời như gợi ý: thêm thẳng theo wanted_hint
+    wanted = set(state.get('wanted') or {})
+    if not done & {'charger', 'accessories'} and _needs_charger(cart) and 'charger' not in wanted:
         return 'charger'
-    if 'accessories' not in done and not in_cart & CROSS_SELL_ACCESSORIES:
+    if 'accessories' not in done and not (in_cart | wanted) & CROSS_SELL_ACCESSORIES:
         return 'accessories'
     if 'confirm' not in done:
         return 'confirm'

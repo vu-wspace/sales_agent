@@ -6,7 +6,7 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 # LangChain / LangGraph
-langchain>=1.4.7
+langchain[mcp]>=1.4.7
 langchain-core>=1.7.0
 langgraph>=1.2.16
 

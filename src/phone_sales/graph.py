@@ -43,6 +43,7 @@ def track_user(state: AgentState) -> dict:
         'sentiment_history': info['sentiment_history'],
         'handoff': after['handoff'],
         'declined': info['declined'],
+        'wanted': info['wanted'],
         'order_form': False,  # form chỉ hiện ở lượt gọi show_order_form
         'stage': decide_stage(after, info['wants_compare'], info['wants_close']),
     }

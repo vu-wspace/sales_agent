@@ -292,6 +292,7 @@ Bảng `promotions` (`promotions.py`):
 | `orders` | Mã các đơn đã đặt trong hội thoại |
 | `objection`, `objection_type`, `objection_step` | Phản đối lượt này (`price`, `competitor`, `hesitation`), loại đang xử lý và đã xử lý bao nhiêu lượt |
 | `offered_alternatives` | Máy rẻ hơn đã gợi ý (không gợi ý lại) |
+| `wanted` | Phụ kiện khách đã tự yêu cầu mua `{loại: tin nhắn}` (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)); khách bỏ món khỏi giỏ thì quên loại đó, đặt/hủy đơn thì làm lại |
 
 Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `closing`: xác nhận giỏ và tổng tiền, hỏi khách có chốt đơn không, khách xác nhận thì mở form đặt hàng; không tự nêu phí giao hàng hay kỳ hạn trả góp.
 
@@ -339,6 +340,7 @@ Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 - **Chính hãng:** phụ kiện cùng hãng với máy; hàng Beats, mophie, Belkin, Anker do cửa hàng Apple bán không tính là chính hãng. `find_accessories` xếp còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây hoặc sạc ô tô, rồi rẻ trước, và nhận nhiều loại một lúc (`'sạc, cáp'`: mỗi loại 2 món). `'củ sạc'` chỉ trả củ sạc cắm tường, bỏ sạc không dây, MagSafe, sạc ô tô; nếu hộp máy đã có cáp thì bỏ cả bộ củ sạc kèm cáp (khách không mua thêm cáp lần hai). Bước 1 dùng loại này khi hộp đã có cáp, nên Galaxy hiện chỉ có 1 củ sạc chính hãng để mời (60W). Danh sách 1 loại tách riêng mục "Hãng khác" sau hàng chính hãng. Bước bán kèm gọi `find_accessories(..., genuine_only=True)`: loại nào có hàng chính hãng thì tool bỏ hàng hãng khác của loại đó (chỉ dặn trong prompt thì model vẫn lấy củ sạc Apple, Belkin cho Galaxy cho đủ số món); loại không có hàng chính hãng thì giữ hàng hãng khác, vì Apple không bán miếng dán màn hình, cường lực cho iPhone chỉ có Belkin. Model nói đúng tên hãng, không gọi hàng Belkin là chính hãng.
 - **Gợi ý nhẹ, không ép:** cả củ sạc lẫn ốp lưng, cường lực đều là gợi ý (`LIGHT_OFFER` trong `conversation.py`, quy tắc 9 trong prompt): không thúc giục, không nói "nên mua", "đừng bỏ lỡ", không khen quá lời, luôn cho khách thấy không lấy cũng được, khách không lấy thì không hỏi lại.
 - **Công suất sạc:** máy có thông số sạc (hiện là iPhone, đọc từ mục "Pin Và Nguồn Điện", "MagSafe và Sạc Không Dây") thì `find_accessories` thêm dòng đầu "Công suất sạc của … (theo thông số)" (vd iPhone 17: sạc nhanh 50% trong 20 phút cần bộ tiếp hợp từ 40W qua cáp USB-C; MagSafe tối đa 25W) và ghi chú từng củ sạc: "đủ công suất sạc nhanh cho máy" hoặc "dưới 40W: sạc được nhưng không đạt sạc nhanh"; củ sạc đủ công suất xếp trước. Sạc MagSafe ghi công suất không dây tối đa trên máy đó. Máy không có thông số sạc (dòng Galaxy, iPhone 18 Pro, Duo với sạc có dây) thì không ghi, agent không tự nêu công suất cần.
+- **Khách tự yêu cầu phụ kiện** ("tui muốn đặt ip17, củ sạc 40W, ốp lưng silicon, kính cường lực belkin"): `wanted_of` nhận loại phụ kiện trong tin có ý mua ("mua", "lấy", "đặt", "thêm"…; câu hỏi "có củ sạc nào không" hay câu từ chối không tính) và lưu vào `wanted`. `wanted_hint` yêu cầu agent tìm đúng món khớp mô tả (công suất, chất liệu, hãng) và `add_to_cart` luôn, kể cả khi máy chưa đủ dung lượng, màu (khi đó chỉ hỏi phiên bản máy); chỉ hỏi lại khi nhiều món khớp ngang nhau hoặc không có món nào khớp. Bán kèm bỏ qua bước của loại khách đã yêu cầu (đã yêu cầu củ sạc thì không mời củ sạc; đã yêu cầu ốp hoặc cường lực thì không mời ốp lưng, cường lực), không còn hỏi lại như lời mời.
 - **Mẫu câu trả lời:** mỗi bước có mẫu riêng trong `cross_sell_hint`: bước củ sạc "Dạ, em đã thêm … vào giỏ rồi nha" + dòng hộp máy có gì + "Nếu anh/chị cần thì bên em có củ sạc chính hãng" + danh sách + "Anh/chị không cần thì cũng không sao, cứ nói em một tiếng nha."; bước ốp lưng, cường lực "Anh/chị muốn giữ … kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em" + danh sách + "Không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha."; bước xác nhận "Đơn hàng của anh/chị:" + từng món + "Tổng cộng" + "Anh/chị xác nhận đặt hàng giúp em, em mở form để mình điền thông tin nhận hàng nha."
 - **Nhận diện từ chối** (`DECLINE` trong `conversation.py`) dùng từ khóa: "không cần", "khỏi", "không lấy", "chưa cần", "để sau", "thôi không", "vậy thôi"… Các bước bán kèm không phụ thuộc vào việc nhận ra từ chối (khách lấy hay không đều sang bước kế tiếp), nhưng cách nói lạ ("để em tính", viết không dấu "ko can") vẫn có thể ảnh hưởng tới cảm xúc và bước bán hàng. Chữ "thôi" đứng một mình không tính là từ chối vì hay dùng khi chốt ("lấy luôn thôi").
 
@@ -526,7 +528,7 @@ sales_agent/
 uv run pytest
 ```
 
-236 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+244 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 

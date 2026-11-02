@@ -570,9 +570,12 @@ def remove_from_cart(product: str, state: Annotated[dict, InjectedState],
     if len(keep) == len(cart):
         return _cart_reply(tool_call_id, f"Không có '{product}' trong giỏ hàng.")
     total = sum(i['price'] * i['quantity'] for i in keep)
-    removed = [i['variant_id'] for i in cart if i not in keep]
-    return _cart_reply(tool_call_id, f'Đã bỏ {len(cart) - len(keep)} sản phẩm. Giỏ còn {len(keep)} sản phẩm, '
-                       f'tổng {_price(total)}.', {'remove': removed})
+    removed = [i for i in cart if i not in keep]
+    reply = _cart_reply(tool_call_id, f'Đã bỏ {len(cart) - len(keep)} sản phẩm. Giỏ còn {len(keep)} sản phẩm, '
+                        f'tổng {_price(total)}.', {'remove': [i['variant_id'] for i in removed]})
+    # Khách bỏ phụ kiện đã yêu cầu: quên yêu cầu đó, không để wanted_hint tự thêm lại
+    reply.update['wanted'] = {'drop': [i['accessory_type'] for i in removed if i.get('accessory_type')]}
+    return reply
 
 @tool
 def show_order_form(state: Annotated[dict, InjectedState],
