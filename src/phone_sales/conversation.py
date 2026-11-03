@@ -350,10 +350,44 @@ def describe(state: dict) -> str:
     objection = objection_hint(state)
     if objection:
         lines.append(objection)
+    added = added_hint(state)
+    if added:
+        lines.append(added)
     hint = cross_sell_hint(state)
-    if hint and not unhappy:
+    # Đã liệt kê các món vừa thêm kèm tổng giỏ: không cần thêm mẫu "Đơn hàng của anh/chị" của bước xác nhận
+    if hint and not unhappy and not (added and cross_sell_step(state) == 'confirm'):
         lines.append(hint)
     return '\n'.join(lines)
+
+ADDED_RE = re.compile(r'^Đã thêm (\d+) x (.+?) \((\d[\d.]*đ)\)\.')
+
+def added_this_turn(messages: list[AnyMessage]) -> list[dict]:
+    """Các món add_to_cart thêm thành công trong lượt này (đọc từ kết quả tool: đúng tên, phiên bản, giá)."""
+    items = []
+    for call, content in _tool_results(messages):
+        m = ADDED_RE.match(content) if call['name'] == 'add_to_cart' else None
+        if m:
+            items.append({'qty': int(m.group(1)), 'name': ' '.join(m.group(2).split()), 'price': m.group(3)})
+    return items
+
+def added_hint(state: dict) -> str | None:
+    """Khách mua nhiều món cùng lúc ("bán cho tui ip17 512gb đen, củ sạc 40w, kính belkin"): liệt kê từng món
+    vừa thêm rồi mới chốt 1 câu tổng, không chỉ nói gộp "đã thêm 3 món"."""
+    items = added_this_turn(state.get('messages') or [])
+    if len(items) < 2:
+        return None
+    cart = state.get('cart') or []
+    total = _price(sum(i['price'] * i['quantity'] for i in cart))
+    missing = [WANTED_LABELS.get(k, k) for k in (state.get('wanted') or {}) if k not in _cart_kinds(cart)]
+    lines = '\n'.join(f"- {i['qty']} x **{i['name']}**: {i['price']}" if i['qty'] > 1 else
+                      f"- **{i['name']}**: {i['price']}" for i in items)
+    done = (f"Đã thêm {len(items)} món anh/chị yêu cầu vào giỏ, còn {', '.join(missing)} em chưa thêm được "
+            "[nói ngắn lý do theo kết quả tool]." if missing else
+            f"Đã thêm đủ {len(items)} món anh/chị yêu cầu vào giỏ.")
+    return ("Lượt này đã thêm nhiều món vào giỏ: liệt kê đúng từng món như dưới (không gộp, không đổi tên, giá) rồi "
+            "mới chốt 1 câu tổng. Trả lời theo mẫu:\n"
+            f"Dạ, em đã thêm vào giỏ:\n{lines}\n\n{done} Tổng cộng **{total}**.\n\n"
+            "[1 câu tiếp theo: gợi ý theo mục \"Bán kèm\" nếu có, không thì hỏi khách xác nhận đặt hàng để mở form]")
 
 # Khoảng giá máy thay thế theo % (không dùng số tiền cố định: "rẻ hơn 5-10 triệu" với máy 7 triệu là tụt phân khúc
 # hoặc không có máy nào). Khách đã nói ngân sách thì find_cheaper_alternatives lấy ngân sách làm trần

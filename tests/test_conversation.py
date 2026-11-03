@@ -402,3 +402,38 @@ def test_cross_sell_templates_do_not_leak_instructions():
         for word in ('tool', 'find_accessories', 'genuine', 'từ rẻ tới đắt', 'Mời ', 'show_order_form', '2-3'):
             assert word not in template, (word, template)
         assert '**' in template                                       # tên món / tổng tiền in đậm theo quy tắc 11b
+
+
+def _added_turn(*results):
+    # 1 lượt: khách nhắn, model gọi add_to_cart song song, tool trả kết quả
+    calls = [{'name': 'add_to_cart', 'args': {}, 'id': f'a{i}'} for i in range(len(results))]
+    return [HumanMessage('bán cho tui ip17 512gb đen, củ sạc 40w, kính cường lực belkin'), AIMessage('', tool_calls=calls),
+            *[ToolMessage(r, tool_call_id=f'a{i}') for i, r in enumerate(results)]]
+
+
+def test_added_hint_lists_each_item_then_total():
+    messages = _added_turn('Đã thêm 1 x iPhone 17 512GB Đen (35.499.000đ). Giỏ có 1 sản phẩm, tổng 35.499.000đ.',
+                           'Đã thêm 1 x Bộ Tiếp Hợp Nguồn Động 40W  (999.000đ). Giỏ có 1 sản phẩm, tổng 999.000đ.',
+                           'Đã thêm 2 x Củ Sạc Không Kèm Cáp 60W (Đen)  (1.089.720đ). Giỏ có 1 sản phẩm.',
+                           'iPhone 17 không có phiên bản dung lượng \'1TB\'.')               # thêm lỗi: không liệt kê
+    cart = [{'name': 'iPhone 17', 'category': 'phone', 'price': 35_499_000, 'quantity': 1},
+            {'name': 'Củ sạc', 'category': 'accessory', 'accessory_type': 'charger', 'price': 999_000, 'quantity': 1},
+            {'name': 'Củ sạc 60W', 'category': 'accessory', 'accessory_type': 'charger', 'price': 1_089_720, 'quantity': 2}]
+    hint = conv.added_hint({'messages': messages, 'cart': cart, 'wanted': {'charger': 'củ sạc 40w'}})
+    assert ('- **iPhone 17 512GB Đen**: 35.499.000đ\n- **Bộ Tiếp Hợp Nguồn Động 40W**: 999.000đ\n'
+            '- 2 x **Củ Sạc Không Kèm Cáp 60W (Đen)**: 1.089.720đ\n\n'
+            'Đã thêm đủ 3 món anh/chị yêu cầu vào giỏ. Tổng cộng **38.677.440đ**.') in hint
+    # Khách yêu cầu cường lực mà chưa thêm được: không nói "đủ", nêu món còn thiếu
+    missing = conv.added_hint({'messages': messages, 'cart': cart,
+                               'wanted': {'charger': 'x', 'screen-protector': 'kính belkin'}})
+    assert 'còn cường lực/miếng dán em chưa thêm được' in missing and 'đủ' not in missing.split('Trả lời theo mẫu')[1]
+    # Chỉ 1 món: không cần mẫu này
+    assert conv.added_hint({'messages': _added_turn('Đã thêm 1 x A (1đ). Giỏ có 1 sản phẩm.'), 'cart': cart}) is None
+
+
+def test_added_hint_replaces_confirm_template_in_describe():
+    messages = _added_turn('Đã thêm 1 x iPhone 17 512GB Đen (35.499.000đ). Giỏ.', 'Đã thêm 1 x Kính Belkin (1.177.000đ). Giỏ.')
+    state = {'stage': 'closing', 'messages': messages, 'cart': [PHONE_IN_CART, CASE],
+             'wanted': {'case': 'ốp'}, 'cross_sell': ['accessories']}
+    text = conv.describe(state)
+    assert 'Dạ, em đã thêm vào giỏ:' in text and 'Đơn hàng của anh/chị:' not in text    # không lặp danh sách
