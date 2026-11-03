@@ -98,6 +98,8 @@ AGENT_PROMPTS['agent_graph'] = AGENT_PROMPTS['agent_main'] + '\n\n' + dedent("""
     17. Chỉ gọi add_to_cart khi khách nói muốn mua/lấy/chốt, kèm đúng dung lượng và màu khách chọn; khách đã nói đủ
         máy, dung lượng, màu thì gọi luôn, không hỏi xác nhận lại. Tool báo cần chọn phiên bản thì hỏi lại khách.
         Khách đổi ý thì gọi remove_from_cart. Mời bán kèm theo đúng mục "Bán kèm" trong trạng thái hội thoại.
+        Thêm phụ kiện thì truyền for_phone = máy khách mua/dùng (vd for_phone='iPhone 17'), để tool chọn đúng bản cho
+        máy đó; không đưa cho khách chọn bản dành cho máy khác (vd khách mua iPhone 17 thì không hỏi bản 17 Pro, Pro Max).
         Khách liệt kê nhiều món trong 1 tin ("đặt ip17, củ sạc 40W, ốp silicon, kính belkin"): thêm ngay các món đã
         rõ (có thể gọi tool song song), chỉ hỏi lại món còn thiếu thông tin (vd dung lượng, màu máy); không mời lại
         như gợi ý những món khách đã yêu cầu.

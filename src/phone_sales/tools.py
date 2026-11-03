@@ -2,14 +2,14 @@ import re
 import unicodedata
 import psycopg
 from langchain.tools import tool
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import InjectedToolCallId
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
 from phone_sales import promotions
-from phone_sales.conversation import added_to_cart_this_turn, cart_update, cross_sell_step
+from phone_sales.conversation import _current_turn, added_to_cart_this_turn, cart_update, cross_sell_step
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_sales.vector_db import get_vector_store
@@ -516,18 +516,42 @@ def _cart_extra(p: dict) -> dict:
     box = _in_box(p)
     return {'charger_in_box': box['charger'] if box else None, 'cable_in_box': box['cable'] if box else None}
 
+def _context_phones(state: dict, for_phone: str) -> list[str]:
+    """Điện thoại khách đang mua: for_phone model truyền, máy trong giỏ, máy add_to_cart cùng lượt (gọi song song
+    thì giỏ chưa kịp có máy). Dùng để chọn phụ kiện đúng máy khi tên phụ kiện khớp nhiều sản phẩm."""
+    names = [for_phone] if for_phone.strip() else []
+    names += [i['name'] for i in state.get('cart') or [] if i.get('category') == 'phone']
+    names += [tc['args'].get('product', '') for m in _current_turn(state.get('messages') or [])
+              if isinstance(m, AIMessage) for tc in (m.tool_calls or []) if tc['name'] == 'add_to_cart']
+    return [n for n in dict.fromkeys(names) if n.strip()]
+
+def _narrow_to_phone(hits: list[dict], phones: list[str]) -> list[dict]:
+    """Tên phụ kiện khớp nhiều sản phẩm ('Miếng Dán Belkin UltraGlass 2' có bản cho iPhone 17, 17 Pro, 17 Pro Max):
+    giữ món tương thích với máy khách đang mua. Không lọc được (không rõ máy, không món nào hợp) thì giữ nguyên."""
+    if len(hits) < 2 or not phones or any(h['category'] == 'phone' for h in hits):
+        return hits
+    catalog = _query("SELECT product_id, name FROM products WHERE category = 'phone'")
+    phone_ids = {p['product_id'] for n in phones for p in _match(catalog, n) if len(_match(catalog, n)) == 1}
+    if not phone_ids:
+        return hits
+    fits = {r['accessory_id'] for r in _query(
+        'SELECT accessory_id FROM compatibility WHERE phone_id = ANY(%s) AND accessory_id = ANY(%s)',
+        (list(phone_ids), [h['product_id'] for h in hits]))}
+    return [h for h in hits if h['product_id'] in fits] or hits
+
 @tool
 def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId],
-                storage: str = '', color: str = '', quantity: int = 1) -> Command:
+                storage: str = '', color: str = '', quantity: int = 1, for_phone: str = '') -> Command:
     """Thêm 1 sản phẩm (điện thoại hoặc phụ kiện) vào giỏ hàng khi khách đồng ý mua.
     product: tên sản phẩm (vd 'iPhone 17', 'Ốp Lưng Trong Suốt Galaxy S26 Ultra').
     storage, color: phiên bản điện thoại khách chọn (bắt buộc nếu máy có nhiều phiên bản). quantity: số lượng.
+    for_phone: với phụ kiện, tên điện thoại khách dùng (vd 'iPhone 17') để chọn đúng bản cho máy đó.
     Chỉ gọi khi khách đã nói muốn mua/lấy/chốt; không tự thêm khi khách mới hỏi giá."""
     if quantity < 1:
         return _cart_reply(tool_call_id, 'Số lượng phải từ 1 trở lên.')
     try:
         products = _query('SELECT product_id, name, brand, category, attributes FROM products')
-        hits = _match(products, product)
+        hits = _narrow_to_phone(_match(products, product), _context_phones(state, for_phone))
         if len(hits) != 1:
             names = ', '.join(p['name'] for p in hits[:MAX_LINES])
             return _cart_reply(tool_call_id, f"Có nhiều sản phẩm khớp '{product}': {names}. Hỏi lại khách." if hits

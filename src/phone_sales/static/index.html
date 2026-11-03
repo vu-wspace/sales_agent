@@ -122,7 +122,7 @@
 <main>
   <header>
     <h1>Tư vấn điện thoại</h1>
-    <button id="reset" type="button">Cuộc trò chuyện mới</button>
+    <button id="reset" type="button" title="Kết thúc cuộc trò chuyện này và bắt đầu cuộc mới">Cuộc trò chuyện mới</button>
   </header>
   <div id="log" aria-live="polite"></div>
   <template id="order-tpl">
@@ -433,6 +433,7 @@
       }
       // Đơn đã tạo: bỏ form, hiện thẻ xác nhận; dựng thẻ lỗi thì vẫn hiện tóm tắt dạng chữ, không để trống
       f.remove();
+      if (data.customer_token) saveToken(data.customer_token);
       add('Đã gửi thông tin đặt hàng', 'me');
       try {
         addReceipt(data.order);
@@ -529,16 +530,51 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  function greet() {
+  // Mã khách quen (đã ký trên server) giữ trong trình duyệt: phiên chat sau chào lại theo tên.
+  // localStorage có thể bị chặn (chế độ riêng tư) -> bỏ qua, chào như khách mới
+  const TOKEN_KEY = 'phone_sales_customer';
+  const loadToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
+  const saveToken = (t) => {
+    try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {}
+  };
+  const GREETING = 'Dạ, em chào anh/chị. Bên em tư vấn iPhone, Samsung Galaxy, phụ kiện đi kèm, giá và tình trạng hàng, cùng chính sách đổi trả, giao hàng, trả góp và bảo hành. Anh/chị cần gì cứ hỏi em nha.';
+
+  // Kết thúc cuộc trò chuyện cũ (server xóa lịch sử, giỏ hàng) và mở cuộc mới. Khách đã đặt hàng thì được chào lại
+  // theo tên; máy chủ lỗi thì vẫn chào như khách mới, thread tạo ở lượt chat đầu tiên.
+  let starting = null;
+  async function greet() {
+    const ended = threadId;
     log.replaceChildren();
     threadId = null;
-    add('Dạ, em chào anh/chị. Bên em tư vấn iPhone, Samsung Galaxy, phụ kiện đi kèm, giá và tình trạng hàng, cùng chính sách đổi trả, giao hàng, trả góp và bảo hành. Anh/chị cần gì cứ hỏi em nha.');
+    send.disabled = true;
+    const pending = addPending();
+    starting = (async () => {
+      try {
+        const r = await fetch('/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ end_thread_id: ended, customer_token: loadToken() }),
+        });
+        if (!r.ok) throw new Error();
+        const data = await r.json();
+        threadId = data.thread_id;
+        saveToken(data.customer_token);
+        fill(pending.div, data.greeting, '');
+      } catch {
+        fill(pending.div, GREETING, '');
+      } finally {
+        send.disabled = false;
+        starting = null;
+      }
+    })();
+    await starting;
   }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const message = input.value.trim();
     if (!message) return;
+    if (starting) await starting;  // chờ phiên mới có thread_id
     add(message, 'me');
     input.value = '';
     send.disabled = true;

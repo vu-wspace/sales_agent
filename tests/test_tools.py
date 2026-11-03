@@ -1,5 +1,6 @@
 import pytest
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 
 from phone_sales import tools
 
@@ -361,3 +362,59 @@ def test_find_chargers_puts_fast_enough_first(monkeypatch):
     assert out[0].startswith('Công suất sạc của iPhone 17 (theo thông số)')
     assert '40W' in out[2] and 'đủ công suất sạc nhanh' in out[2]       # đủ công suất xếp trước, dù đắt hơn
     assert '35W' in out[3] and 'không đạt sạc nhanh' in out[3]
+
+
+# ---------------------------------------------------------------- phụ kiện trùng tên, khác máy
+
+BELKIN = [
+    {'product_id': 'belkin-17', 'name': 'Miếng Dán Màn Hình Belkin UltraGlass 2 cho iPhone 17 | iPhone 16 Pro',
+     'brand': 'Belkin', 'category': 'accessory', 'attributes': {'accessory_type': 'screen-protector'}},
+    {'product_id': 'belkin-pro', 'name': 'Miếng Dán Màn Hình Belkin UltraGlass 2 cho iPhone 18 Pro | iPhone 17 Pro',
+     'brand': 'Belkin', 'category': 'accessory', 'attributes': {'accessory_type': 'screen-protector'}},
+    {'product_id': 'belkin-max', 'name': 'Miếng Dán Màn Hình Belkin UltraGlass 2 cho iPhone 18 Pro Max | iPhone 17 Pro Max',
+     'brand': 'Belkin', 'category': 'accessory', 'attributes': {'accessory_type': 'screen-protector'}},
+]
+CATALOG = [{'product_id': 'iphone-17', 'name': 'iPhone 17', 'brand': 'Apple', 'category': 'phone', 'attributes': {}},
+           {'product_id': 'iphone-18-pro-max', 'name': 'iPhone 18 Pro Max', 'brand': 'Apple', 'category': 'phone',
+            'attributes': {}}, *BELKIN]
+FITS = {'iphone-17': {'belkin-17'}, 'iphone-18-pro-max': {'belkin-max'}}
+
+
+@pytest.fixture
+def belkin_db(monkeypatch):
+    def query(sql, params=()):
+        if 'FROM compatibility' in sql:
+            phones, accs = params
+            return [{'accessory_id': a} for p in phones for a in FITS.get(p, ()) if a in accs]
+        if 'FROM variants' in sql:
+            return [{'variant_id': f'V-{params[0]}', 'color': None, 'storage': None, 'price': 1177000, 'stock': 5}]
+        if "category = 'phone'" in sql:
+            return [p for p in CATALOG if p['category'] == 'phone']
+        return CATALOG
+    monkeypatch.setattr(tools, '_query', query)
+
+
+def _add(args, state):
+    r = tools.add_to_cart.invoke({'type': 'tool_call', 'id': 't1', 'name': 'add_to_cart', 'args': {**args, 'state': state}})
+    return r.update['messages'][0].content
+
+
+@pytest.mark.parametrize('args, state, expected', [
+    # Khách đã chốt iPhone 17: không hỏi lại bản cho 17 Pro / Pro Max (lỗi 03/11/2026)
+    ({'for_phone': 'iPhone 17'}, {'cart': [], 'messages': []}, 'iPhone 17 | iPhone 16 Pro'),
+    ({}, {'cart': [{'variant_id': 'X', 'name': 'iPhone 17', 'category': 'phone', 'price': 1, 'quantity': 1}],
+          'messages': []}, 'iPhone 17 | iPhone 16 Pro'),
+    # Gọi song song với máy trong cùng lượt: giỏ chưa có máy, lấy máy từ lệnh add_to_cart bên cạnh
+    ({}, {'cart': [], 'messages': [HumanMessage('ip17 512 đen, kính belkin'), AIMessage('', tool_calls=[
+        {'id': 'a', 'name': 'add_to_cart', 'args': {'product': 'iPhone 17', 'storage': '512GB', 'color': 'Đen'}},
+        {'id': 'b', 'name': 'add_to_cart', 'args': {'product': 'Miếng Dán Màn Hình Belkin UltraGlass 2'}}])]},
+     'iPhone 17 | iPhone 16 Pro'),
+    ({'for_phone': 'iPhone 18 Pro Max'}, {'cart': [], 'messages': []}, 'iPhone 17 Pro Max'),
+])
+def test_add_to_cart_picks_accessory_for_customer_phone(belkin_db, args, state, expected):
+    text = _add({'product': 'Miếng Dán Màn Hình Belkin UltraGlass 2', **args}, state)
+    assert text.startswith('Đã thêm 1 x') and expected in text
+
+
+def test_add_to_cart_still_asks_when_phone_unknown(belkin_db):
+    assert _add({'product': 'Miếng Dán Màn Hình Belkin UltraGlass 2'}, {'cart': [], 'messages': []}).startswith('Có nhiều')

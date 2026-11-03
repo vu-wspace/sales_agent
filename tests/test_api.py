@@ -323,7 +323,8 @@ def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
     r = TestClient(api.app).post('/order', json={**ORDER_FORM, 'cart': [{'price': 0}]})  # giỏ client gửi bị bỏ qua
     assert r.status_code == 200
     assert r.json() == {'thread_id': 't1', 'order_id': 'DH0000000C', 'answer': 'Đơn #DH0000000C\n\nCảm ơn Nguyễn Văn A!',
-                        'order': {'order_id': 'DH0000000C', 'total': 1}, 'thanks': 'Cảm ơn Nguyễn Văn A!'}
+                        'order': {'order_id': 'DH0000000C', 'total': 1}, 'thanks': 'Cảm ơn Nguyễn Văn A!',
+                        'customer_token': None}
     assert fake_orders == [(CART, ('Nguyễn Văn A', '0912345678', '12 Lê Lợi, Quy Nhơn', 'delivery', 'cod'), 't1')]
     thread, values, node = agent.updates[0]
     assert thread == 't1' and node == 'track_reply'
@@ -399,3 +400,58 @@ def test_order_without_pii_key_returns_503(monkeypatch):
     api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
     assert r.status_code == 503 and 'chưa lưu được đơn hàng' in r.json()['detail']
+
+
+# ---------------------------------------------------------------- phiên chat mới, khách quen
+
+PROFILE = {'customer_id': 'KH00000001', 'name': 'Nguyễn Văn A', 'order_count': 2,
+           'last_order': {'order_id': 'DH0000000C', 'date': '02/11/2026', 'items': ['iPhone 17 512GB Đen', 'Ốp lưng']}}
+
+
+class SessionAgent(CartAgent):
+    def __init__(self):
+        super().__init__([])
+        self.checkpointer = SimpleNamespace(deleted=[], delete_thread=lambda t: self.checkpointer.deleted.append(t))
+
+
+@pytest.fixture
+def session_agent(monkeypatch):
+    agent = api.app.state.agent = SessionAgent()
+    monkeypatch.setattr(api.orders, 'customer_profile', lambda cid: PROFILE if cid == 'KH00000001' else None)
+    return agent
+
+
+def test_new_session_for_new_customer_greets_normally_and_ends_old_thread(session_agent):
+    data = TestClient(api.app).post('/session', json={'end_thread_id': 'old'}).json()
+    assert data['greeting'] == api.GREETING and data['returning'] is False and data['customer_token'] is None
+    assert data['thread_id'] and data['thread_id'] != 'old'
+    assert session_agent.checkpointer.deleted == ['old'] and session_agent.updates == []
+
+
+def test_new_session_keeps_returning_customer(session_agent):
+    token = api.pii.customer_token('KH00000001')
+    data = TestClient(api.app).post('/session', json={'customer_token': token}).json()
+    assert data['returning'] is True and data['customer_token'] == token
+    assert 'Nguyễn Văn A' in data['greeting'] and 'iPhone 17 512GB Đen' in data['greeting']
+    thread, values, node = session_agent.updates[0]
+    assert thread == data['thread_id'] and node == 'track_reply'
+    assert values['customer'] == PROFILE and values['messages'][0].text == data['greeting']
+
+
+@pytest.mark.parametrize('token', ['KH00000001.' + '0' * 32,             # chữ ký sai: không xem được khách khác
+                                   'KH00000001', ''])
+def test_new_session_rejects_forged_token(session_agent, token):
+    data = TestClient(api.app).post('/session', json={'customer_token': token}).json()
+    assert data['returning'] is False and data['greeting'] == api.GREETING and data['customer_token'] is None
+
+
+def test_new_session_customer_without_orders_is_new(session_agent):
+    data = TestClient(api.app).post('/session', json={'customer_token': api.pii.customer_token('KH00000099')}).json()
+    assert data['returning'] is False and data['customer_token'] is None
+
+
+def test_order_returns_customer_token(fake_orders, monkeypatch):
+    api.app.state.agent = CartAgent(CART)
+    monkeypatch.setattr(api.orders, 'get_order', lambda order_id: {'order_id': order_id, 'customer_id': 'KH00000001'})
+    data = TestClient(api.app).post('/order', json=ORDER_FORM).json()
+    assert api.pii.verify_customer_token(data['customer_token']) == 'KH00000001'

@@ -137,6 +137,20 @@ class OrderResponse(BaseModel):
     answer: str          # tóm tắt dạng chữ + lời cảm ơn (cũng là tin nhắn ghi vào lịch sử hội thoại)
     order: dict          # dữ liệu đơn đọc từ database, giao diện hiện thành thẻ xác nhận
     thanks: str          # lời cảm ơn do LLM viết
+    customer_token: str | None = None  # mã khách đã ký, trình duyệt giữ để phiên sau nhận ra khách quen (POST /session)
+
+GREETING = ('Dạ, em chào anh/chị. Bên em tư vấn iPhone, Samsung Galaxy, phụ kiện đi kèm, giá và tình trạng hàng, '
+            'cùng chính sách đổi trả, giao hàng, trả góp và bảo hành. Anh/chị cần gì cứ hỏi em nha.')
+
+class SessionRequest(BaseModel):
+    end_thread_id: str | None = Field(default=None, max_length=100)    # cuộc trò chuyện cũ cần kết thúc
+    customer_token: str | None = Field(default=None, max_length=200)   # từ OrderResponse / lần /session trước
+
+class SessionResponse(BaseModel):
+    thread_id: str
+    greeting: str
+    returning: bool                     # khách quen (đã đặt hàng trước đó)
+    customer_token: str | None = None   # None: mã sai / khách không còn -> trình duyệt xóa mã đã lưu
 
 def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
     # Qdrant có thể khởi động chậm hơn API khi chạy bằng docker compose -> thử lại vài lần
@@ -307,7 +321,8 @@ def order(req: OrderRequest, request: Request, background: BackgroundTasks):
                                 'wanted': None},
                        as_node='track_reply')
     return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
-                         thanks=thanks)
+                         thanks=thanks,
+                         customer_token=pii.customer_token(saved['customer_id']) if saved.get('customer_id') else None)
 
 @app.post('/order/quote', response_model=QuoteResponse)
 def order_quote(req: QuoteRequest, request: Request):
@@ -324,6 +339,37 @@ def order_quote(req: QuoteRequest, request: Request):
     promo = price['promo']
     return QuoteResponse(subtotal=price['subtotal'], discount=price['discount'], total=price['total'],
                          promo=promotions.label(promo), promo_text=promotions.describe(promo) if promo else None)
+
+@app.post('/session', response_model=SessionResponse)
+def new_session(req: SessionRequest, request: Request):
+    """Kết thúc cuộc trò chuyện cũ (xóa lịch sử, giỏ hàng khỏi bộ nhớ) và mở cuộc trò chuyện mới.
+    Khách đã đặt hàng (customer_token hợp lệ, có đơn) thì chào lại theo tên, ghi khách quen vào trạng thái hội thoại;
+    không thì chào như khách mới. Lời chào là template, không gọi LLM."""
+    agent = request.app.state.agent
+    if req.end_thread_id:
+        checkpointer = getattr(agent, 'checkpointer', None)
+        if checkpointer is not None:
+            checkpointer.delete_thread(req.end_thread_id)
+    thread_id = str(uuid.uuid4())
+    customer_id = pii.verify_customer_token(req.customer_token)
+    profile = None
+    if customer_id:
+        try:
+            profile = orders.customer_profile(customer_id)
+        except psycopg.Error as e:
+            # Không đọc được database: vẫn mở phiên, chào như khách mới, giữ mã để lần sau thử lại
+            log.error('Không đọc được thông tin khách quen', exc_info=e)
+            return SessionResponse(thread_id=thread_id, greeting=GREETING, returning=False,
+                                   customer_token=req.customer_token)
+    if not profile:
+        return SessionResponse(thread_id=thread_id, greeting=GREETING, returning=False)
+    greeting = orders.welcome_back(profile)
+    values = {'messages': [AIMessage(greeting)]}
+    if AGENT_IMPL == 'graph':
+        values['customer'] = profile
+    agent.update_state({'configurable': {'thread_id': thread_id}}, values, as_node='track_reply' if AGENT_IMPL == 'graph' else None)
+    return SessionResponse(thread_id=thread_id, greeting=greeting, returning=True,
+                           customer_token=pii.customer_token(customer_id))
 
 @app.post('/order/cancel', response_model=CancelResponse)
 def cancel_order(req: CancelRequest, request: Request):

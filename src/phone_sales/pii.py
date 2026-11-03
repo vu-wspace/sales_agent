@@ -114,6 +114,22 @@ def email_key(email: str | None) -> str | None:
     return _blind('email:' + email.strip().lower()) if email else None
 
 
+# ---------------------------------------------------------------- mã khách cho phiên chat mới
+
+def customer_token(customer_id: str) -> str:
+    """Mã khách kèm chữ ký HMAC, trình duyệt giữ để phiên chat sau nhận ra khách quen (api.py: POST /session).
+    Có chữ ký nên không đoán/đổi được mã khách khác để xem tên, đơn cũ của họ."""
+    return f"{customer_id}.{_blind('customer:' + customer_id)[:32]}"
+
+
+def verify_customer_token(token: str | None) -> str | None:
+    """Trả mã khách nếu chữ ký đúng, sai/thiếu thì None."""
+    customer_id, _, sig = (token or '').rpartition('.')
+    if not customer_id or not sig:
+        return None
+    return customer_id if hmac.compare_digest(sig, customer_token(customer_id).rpartition('.')[2]) else None
+
+
 # ---------------------------------------------------------------- che trong log
 
 class RedactFilter(logging.Filter):

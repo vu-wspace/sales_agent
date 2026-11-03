@@ -85,6 +85,7 @@ class AgentState(TypedDict, total=False):
     objection_step: int                                   # đã xử lý loại đó bao nhiêu lượt (bậc thang khi khách do dự)
     offered_alternatives: Annotated[list[str], append_unique]  # máy rẻ hơn đã gợi ý (find_cheaper_alternatives không lặp lại)
     wanted: Annotated[dict, wanted_update]                # phụ kiện khách đã yêu cầu mua {loại: tin nhắn}, xem wanted_of
+    customer: Annotated[dict | None, last]                # khách quen (đã đặt hàng trước), api.py: POST /session
 
 # ---------------------------------------------------------------- trích từ tin nhắn của khách
 
@@ -209,7 +210,7 @@ def wanted_hint(state: dict) -> str | None:
     labels = ', '.join(WANTED_LABELS.get(k, k) for k in pending)
     return (f"Khách đã yêu cầu mua kèm: {labels} (khách nói: \"{asked}\"). Đây là yêu cầu của khách, không phải gợi ý: "
             "gọi find_accessories cho máy khách chọn với đúng loại đó (có thể gọi song song), chọn món khớp mô tả của "
-            "khách (công suất, chất liệu, hãng...) rồi add_to_cart luôn, kể cả khi máy chưa đủ dung lượng, màu (khi đó "
+            "khách (công suất, chất liệu, hãng...) rồi add_to_cart luôn (phụ kiện truyền for_phone = máy khách chọn), kể cả khi máy chưa đủ dung lượng, màu (khi đó "
             "chỉ hỏi phiên bản máy). Chỉ hỏi lại khi có nhiều món khớp ngang nhau (vd nhiều màu) hoặc không có món nào "
             "khớp (nói thật, gợi ý món gần nhất). Không mời lại các loại này như gợi ý bán kèm.")
 
@@ -338,6 +339,9 @@ def describe(state: dict) -> str:
         'Đã giới thiệu: ' + (', '.join(state.get('shown_products') or []) or 'chưa có'),
         'Giỏ hàng: ' + (f'{cart_text}. Tổng {_price(total)}' if cart else 'trống'),
     ]
+    customer = customer_hint(state)
+    if customer:
+        lines.append(customer)
     if state.get('objections'):
         lines.append('Khách đang lo ngại: ' + ', '.join(state['objections'])
                      + '. Trả lời thẳng vào lo ngại này bằng dữ liệu công cụ (vd gợi ý máy rẻ hơn, pin lớn hơn).')
@@ -358,6 +362,19 @@ def describe(state: dict) -> str:
     if hint and not unhappy and not (added and cross_sell_step(state) == 'confirm'):
         lines.append(hint)
     return '\n'.join(lines)
+
+def customer_hint(state: dict) -> str | None:
+    """Khách quen: phiên chat mới của khách đã đặt hàng trước đó (api.py: POST /session)."""
+    c = state.get('customer')
+    if not c:
+        return None
+    last = c.get('last_order') or {}
+    bought = ', '.join(last.get('items') or []) or 'không rõ'
+    return (f"Khách quen: {c['name']}, đã đặt {c['order_count']} đơn; đơn gần nhất #{last.get('order_id')} "
+            f"ngày {last.get('date')}: {bought}. Gọi khách là anh/chị {c['name']}, không chào lại từ đầu. "
+            "Khách hỏi phụ kiện mà không nói máy nào thì có thể hỏi có phải cho máy đã mua không; không tự nhắc lại "
+            "chi tiết đơn cũ khi khách không hỏi. Không có công cụ tra trạng thái giao hàng: khách hỏi đơn cũ đang ở "
+            "đâu thì nói nhân viên sẽ liên hệ, có thể chuyển nhân viên.")
 
 ADDED_RE = re.compile(r'^Đã thêm (\d+) x (.+?) \((\d[\d.]*đ)\)\.')
 

@@ -10,6 +10,7 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 - Nhớ trạng thái hội thoại bán hàng (nhu cầu, máy đã giới thiệu, lo ngại, cảm xúc) và quản lý giỏ hàng.
 - Bán thêm: gợi ý dung lượng lớn hơn khi nhu cầu cần (kèm số tiền chênh), máy nhỉnh hơn ngân sách; khi khách chốt mua thì mời sạc chính hãng nếu máy không kèm sạc, rồi ốp lưng, cường lực.
 - Đặt hàng ngay trong khung chat: khách xác nhận thì hiện form (tên, số điện thoại, địa chỉ), đơn lưu vào Postgres, tóm tắt đơn lấy từ database.
+- Phiên chat: nút "Cuộc trò chuyện mới" kết thúc cuộc cũ (xóa lịch sử, giỏ hàng) và mở cuộc mới; khách đã đặt hàng trên trình duyệt đó được chào lại theo tên, agent biết đơn gần nhất.
 - Gửi email xác nhận đơn hàng (HTML + chữ thuần) khi khách có nhập email; khi phát triển, email được Mailpit giữ lại, không gửi ra ngoài.
 - Chuẩn hóa tin nhắn (Unicode, dấu kiểu cũ, viết tắt "ko", "dc", "20tr"…) và kiểm tra câu trả lời không bịa số liệu (giá, thông số, chính sách).
 - Chuyển nhân viên khi khách khiếu nại, đơn có vấn đề hoặc khách bực bội.
@@ -121,12 +122,31 @@ Trong Docker, compose tự đặt `DATABASE_URL`, `QDRANT_URL`, `SMTP_HOST=mailp
 | Method | Đường dẫn | Mô tả |
 |---|---|---|
 | `GET` | `/` | Trang chat |
+| `POST` | `/session` | Kết thúc cuộc trò chuyện cũ, mở cuộc mới; chào lại khách quen |
 | `POST` | `/chat` | Gửi tin nhắn, nhận câu trả lời đầy đủ |
 | `POST` | `/chat/stream` | Như `/chat`, trả Server-Sent Events |
 | `POST` | `/order` | Gửi form đặt hàng, tạo đơn từ giỏ hàng của hội thoại |
 | `POST` | `/order/quote` | Form hỏi giá: tạm tính, giảm giá theo mã khuyến mãi hoặc khuyến mãi tự động, tổng tiền |
 | `POST` | `/order/cancel` | Khách bấm "Hủy đặt hàng" trên form |
 | `GET` | `/health` | Trạng thái Qdrant và số đoạn chính sách |
+
+### `POST /session`
+
+```jsonc
+// request: cả 2 trường đều không bắt buộc
+{"end_thread_id": "5f0c…",                       // cuộc trò chuyện cũ: xóa lịch sử, giỏ hàng khỏi bộ nhớ
+ "customer_token": "KH0B3F1C02.0f0…"}            // mã khách quen, lấy từ response của POST /order
+// response: khách quen
+{"thread_id": "9a1d…", "returning": true, "customer_token": "KH0B3F1C02.0f0…",
+ "greeting": "Dạ, em chào anh/chị Nguyễn Văn A, rất vui được gặp lại anh/chị nha. Lần trước anh/chị đã đặt iPhone 17 512GB Đen. …"}
+// response: khách mới, mã sai hoặc khách chưa có đơn
+{"thread_id": "9a1d…", "returning": false, "customer_token": null, "greeting": "Dạ, em chào anh/chị. Bên em tư vấn …"}
+```
+
+- Trang chat gọi khi mở trang và khi bấm "Cuộc trò chuyện mới". Lời chào là template, không gọi LLM.
+- `customer_token` = mã khách + chữ ký HMAC (khóa sinh từ `PII_KEY`), trình duyệt giữ trong `localStorage`. Có chữ ký nên không đổi được sang mã khách khác để xem tên, đơn của người khác. Mã sai hoặc khách không còn đơn thì trả `null`, trang chat xóa mã đã lưu. Database lỗi thì vẫn mở phiên, chào như khách mới, giữ mã.
+- Khách quen: lời chào và hồ sơ (`orders.customer_profile`: tên, số đơn, đơn gần nhất gồm mã, ngày, tên món) được ghi vào thread mới (`customer` trong trạng thái hội thoại). Không có số điện thoại, email, địa chỉ trong hồ sơ vì hồ sơ được gửi cho LLM.
+- `thread_id` của `/chat` vẫn có thể bỏ trống như trước (gọi API trực tiếp không cần `/session`).
 
 ### `POST /chat`
 
@@ -189,6 +209,7 @@ Em cảm ơn anh Nguyễn Văn A…"}
 - `order` có thêm `subtotal`, `discount`, `promo` (mã đã áp dụng); không có giảm giá thì `discount` = 0.
 - Số điện thoại, email trong `order` và `answer` đã che (xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii)).
 - Có `email` thì sau khi trả response, server gửi email xác nhận tới địa chỉ đó (xem [Email xác nhận đơn hàng](#email-xác-nhận-đơn-hàng)); response không chờ email gửi xong.
+- `customer_token`: mã khách đã ký, trang chat lưu lại để phiên sau chào lại khách (xem [`POST /session`](#post-session)).
 - Mã lỗi: `422` thông tin sai, `409` giỏ trống, hết hàng hoặc mã khuyến mãi không dùng được (kèm lý do), `503` không ghi được database. Có lỗi thì không gửi email.
 
 ### `POST /order/quote`
@@ -321,6 +342,7 @@ Bảng `promotions` (`promotions.py`):
 | `orders` | Mã các đơn đã đặt trong hội thoại |
 | `objection`, `objection_type`, `objection_step` | Phản đối lượt này (`price`, `competitor`, `hesitation`), loại đang xử lý và đã xử lý bao nhiêu lượt |
 | `offered_alternatives` | Máy rẻ hơn đã gợi ý (không gợi ý lại) |
+| `customer` | Khách quen (`POST /session`): tên, số đơn, đơn gần nhất. `customer_hint` dặn agent gọi khách theo tên, không chào lại từ đầu, không tự nhắc chi tiết đơn cũ; khách hỏi phụ kiện mà không nói máy thì hỏi có phải cho máy đã mua không |
 | `wanted` | Phụ kiện khách đã tự yêu cầu mua `{loại: tin nhắn}` (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)); khách bỏ món khỏi giỏ thì quên loại đó, đặt/hủy đơn thì làm lại |
 
 Mỗi bước có hướng dẫn riêng được đưa vào system prompt, vd `closing`: xác nhận giỏ và tổng tiền, hỏi khách có chốt đơn không, khách xác nhận thì mở form đặt hàng; không tự nêu phí giao hàng hay kỳ hạn trả góp.
@@ -370,6 +392,7 @@ Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 - **Gợi ý nhẹ, không ép:** cả củ sạc lẫn ốp lưng, cường lực đều là gợi ý (`LIGHT_OFFER` trong `conversation.py`, quy tắc 9 trong prompt): không thúc giục, không nói "nên mua", "đừng bỏ lỡ", không khen quá lời, luôn cho khách thấy không lấy cũng được, khách không lấy thì không hỏi lại.
 - **Công suất sạc:** máy có thông số sạc (hiện là iPhone, đọc từ mục "Pin Và Nguồn Điện", "MagSafe và Sạc Không Dây") thì `find_accessories` thêm dòng đầu "Công suất sạc của … (theo thông số)" (vd iPhone 17: sạc nhanh 50% trong 20 phút cần bộ tiếp hợp từ 40W qua cáp USB-C; MagSafe tối đa 25W) và ghi chú từng củ sạc: "đủ công suất sạc nhanh cho máy" hoặc "dưới 40W: sạc được nhưng không đạt sạc nhanh"; củ sạc đủ công suất xếp trước. Sạc MagSafe ghi công suất không dây tối đa trên máy đó. Máy không có thông số sạc (dòng Galaxy, iPhone 18 Pro, Duo với sạc có dây) thì không ghi, agent không tự nêu công suất cần.
 - **Khách tự yêu cầu phụ kiện** ("tui muốn đặt ip17, củ sạc 40W, ốp lưng silicon, kính cường lực belkin"): `wanted_of` nhận loại phụ kiện trong tin có ý mua ("mua", "lấy", "đặt", "thêm"…; câu hỏi "có củ sạc nào không" hay câu từ chối không tính) và lưu vào `wanted`. `wanted_hint` yêu cầu agent tìm đúng món khớp mô tả (công suất, chất liệu, hãng) và `add_to_cart` luôn, kể cả khi máy chưa đủ dung lượng, màu (khi đó chỉ hỏi phiên bản máy); chỉ hỏi lại khi nhiều món khớp ngang nhau hoặc không có món nào khớp. Bán kèm bỏ qua bước của loại khách đã yêu cầu (đã yêu cầu củ sạc thì không mời củ sạc; đã yêu cầu ốp hoặc cường lực thì không mời ốp lưng, cường lực), không còn hỏi lại như lời mời.
+- **Phụ kiện trùng tên, khác máy:** "Miếng Dán Belkin UltraGlass 2" có bản cho iPhone 17, 17 Pro, 17 Pro Max. Tên khớp nhiều sản phẩm thì `add_to_cart` giữ món tương thích (bảng `compatibility`) với máy khách đang mua: tham số `for_phone`, máy trong giỏ, hoặc máy được `add_to_cart` cùng lượt (gọi song song nên giỏ chưa có máy). Không biết máy nào mới hỏi lại khách; khách đã chốt iPhone 17 thì không đưa bản 17 Pro, Pro Max ra chọn.
 - **Mua nhiều món cùng lúc** ("bán cho tui ip17, 512gb, đen, củ sạc 40w, kính cường lực belkin"): lượt có từ 2 lần `add_to_cart` thành công thì `added_hint` dựng sẵn danh sách từ kết quả tool (đúng tên, phiên bản, giá) và tổng giỏ từ state; agent liệt kê từng món rồi mới chốt "Đã thêm đủ 3 món anh/chị yêu cầu vào giỏ. Tổng cộng **37.675.000đ**.", sau đó 1 câu gợi ý theo bước bán kèm hoặc hỏi xác nhận đặt hàng. Món khách yêu cầu mà chưa thêm được thì không nói "đủ", nêu món còn thiếu. Có danh sách này thì bỏ mẫu "Đơn hàng của anh/chị" của bước xác nhận để không lặp.
 - **Mẫu câu trả lời:** mỗi bước có mẫu riêng trong `cross_sell_hint`: bước củ sạc "Dạ, em đã thêm … vào giỏ rồi nha" + dòng hộp máy có gì + "Nếu anh/chị cần thì bên em có củ sạc chính hãng" + danh sách + "Anh/chị không cần thì cũng không sao, cứ nói em một tiếng nha."; bước ốp lưng, cường lực "Anh/chị muốn giữ … kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em" + danh sách + "Không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha."; bước xác nhận "Đơn hàng của anh/chị:" + từng món + "Tổng cộng" + "Anh/chị xác nhận đặt hàng giúp em, em mở form để mình điền thông tin nhận hàng nha."
 - **Nhận diện từ chối** (`DECLINE` trong `conversation.py`) dùng từ khóa: "không cần", "khỏi", "không lấy", "chưa cần", "để sau", "thôi không", "vậy thôi"… Các bước bán kèm không phụ thuộc vào việc nhận ra từ chối (khách lấy hay không đều sang bước kế tiếp), nhưng cách nói lạ ("để em tính", viết không dấu "ko can") vẫn có thể ảnh hưởng tới cảm xúc và bước bán hàng. Chữ "thôi" đứng một mình không tính là từ chối vì hay dùng khi chốt ("lấy luôn thôi").
@@ -451,7 +474,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 | `search_products` | Postgres | Tìm máy theo dòng, hãng, ngân sách |
 | `get_product_details` | Postgres | Giá, tồn kho từng phiên bản, thông số của 1 máy |
 | `find_accessories` | Postgres | Phụ kiện tương thích, 5 món mỗi trang |
-| `add_to_cart`, `remove_from_cart` | Postgres + state | Khách chốt mua hoặc đổi ý (chỉ `graph.py`) |
+| `add_to_cart`, `remove_from_cart` | Postgres + state | Khách chốt mua hoặc đổi ý (chỉ `graph.py`); phụ kiện kèm `for_phone` để chọn đúng bản cho máy |
 | `show_order_form` | State | Khách xác nhận đặt hàng: hiện form đặt hàng (chỉ `graph.py`) |
 | `get_promotions` | Postgres | Khách hỏi khuyến mãi, mã giảm giá hoặc đang do dự: khuyến mãi đang chạy, lọc theo sản phẩm |
 | `find_cheaper_alternatives` | Postgres + state | Khách chê đắt, do dự: máy khác rẻ hơn trong khoảng % cho trước, còn hàng (chỉ `graph.py`) |
@@ -561,7 +584,7 @@ sales_agent/
 │   ├── api.py                  # FastAPI
 │   └── static/                 # Giao diện chat (index.html), mẫu form đặt hàng (order_form.html)
 ├── tests/                      # Unit test
-├── evals/                      # Bộ câu hỏi và script đánh giá
+├── evals/                      # Bộ câu hỏi, script đánh giá, user simulator (simulate.py, personas.jsonl)
 ├── certs/                      # CA nội bộ cho mạng có SSL inspection (không commit)
 ├── Dockerfile, docker-compose.yml
 ├── langgraph.json
@@ -576,7 +599,7 @@ sales_agent/
 uv run pytest
 ```
 
-258 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+286 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
@@ -608,9 +631,47 @@ Kết quả gần nhất (`graph.py` khi model chính còn là OpenRouter, trư�
 
 Độ trễ trung bình 15,8 giây mỗi câu do model chính lúc đó là model suy luận; chưa đo lại với 9Router. Kết quả chi tiết lưu ở `evals/results/` (không commit).
 
+### User simulator (end-to-end)
+
+`evals/simulate.py`: Gemini đóng vai khách theo persona, có mục tiêu ẩn mà agent không biết (`evals/personas.jsonl`), chat với web app đang chạy qua API thật: `POST /session` → `/chat` nhiều lượt → form đặt hàng. Khi agent mở form, khách giả lập chọn gửi (`/order`, dùng thông tin trong persona, số điện thoại `0900000003`) hoặc hủy (`/order/cancel`); mã khuyến mãi bị từ chối thì được gửi lại không mã.
+
+| Persona | Mục tiêu ẩn | Đạt khi |
+|---|---|---|
+| `sv_budget` | Sinh viên, viết không dấu, mua máy dưới 8 triệu pin tốt | Tạo đơn, đúng giỏ |
+| `price_haggler` | Đòi giảm giá Galaxy S26, nói bên khác rẻ hơn | Không bịa giá, mã, ưu đãi |
+| `angry_customer` | Bực vì đơn trước giao trễ, muốn gặp nhân viên | Chuyển nhân viên |
+| `undecided` | Phân vân iPhone 17 / Galaxy S26, do dự nhiều lần | Tạo đơn, hoặc đã tra chi tiết 2 máy |
+| `multi_item` | 1 tin: iPhone 17 256GB + củ sạc 40W + ốp lưng | Đơn có máy và ít nhất 2 phụ kiện, đúng giỏ |
+| `fake_code` | Đòi áp mã VIP2026 (không có thật), nhập vào form | Mã bị từ chối, không bịa ưu đãi |
+
+Chấm 2 lớp:
+
+1. **Kiểm tra xác định** (quyết định đạt/trượt), từ response API và database:
+   - đơn có được tạo không, các món trong đơn có đúng giỏ lúc gửi form không;
+   - mọi số tiền dạng `…đ` agent nói phải có trong database: giá phiên bản, chênh lệch hoặc tổng 2 giá (lên dung lượng, máy rẻ hơn, máy + củ sạc), giá trị khuyến mãi, tổng giỏ, tạm tính/giảm giá/tổng của đơn;
+   - mã khuyến mãi agent nhắc phải có trong bảng `promotions`; câu nói về giảm giá, ưu đãi, quà tặng trước khi gọi `get_promotions` bị đánh dấu (trừ câu phủ định "không có khuyến mãi");
+   - form đặt hàng hiện ở lượt khách chưa có ý chốt; mã giả nhập ở form có bị từ chối không; có chuyển nhân viên không.
+2. **LLM-as-judge** (Gemini) chấm 1–5 kèm lý do cho 5 tiêu chí: hiểu nhu cầu, gợi ý phù hợp, xử lý phản đối, giọng điệu, chuyển nhân viên đúng lúc. Judge nhận cả kết quả kiểm tra xác định để đối chiếu.
+
+```bash
+docker compose up -d
+uv run python evals/simulate.py                                  # mỗi persona 1 lần
+uv run python evals/simulate.py --runs 5 --only undecided        # chạy nhiều lần, báo tỷ lệ đạt
+uv run python evals/simulate.py --no-judge                       # chỉ kiểm tra xác định
+uv run python evals/simulate.py --agreement evals/results/<lần chạy>-sim-human.csv
+```
+
+Mỗi lần chạy ghi vào `evals/results/`: `…-sim.json` (hội thoại, kết quả kiểm tra, điểm judge, phiên bản: commit, model của agent/khách/judge), `…-sim.md` (hội thoại để đọc lại) và `…-sim-human.csv`. Kiểm tra lại judge: tự chấm khoảng 20–30 hội thoại vào cột `human` của file CSV rồi chạy `--agreement` (tỷ lệ trùng điểm, lệch ≤ 1, sai số trung bình theo tiêu chí); lệch nhiều thì viết lại rubric.
+
+- Chạy trên database thật của web app: đơn giả lập bị xóa khi chạy xong (trả tồn kho, trả lượt dùng mã), trừ khi có `--keep-orders`; email xác nhận vào Mailpit. Chưa có database test riêng.
+- Agent chạy cả chuỗi dự phòng của server nên model trả lời có thể khác nhau giữa các lần; file kết quả chỉ ghi model chính (`ROUTER9_MODEL`).
+- Khách giả lập mặc định `temperature=0` (`--sim-temperature` để đa dạng hơn). LLM vẫn không hoàn toàn xác định: nên chạy `--runs` nhiều lần và xem tỷ lệ đạt.
+- Kiểm tra giá chỉ xét số tiền viết dạng `…đ` (không xét "8 triệu"); số tiền tính từ % khuyến mãi agent tự nói ra bị đánh dấu sai giá.
+
 ## Hạn chế
 
 - State hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker.
+- Khách quen nhận ra theo trình duyệt (`localStorage`), không có đăng nhập: máy dùng chung thì người sau thấy tên và món đơn gần nhất của người trước; xóa dữ liệu trang hoặc đổi trình duyệt thì thành khách mới. Đóng tab không gọi `/session` nên lịch sử cuộc cũ vẫn nằm trong RAM tới khi restart.
 - Form đặt hàng chỉ hỗ trợ giao tận nơi và thanh toán khi nhận hàng; chưa có trang quản lý đơn, đơn chỉ nằm trong database.
 - Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`), kể cả câu từ chối phụ kiện bán kèm.
 - Kiểm tra bịa số liệu chỉ xét số kèm đơn vị và chỉ trong `graph.py`: không bắt được câu bịa không có số ("máy chống nước tốt", sai tên màu), số trùng ngẫu nhiên với một số có trong nguồn, hay câu trả lời của `agent.py`.

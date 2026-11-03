@@ -80,3 +80,10 @@ def test_log_filter_keeps_args_shape_for_uvicorn_access():
     pii.RedactFilter().filter(record)
     client, method, path, version, status = record.args
     assert path == '/?phone=[SỐ ĐIỆN THOẠI]' and status == 200 and client == '127.0.0.1:5000'
+
+
+def test_customer_token_round_trip_and_rejects_tampering():
+    token = pii.customer_token('KH12345678')
+    assert pii.verify_customer_token(token) == 'KH12345678'
+    assert pii.verify_customer_token(token.replace('KH12345678', 'KH87654321')) is None
+    assert pii.verify_customer_token(None) is None and pii.verify_customer_token('abc') is None

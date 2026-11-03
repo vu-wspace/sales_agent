@@ -140,7 +140,7 @@ def get_order(order_id: str) -> dict:
         # Người nhận lấy từ chính đơn: customers chỉ giữ tên mới nhất theo số điện thoại, đơn sau cùng số
         # với tên khác sẽ ghi đè (đơn cũ hiện sai tên nếu đọc từ customers)
         order = conn.execute(
-            """SELECT o.order_id, o.recipient_name AS name, o.recipient_phone AS phone, o.recipient_email AS email,
+            """SELECT o.order_id, o.customer_id, o.recipient_name AS name, o.recipient_phone AS phone, o.recipient_email AS email,
                       o.address, o.fulfillment_type, o.payment, o.subtotal, o.discount_amount, o.total, o.status,
                       p.code AS promo_code, p.description AS promo_description
                FROM orders o LEFT JOIN promotions p ON p.promo_id = o.promo_id
@@ -152,6 +152,36 @@ def get_order(order_id: str) -> dict:
                WHERE oi.order_id = %s ORDER BY oi.unit_price DESC""", (order_id,)).fetchall()
     # Giải mã ở đây; summary/view tự che khi hiển thị
     return {**order, 'phone': pii.decrypt(order['phone']), 'email': pii.decrypt(order['email']), 'items': items}
+
+def customer_profile(customer_id: str) -> dict | None:
+    """Khách quen cho phiên chat mới (api.py: POST /session): tên, số đơn, đơn gần nhất (mã, ngày, tên món).
+    Không lấy số điện thoại, email, địa chỉ: thông tin này đưa vào trạng thái hội thoại, gửi cho LLM.
+    Khách không tồn tại hoặc chưa có đơn nào thì None."""
+    with _connect() as conn:
+        c = conn.execute(
+            """SELECT c.customer_id, c.name, count(o.order_id) AS order_count, max(o.created_at) AS last_at
+               FROM customers c JOIN orders o ON o.customer_id = c.customer_id
+               WHERE c.customer_id = %s GROUP BY c.customer_id, c.name""", (customer_id,)).fetchone()
+        if not c:
+            return None
+        last = conn.execute(
+            """SELECT o.order_id, o.created_at FROM orders o WHERE o.customer_id = %s
+               ORDER BY o.created_at DESC LIMIT 1""", (customer_id,)).fetchone()
+        items = conn.execute(
+            """SELECT p.name, v.storage, v.color, oi.qty FROM order_items oi
+               JOIN variants v ON v.variant_id = oi.variant_id JOIN products p ON p.product_id = v.product_id
+               WHERE oi.order_id = %s ORDER BY oi.unit_price DESC""", (last['order_id'],)).fetchall()
+    return {'customer_id': c['customer_id'], 'name': c['name'], 'order_count': c['order_count'],
+            'last_order': {'order_id': last['order_id'],
+                           'date': last['created_at'].strftime('%d/%m/%Y') if last['created_at'] else None,
+                           'items': [_item_name(i) for i in items]}}
+
+def welcome_back(profile: dict) -> str:
+    """Lời chào khách quen (template, không gọi LLM): tên, máy/món đơn gần nhất."""
+    items = profile['last_order']['items']
+    bought = f" Lần trước anh/chị đã đặt {items[0]}{' và ' + str(len(items) - 1) + ' món khác' if len(items) > 1 else ''}." if items else ''
+    return (f"Dạ, em chào anh/chị {profile['name']}, rất vui được gặp lại anh/chị nha.{bought} "
+            'Hôm nay anh/chị cần em tư vấn thêm điện thoại, phụ kiện hay chính sách gì cứ nói em nha.')
 
 EMAIL_STATUSES = ('pending', 'sent', 'failed', 'skipped')
 

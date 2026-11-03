@@ -437,3 +437,11 @@ def test_added_hint_replaces_confirm_template_in_describe():
              'wanted': {'case': 'ốp'}, 'cross_sell': ['accessories']}
     text = conv.describe(state)
     assert 'Dạ, em đã thêm vào giỏ:' in text and 'Đơn hàng của anh/chị:' not in text    # không lặp danh sách
+
+
+def test_customer_hint_for_returning_customer():
+    profile = {'customer_id': 'KH1', 'name': 'Nguyễn Văn A', 'order_count': 1,
+               'last_order': {'order_id': 'DH1', 'date': '02/11/2026', 'items': ['iPhone 17 512GB Đen']}}
+    text = conv.describe({'customer': profile})
+    assert 'Khách quen: Nguyễn Văn A' in text and 'iPhone 17 512GB Đen' in text
+    assert 'Khách quen' not in conv.describe({})

@@ -192,3 +192,10 @@ def test_thank_you_uses_llm_and_falls_back(monkeypatch):
         raise RuntimeError('quota')
     monkeypatch.setattr(orders._chain, 'call', boom)
     assert orders.thank_you('A') == orders.THANKS_FALLBACK
+
+
+def test_welcome_back_mentions_name_and_last_purchase():
+    profile = {'name': 'Nguyễn Văn A', 'last_order': {'items': ['iPhone 17 512GB Đen', 'Ốp lưng', 'Củ sạc']}}
+    text = orders.welcome_back(profile)
+    assert text.startswith('Dạ, em chào anh/chị Nguyễn Văn A') and 'iPhone 17 512GB Đen và 2 món khác' in text
+    assert ' ạ' not in text
