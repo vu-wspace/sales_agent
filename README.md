@@ -28,11 +28,11 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 
 ## Bắt đầu nhanh
 
-Yêu cầu: Docker và các API key trong [Cấu hình](#cấu-hình). Khi phát triển trên máy cần thêm Python 3.12.15 và [uv](https://docs.astral.sh/uv/).
+Yêu cầu: Docker, các API key trong [Cấu hình](#cấu-hình) và 9Router chạy trên máy (cổng 20128; không có thì agent dùng model dự phòng, nhưng mỗi lần gọi phải chờ lỗi kết nối trước). Khi phát triển trên máy cần thêm Python 3.12.15 và [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cp .env.example .env            # điền API key
-docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + web app (tự nạp chính sách)
+docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + Mailpit + web app (tự nạp chính sách)
 ```
 
 | Địa chỉ | Nội dung |
@@ -40,16 +40,17 @@ docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + w
 | http://localhost:8000 | Trang chat |
 | http://localhost:8000/docs | Swagger UI |
 | http://localhost:6333/dashboard | Dashboard Qdrant |
+| http://localhost:8025 | Mailpit: email xác nhận đơn hàng (không gửi ra Internet) |
 
 Lần build đầu mất khoảng 8 phút, chủ yếu để tải model embedding (~540 MB). Các lần sau chỉ build lại vài giây nếu không đổi thư viện.
 
 ### Chạy trên máy
 
-Postgres và Qdrant chạy bằng Docker, code chạy trên máy:
+Postgres, Qdrant, Mailpit chạy bằng Docker, code chạy trên máy:
 
 ```bash
 uv sync
-docker compose up -d postgres qdrant
+docker compose up -d postgres qdrant mailpit
 uv run python -m phone_sales.vector_db           # nạp chính sách vào Qdrant
 uv run uvicorn phone_sales.api:app --port 8001   # web app (8000 đã dùng cho container api)
 uv run langgraph dev                             # LangGraph Studio: agent_main, phone_graph
@@ -165,12 +166,12 @@ Kết quả tool và nội dung suy nghĩ của model không bao giờ được 
 ```jsonc
 // request: thread_id của hội thoại có giỏ hàng; giỏ hàng lấy từ state trên server, không nhận từ trình duyệt
 {"thread_id": "5f0c…", "name": "Nguyễn Văn A", "phone": "0912 345 678",
- "address": "123 Lê Hồng Phong, Quy Nhơn, Gia Lai", "email": "a@example.com", "promo_code": "GIAM500K",
+ "address": "123 Lê Hồng Phong, Quy Nhơn, Gia Lai", "email": "nguyenvana@gmail.com", "promo_code": "GIAM500K",
  "fulfillment_type": "delivery", "payment": "cod"}
 
 // response
 {"thread_id": "5f0c…", "order_id": "DH3F9A1C2B",
- "order": {"order_id": "DH3F9A1C2B", "name": "Nguyễn Văn A", "phone": "0912345678", "email": "a@example.com",
+ "order": {"order_id": "DH3F9A1C2B", "name": "Nguyễn Văn A", "phone": "0912 *** 678", "email": "ng***@gmail.com",
            "address": "…",
            "fulfillment": "Giao tận nơi", "payment": "Thanh toán khi nhận hàng",
            "items": [{"name": "Galaxy S26", "variant": "256GB · Đen Classic", "qty": 1, "unit_price": 29990001}],
@@ -186,7 +187,9 @@ Em cảm ơn anh Nguyễn Văn A…"}
 - `order` là dữ liệu đơn đọc lại từ database, trang chat hiện thành thẻ xác nhận (mã đơn, người nhận, sản phẩm, tổng tiền); `thanks` hiện thành bong bóng riêng. `answer` là bản chữ của cả hai, được ghi vào lịch sử hội thoại.
 - Kiểm tra giống form: tên ≥ 2 ký tự, số điện thoại `0`/`+84` + 9 số (bỏ dấu cách, chấm, gạch), địa chỉ ≥ 10 ký tự; `email` không bắt buộc (bỏ trống hoặc `null`), có nhập thì phải đúng dạng `x@y.z`; `promo_code` không bắt buộc (không phân biệt hoa thường). Hiện chỉ nhận `delivery` và `cod`.
 - `order` có thêm `subtotal`, `discount`, `promo` (mã đã áp dụng); không có giảm giá thì `discount` = 0.
-- Mã lỗi: `422` thông tin sai, `409` giỏ trống, hết hàng hoặc mã khuyến mãi không dùng được (kèm lý do), `503` không ghi được database.
+- Số điện thoại, email trong `order` và `answer` đã che (xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii)).
+- Có `email` thì sau khi trả response, server gửi email xác nhận tới địa chỉ đó (xem [Email xác nhận đơn hàng](#email-xác-nhận-đơn-hàng)); response không chờ email gửi xong.
+- Mã lỗi: `422` thông tin sai, `409` giỏ trống, hết hàng hoặc mã khuyến mãi không dùng được (kèm lý do), `503` không ghi được database. Có lỗi thì không gửi email.
 
 ### `POST /order/quote`
 
@@ -222,6 +225,8 @@ flowchart TB
     tools --> postgres[("Postgres<br/>sản phẩm, phiên bản, tương thích")]
     tools --> qdrant[("Qdrant<br/>chính sách")]
     tools --> tavily(["Tavily"])
+    api -- "POST /order" --> orders["Đơn hàng<br/>orders.py"] --> postgres
+    api -. "BackgroundTasks" .-> mailer["Email xác nhận<br/>mailer.py"] -- "SMTP" --> mailpit(["Mailpit / nhà cung cấp email"])
 ```
 
 Luồng một lượt chat trong `graph.py`:
@@ -235,8 +240,10 @@ flowchart LR
 
 1. `track_user` đọc tin nhắn của khách: nhu cầu, lo ngại, cảm xúc, có cần chuyển nhân viên không.
 2. `model` gọi LLM với system prompt, tóm tắt trạng thái hội thoại và lịch sử đã cắt gọn (4 lượt gần nhất).
-3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng. Model được gọi nhiều tool song song trong 1 bước (OpenRouter bật `parallel_tool_calls=True`, model dự phòng mặc định cũng song song), vd tra giá 2 máy khi so sánh, thêm máy và củ sạc cùng lúc; các khóa state mà tool ghi (`cart`, `order_form`, `offered_alternatives`) đều có reducer nên nhận được nhiều cập nhật cùng bước.
+3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng. Model được gọi nhiều tool song song trong 1 bước (9Router và OpenRouter bật `parallel_tool_calls=True`, model dự phòng khác mặc định cũng song song), vd tra giá 2 máy khi so sánh, thêm máy và củ sạc cùng lúc; các khóa state mà tool ghi (`cart`, `order_form`, `offered_alternatives`) đều có reducer nên nhận được nhiều cập nhật cùng bước.
 4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời.
+
+`agent.py` dựng bằng `create_agent`, dùng chung tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng; model chính vẫn là OpenRouter (`llm.open_llm`), không qua 9Router.
 
 ### Đặt hàng
 
@@ -253,6 +260,7 @@ flowchart LR
 5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền; số điện thoại, email đã che) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
 6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
 7. Gửi email xác nhận (xem [Email xác nhận đơn hàng](#email-xác-nhận-đơn-hàng)) sau khi đã trả kết quả cho khách.
+8. Khách bấm **Hủy đặt hàng** trên form thay vì gửi → `POST /order/cancel`: bỏ form, hiện câu "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?", giỏ hàng làm trống, không tạo đơn.
 
 Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng là áp dụng, không gửi cả form). Mở form là hỏi giá ngay (`POST /order/quote`) để hiện khuyến mãi tự động (nếu có). Thẻ xác nhận đơn có thêm dòng tạm tính và giảm giá.
 
@@ -268,14 +276,15 @@ Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng 
 
 ### Email xác nhận đơn hàng
 
-`POST /order` tạo đơn xong thì lên lịch `mailer.send_order_email` bằng `BackgroundTasks`: khách nhận kết quả ngay, email gửi sau.
+`POST /order` tạo đơn xong thì lên lịch `mailer.send_order_email` bằng `BackgroundTasks`: khách nhận kết quả ngay, email gửi sau (fastapi-mail, SMTP bất đồng bộ). Tiêu đề "Xác nhận đơn hàng #DH… - PhoneShop Demo" (tên cửa hàng lấy từ `MAIL_FROM`).
 
 - Đọc lại đơn từ database (`orders.get_order`, dữ liệu qua `orders.view`), không dùng dữ liệu form: email luôn khớp đơn đã lưu (tên món, giảm giá, tổng tiền), giống thẻ xác nhận trên khung chat.
 - Template `src/phone_sales/templates/order_confirmation.html` (Jinja2, tự escape tên, địa chỉ khách nhập): CSS viết inline và bố cục bảng vì Gmail, Outlook bỏ qua thẻ `<style>`. Kèm bản chữ thuần (`render_text`) cho trình đọc email không hiển thị HTML. Template nằm ngoài `static/` để không bị phục vụ công khai.
 - Kết quả ghi vào `orders.email_status`: `pending` (đang chờ) → `sent`, `failed` (lỗi SMTP, chỉ ghi mã đơn vào log), hoặc `skipped` (khách không nhập email, chưa đặt `SMTP_HOST`). Gửi lỗi không ảnh hưởng đơn đã tạo.
+- Nội dung: lời chào theo tên người nhận, bảng sản phẩm (tên, phiên bản, số lượng, thành tiền), tạm tính và giảm giá (nếu có), tổng cộng, cách nhận hàng, địa chỉ (chỉ khi giao tận nơi), thanh toán, ghi chú nhân viên gọi xác nhận. Không đưa số điện thoại, email của khách vào nội dung.
 - Đây là email **xác nhận đơn hàng**, không phải hóa đơn GTGT: hóa đơn điện tử phải phát hành qua nhà cung cấp dịch vụ hóa đơn (Nghị định 123/2020/NĐ-CP).
 
-Thử trên máy: `docker compose up -d`, đặt một đơn có điền email, mở http://localhost:8025 để xem bản HTML và chữ thuần. Chạy thật thì đổi `SMTP_*` sang Gmail (App Password) hoặc dịch vụ email giao dịch (Amazon SES, SendGrid, Resend), code giữ nguyên.
+Thử trên máy: `docker compose up -d`, đặt một đơn có điền email, mở http://localhost:8025 để xem bản HTML và chữ thuần. Xem trạng thái gửi: `docker exec phone_db psql -U postgres -d phone -c "SELECT order_id, email_status FROM orders ORDER BY created_at DESC LIMIT 5"`. Chạy thật thì đổi `SMTP_*` sang Gmail (App Password) hoặc dịch vụ email giao dịch (Amazon SES, SendGrid, Resend), code giữ nguyên.
 
 ### Khuyến mãi
 
@@ -292,9 +301,6 @@ Bảng `promotions` (`promotions.py`):
 
 - Agent đọc khuyến mãi bằng tool `get_promotions` (lọc theo sản phẩm khách đang xem) khi khách hỏi khuyến mãi và ở bước 1 khi khách do dự; chỉ nêu khuyến mãi có trong kết quả, không có thì không nhắc.
 - Khuyến mãi mẫu để thử: `data_schema/promotions_sample.sql` (GIAM500K, SAMSUNG5, giảm 10% phụ kiện tự động, HETHAN đã hết hạn; dữ liệu demo). Nạp: `docker exec -i phone_db psql -U postgres -d phone < data_schema/promotions_sample.sql`.
-7. Khách bấm **Hủy đặt hàng** trên form → `POST /order/cancel`: bỏ form, hiện câu "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?", giỏ hàng làm trống, không tạo đơn.
-
-`agent.py` dựng bằng `create_agent`, dùng chung LLM, tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng.
 
 ### Trạng thái hội thoại
 
@@ -335,7 +341,7 @@ Chỉ thêm `Annotated` là hết lỗi, nhưng reducer phải đúng nghĩa c�
 | `slots` | `merge_slots` | Gộp nhu cầu, giá trị mới ghi đè, danh sách thì cộng dồn |
 | `cross_sell` | `steps` | Nối bước bán kèm; `None` thì làm lại từ đầu |
 
-Khóa không có reducer (`stage`, `handoff`, `declined`, `objection`…) chỉ do node của graph ghi (mỗi bước 1 lần), tool không ghi. Thêm tool mới ghi vào state thì khóa đó phải có reducer. OpenRouter bật `parallel_tool_calls=True` (`graph.py`), model dự phòng mặc định cũng gọi song song. Test: `test_graph_parallel_add_to_cart_keeps_both`, `test_cart_update_applies_each_change` (`tests/test_conversation.py`).
+Khóa không có reducer (`stage`, `handoff`, `declined`, `objection`…) chỉ do node của graph ghi (mỗi bước 1 lần), tool không ghi. Thêm tool mới ghi vào state thì khóa đó phải có reducer. 9Router và OpenRouter bật `parallel_tool_calls=True` (`graph.py`), model dự phòng khác mặc định cũng gọi song song. Test: `test_graph_parallel_add_to_cart_keeps_both`, `test_cart_update_applies_each_change` (`tests/test_conversation.py`).
 
 ### Bán thêm (up-sell, cross-sell)
 
@@ -492,7 +498,7 @@ Database `phone` (schema `data_schema/phone.sql`, dữ liệu `data_schema/outpu
 | `variants` | Phiên bản theo màu và dung lượng: SKU, giá (VND), tồn kho |
 | `compatibility` | Cặp phụ kiện – điện thoại tương thích |
 | `customers` | Khách đặt hàng: mã `KH…`, tên, số điện thoại và email (mã hóa), `phone_hash`, `email_hash` (HMAC để tra cứu; email duy nhất), địa chỉ mặc định |
-| `orders` | Đơn hàng: mã `DH…`, khách, người nhận (tên; số điện thoại, email mã hóa), địa chỉ, cách nhận, thanh toán, tạm tính (`subtotal`), giảm giá (`discount_amount`), khuyến mãi (`promo_id`), tổng tiền, trạng thái (`pending`). Đơn trước khi có khuyến mãi: `subtotal` NULL |
+| `orders` | Đơn hàng: mã `DH…`, khách, người nhận (tên; số điện thoại, email mã hóa), địa chỉ, cách nhận, thanh toán, tạm tính (`subtotal`), giảm giá (`discount_amount`), khuyến mãi (`promo_id`), tổng tiền, trạng thái (`pending`), trạng thái email xác nhận (`email_status`: `pending`, `sent`, `failed`, `skipped`). Đơn trước khi có khuyến mãi: `subtotal` NULL |
 | `promotions` | Khuyến mãi: mã, mức giảm, phạm vi, điều kiện, thời gian, số lượt (xem [Khuyến mãi](#khuyến-mãi)) |
 | `promotion_usages` | Lượt dùng khuyến mãi: khuyến mãi, đơn, khách, số tiền giảm |
 | `order_items` | Sản phẩm trong đơn: phiên bản, số lượng, đơn giá lúc đặt |
@@ -511,7 +517,7 @@ Luật gán `compatibility` (`build_accessories` trong `scrape_phone.py`, 620 d�
 
 "Bộ Chuyển Đổi Sạc + Dữ Liệu" (bộ chia cổng USB-C) phân loại `other`, không phải củ sạc. Còn thiếu do 2 trang hãng không bán: miếng dán cho iPhone 16, 17e, Duo, dòng Galaxy A, S26 FE, S25; ốp lưng cho Galaxy A07 5G, A07s, A08, S25, S25 Ultra.
 
-Schema đơn hàng ở `data_schema/orders.sql` (`CREATE TABLE IF NOT EXISTS`, cột thêm sau như email dùng `ADD COLUMN IF NOT EXISTS`), web app chạy file này mỗi lần khởi động: database mới có đủ bảng, database cũ được bổ sung cột, database đã đủ thì không đổi gì. `order_items.variant_id` có khóa ngoại tới `variants`, nên `phone_seed.sql` không TRUNCATE `variants`/`products` (Postgres không cho TRUNCATE bảng đang bị tham chiếu) mà ghi đè từng dòng (`INSERT … ON CONFLICT DO UPDATE`), rồi xóa phiên bản, sản phẩm không còn bán. Phiên bản đã nằm trong đơn hàng thì giữ lại cho đơn cũ, đặt tồn kho 0. Mỗi lần seed, tồn kho về lại số giả lập (số đã trừ khi đặt hàng không giữ).
+Schema đơn hàng ở `data_schema/orders.sql` (`CREATE TABLE IF NOT EXISTS`, cột thêm sau như email, `email_status` dùng `ADD COLUMN IF NOT EXISTS`), web app chạy file này mỗi lần khởi động: database mới có đủ bảng, database cũ được bổ sung cột, database đã đủ thì không đổi gì. `order_items.variant_id` có khóa ngoại tới `variants`, nên `phone_seed.sql` không TRUNCATE `variants`/`products` (Postgres không cho TRUNCATE bảng đang bị tham chiếu) mà ghi đè từng dòng (`INSERT … ON CONFLICT DO UPDATE`), rồi xóa phiên bản, sản phẩm không còn bán. Phiên bản đã nằm trong đơn hàng thì giữ lại cho đơn cũ, đặt tồn kho 0. Mỗi lần seed, tồn kho về lại số giả lập (số đã trừ khi đặt hàng không giữ).
 
 Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_schema/scrape_phone.py`. Lưu ý:
 
@@ -570,11 +576,11 @@ sales_agent/
 uv run pytest
 ```
 
-258 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+258 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
-Eval gọi LLM, Postgres, Qdrant, Tavily thật trên 51 câu hỏi cố định (`evals/dataset.jsonl`) và chấm điểm bằng Gemini. Câu `cross-01` (nhóm `cross_sell`) cần giỏ hàng nên chỉ chạy với `--target graph`. Chuỗi dự phòng bị tắt để điểm phản ánh đúng model chính.
+Eval gọi LLM, Postgres, Qdrant, Tavily thật trên 51 câu hỏi cố định (`evals/dataset.jsonl`) và chấm điểm bằng Gemini. Câu `cross-01` (nhóm `cross_sell`) cần giỏ hàng nên chỉ chạy với `--target graph`. Chuỗi dự phòng bị tắt để điểm phản ánh đúng model chính: `--target graph` chấm 9Router, mặc định (`agent.py`) chấm OpenRouter.
 
 ```bash
 docker compose up -d postgres qdrant
@@ -583,9 +589,9 @@ uv run python evals/run_eval.py --target graph              # chấm graph.py (m
 uv run python evals/run_eval.py --only product,acc-01       # lọc theo nhóm hoặc id
 ```
 
-Cả bộ cần khoảng 100 request, vượt quota ngày của OpenRouter gói free, nên cần chia làm nhiều lần.
+Cả bộ cần khoảng 100 request; với `agent.py` (OpenRouter gói free) vượt quota ngày nên cần chia làm nhiều lần.
 
-Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu lấy lần chạy mới nhất). Truy xuất chính sách: hit@1 89%, hit@3 100%, MRR 0,95.
+Kết quả gần nhất (`graph.py` khi model chính còn là OpenRouter, trước khi chuyển sang 9Router; chạy ngày 29–30/10/2026, mỗi câu lấy lần chạy mới nhất). Truy xuất chính sách: hit@1 89%, hit@3 100%, MRR 0,95.
 
 | Nhóm | Số câu | Gọi đúng tool | Đủ ý | Hành vi | Dựa trên dữ liệu | Điểm TB (1–5) |
 |---|---|---|---|---|---|---|
@@ -598,9 +604,9 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 | `out_of_scope` | 2 | 2/2 | – | 2/2 | 2/2 | 5,00 |
 | **Tổng** | **37** | **31/33** | **24/24** | **6/6** | **37/37** | **4,81** |
 
-14 câu thêm/sửa ngày 02/11/2026 chưa có trong bảng: `promo-01` (hỏi khuyến mãi, cần nạp `promotions_sample.sql`), `objection-01` đến `objection-04` (chê giá máy đắt, chê giá máy rẻ, so với nơi khác, do dự), `spec-01`, `spec-02`, `upsell-01`, `upsell-02`, `cross-01` (bán kèm lượt đầu: chỉ củ sạc chính hãng), `variants-01`, `variants-02` (khách nêu tên máy thì liệt kê phiên bản), `ground-01` (không nêu thông số không có trong dữ liệu), `norm-01` (tin nhắn viết tắt). Chạy khi OpenRouter còn quota: `uv run python evals/run_eval.py --target graph --only spec-01,spec-02,upsell,cross_sell,variants-01,variants-02,ground-01,norm-01,objection,promo-01`.
+14 câu thêm/sửa ngày 02/11/2026 chưa có trong bảng: `promo-01` (hỏi khuyến mãi, cần nạp `promotions_sample.sql`), `objection-01` đến `objection-04` (chê giá máy đắt, chê giá máy rẻ, so với nơi khác, do dự), `spec-01`, `spec-02`, `upsell-01`, `upsell-02`, `cross-01` (bán kèm lượt đầu: chỉ củ sạc chính hãng), `variants-01`, `variants-02` (khách nêu tên máy thì liệt kê phiên bản), `ground-01` (không nêu thông số không có trong dữ liệu), `norm-01` (tin nhắn viết tắt). Chạy: `uv run python evals/run_eval.py --target graph --only spec-01,spec-02,upsell,cross_sell,variants-01,variants-02,ground-01,norm-01,objection,promo-01`.
 
-Độ trễ trung bình 15,8 giây mỗi câu do model chính là model suy luận. Kết quả chi tiết lưu ở `evals/results/` (không commit).
+Độ trễ trung bình 15,8 giây mỗi câu do model chính lúc đó là model suy luận; chưa đo lại với 9Router. Kết quả chi tiết lưu ở `evals/results/` (không commit).
 
 ## Hạn chế
 
@@ -629,6 +635,10 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 | `db-seed` báo `cannot truncate a table referenced in a foreign key constraint` | `phone_seed.sql` sinh từ bản `scrape_phone.py` cũ (TRUNCATE). Sinh lại: `cd data_schema && python scrape_phone.py --from-json`, rồi chạy lại `db-seed` (bản mới upsert, giữ đơn hàng) |
 | Bot chỉ đưa khoảng giá khi khách nêu tên máy | Xem log tool: phải là `get_product_details`; kiểm tra quy tắc 2 trong `prompts.py` |
 | `InvalidUpdateError: At key '…': Can receive only one value per step` | Nhiều tool ghi cùng khóa state trong 1 bước (gọi song song). Khóa đó cần `Annotated[kiểu, reducer]` với reducer đúng nghĩa, xem [Nhiều tool cập nhật state cùng lúc](#nhiều-tool-cập-nhật-state-cùng-lúc) |
+| Không thấy email xác nhận | Xem `email_status` của đơn: `skipped` là khách không nhập email hoặc chưa đặt `SMTP_HOST`; `failed` thì xem `docker compose logs api \| grep "email xác nhận"` (Mailpit chưa chạy, sai `SMTP_*`); `pending` mãi là server khởi động lại đúng lúc đang gửi |
+| Gửi email lỗi `value is not a valid email address` | Tên miền trong `MAIL_FROM` không được là `.local`, `.localhost`…: dùng vd `no-reply@phoneshop.example` |
+| Câu trả lời chậm tới ~2 phút | 9Router chọn model chậm hoặc không chạy: chờ hết 60 giây, thử lại 1 lần rồi mới sang OpenRouter. Kiểm tra `curl http://localhost:20128/v1/models`, bỏ model chậm khỏi combo |
+| 9Router chạy trên máy được nhưng container báo lỗi kết nối | Trong container `localhost` là chính container; compose đã đặt `ROUTER9_BASE_URL=http://host.docker.internal:20128/v1`. 9Router phải nhận kết nối từ ngoài, không chỉ `127.0.0.1` |
 | `uvicorn` báo cổng 8000 đang dùng | Container `phone_sales_api` đang chạy; dùng `--port 8001` |
 | Trong Docker báo `CERTIFICATE_VERIFY_FAILED` | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
 
