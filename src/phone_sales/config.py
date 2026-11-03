@@ -38,3 +38,14 @@ PII_KEY = os.getenv('PII_KEY', '')
 ROUTER9_BASE_URL = os.getenv('ROUTER9_BASE_URL', 'http://localhost:20128/v1')
 ROUTER9_API_KEY = os.getenv('ROUTER9_API_KEY', '')
 ROUTER9_MODEL = os.getenv('ROUTER9_MODEL', 'super_duper_free_combo')
+
+# Email xác nhận đơn hàng (mailer.py). Chạy trên máy dùng Mailpit trong docker-compose (SMTP localhost:1025, xem email
+# tại http://localhost:8025, không gửi ra Internet). Chạy thật thì đổi sang Gmail (App Password), SES, SendGrid...
+# SMTP_HOST để trống = tắt gửi email (đơn ghi email_status = 'skipped').
+SMTP_HOST = os.getenv('SMTP_HOST', '')
+SMTP_PORT = int(os.getenv('SMTP_PORT', '1025'))
+SMTP_USER = os.getenv('SMTP_USER', '')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+SMTP_STARTTLS = os.getenv('SMTP_STARTTLS', 'false').lower() == 'true'
+SMTP_SSL = os.getenv('SMTP_SSL', 'false').lower() == 'true'          # cổng 465
+MAIL_FROM = os.getenv('MAIL_FROM', 'PhoneShop Demo <no-reply@phoneshop.example>')

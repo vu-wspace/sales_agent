@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><title>Xác nhận đơn hàng #{{ order.order_id }}</title></head>
+<!-- Email xác nhận đơn (mailer.py). CSS viết inline + bố cục bảng: Gmail, Outlook bỏ qua thẻ <style> và CSS hiện đại.
+     order là dict -> dùng order["items"] (order.items là phương thức .items() của dict). -->
+<body style="font-family:Arial,sans-serif;color:#1f1e1d;max-width:560px;margin:auto;padding:16px">
+  <h2 style="color:#185fa5">Xác nhận đơn hàng #{{ order.order_id }}</h2>
+  <p>Chào {{ order.name }},</p>
+  <p>Cảm ơn anh/chị đã đặt hàng tại {{ shop }}. Thông tin đơn hàng:</p>
+
+  <table width="100%" cellpadding="8" style="border-collapse:collapse;font-size:14px">
+    <tr style="background:#f5f4ef">
+      <th align="left">Sản phẩm</th><th align="center">SL</th><th align="right">Thành tiền</th>
+    </tr>
+    {% for item in order["items"] %}
+    <tr style="border-bottom:1px solid #eee">
+      <td>{{ item.name }}</td>
+      <td align="center">{{ item.qty }}</td>
+      <td align="right">{{ (item.unit_price * item.qty) | vnd }}</td>
+    </tr>
+    {% endfor %}
+    {% if order.discount %}
+    <tr><td colspan="2">Tạm tính</td><td align="right">{{ order.subtotal | vnd }}</td></tr>
+    <tr><td colspan="2">Giảm giá{% if order.promo %} ({{ order.promo }}){% endif %}</td>
+        <td align="right">-{{ order.discount | vnd }}</td></tr>
+    {% endif %}
+    <tr style="font-weight:bold"><td colspan="2">Tổng cộng</td><td align="right">{{ order.total | vnd }}</td></tr>
+  </table>
+
+  <p><b>Nhận hàng:</b> {{ order.fulfillment }}<br>
+     {%- if order.address %}<b>Địa chỉ:</b> {{ order.address }}<br>{% endif -%}
+     <b>Thanh toán:</b> {{ order.payment }}</p>
+  <p>{{ order.note }} Mọi thắc mắc, anh/chị vui lòng phản hồi email này.</p>
+  <p style="color:#888;font-size:12px">Email này xác nhận thông tin đơn hàng, không phải hóa đơn giá trị gia tăng.</p>
+</body>
+</html>

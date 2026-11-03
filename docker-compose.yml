@@ -60,6 +60,8 @@ services:
       AUTO_INGEST: "true"              # collection rỗng thì tự nạp chính sách (data_schema/policies) khi khởi động
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
       ROUTER9_BASE_URL: http://host.docker.internal:20128/v1   # 9Router chạy trên máy host, không phải trong container
+      SMTP_HOST: mailpit                                       # ghi đè SMTP_HOST=localhost trong .env
+      SMTP_PORT: "1025"
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Linux cần dòng này; Docker Desktop (Windows/Mac) có sẵn
     depends_on:
@@ -67,6 +69,18 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+    restart: unless-stopped
+
+  # Bắt email khi phát triển: mọi email gửi tới cổng 1025 được giữ lại, xem tại http://localhost:8025,
+  # không đi ra Internet. Chạy thật thì bỏ service này và đặt SMTP_* trỏ tới nhà cung cấp email.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: phone_mailpit
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # giao diện web
     restart: unless-stopped
 
 volumes:

@@ -23,6 +23,9 @@ tavily-python>=0.8.5
 # Database sản phẩm (Postgres)
 psycopg[binary]>=3.2
 
+# Gửi email xác nhận đơn hàng (mailer.py, kèm jinja2 cho template)
+fastapi-mail>=1.6.8
+
 # Mã hóa số điện thoại, email của khách trong database (pii.py)
 cryptography>=50.0.2
 

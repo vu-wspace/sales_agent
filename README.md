@@ -10,6 +10,7 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 - Nhớ trạng thái hội thoại bán hàng (nhu cầu, máy đã giới thiệu, lo ngại, cảm xúc) và quản lý giỏ hàng.
 - Bán thêm: gợi ý dung lượng lớn hơn khi nhu cầu cần (kèm số tiền chênh), máy nhỉnh hơn ngân sách; khi khách chốt mua thì mời sạc chính hãng nếu máy không kèm sạc, rồi ốp lưng, cường lực.
 - Đặt hàng ngay trong khung chat: khách xác nhận thì hiện form (tên, số điện thoại, địa chỉ), đơn lưu vào Postgres, tóm tắt đơn lấy từ database.
+- Gửi email xác nhận đơn hàng (HTML + chữ thuần) khi khách có nhập email; khi phát triển, email được Mailpit giữ lại, không gửi ra ngoài.
 - Chuẩn hóa tin nhắn (Unicode, dấu kiểu cũ, viết tắt "ko", "dc", "20tr"…) và kiểm tra câu trả lời không bịa số liệu (giá, thông số, chính sách).
 - Chuyển nhân viên khi khách khiếu nại, đơn có vấn đề hoặc khách bực bội.
 - Stream trạng thái và câu trả lời theo thời gian thực.
@@ -18,10 +19,11 @@ Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy v
 | Thành phần | Công nghệ |
 |---|---|
 | Agent | LangGraph `StateGraph` (`graph.py`) hoặc LangChain `create_agent` (`agent.py`) |
-| LLM | OpenRouter (chính) → NVIDIA → Gemini → Groq (dự phòng) |
+| LLM | 9Router (chính, chạy trên máy) → OpenRouter → NVIDIA → Gemini → Groq (dự phòng) |
 | Dữ liệu sản phẩm | PostgreSQL 18: 23 điện thoại, 134 phụ kiện, 377 phiên bản |
 | Chính sách (RAG) | Qdrant + embedding `bkai-foundation-models/vietnamese-bi-encoder` |
 | Web | FastAPI + trang chat HTML một file |
+| Email | fastapi-mail (SMTP) + template Jinja2; Mailpit khi phát triển |
 | Triển khai | Docker Compose |
 
 ## Bắt đầu nhanh
@@ -82,6 +84,7 @@ docker compose down -v                                    # dừng và xóa dữ
 | `phone_db` | 5433 | PostgreSQL, database `phone` |
 | `qdrant` | 6333, 6334 | Vector DB |
 | `phone_sales_api` | 8000 | Web app |
+| `phone_mailpit` | 1025, 8025 | Bắt email khi phát triển: SMTP cổng 1025, xem email tại http://localhost:8025 |
 
 ## Cấu hình
 
@@ -89,7 +92,10 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `OPENROUTER_API_KEY` | (bắt buộc) | LLM chính ([openrouter.ai](https://openrouter.ai/keys)) |
+| `ROUTER9_BASE_URL` | `http://localhost:20128/v1` | 9Router, LLM chính (API kiểu OpenAI, chạy trên máy) |
+| `ROUTER9_API_KEY` | (bắt buộc) | Key tạo trong 9Router |
+| `ROUTER9_MODEL` | `super_duper_free_combo` | Tên model hoặc combo trên 9Router |
+| `OPENROUTER_API_KEY` | (bắt buộc) | LLM dự phòng ([openrouter.ai](https://openrouter.ai/keys)) |
 | `NVIDIA_API_KEY` | (bắt buộc) | LLM dự phòng ([build.nvidia.com](https://build.nvidia.com)) |
 | `GOOGLE_API_KEY` | (bắt buộc) | Gemini: LLM dự phòng và judge của eval ([AI Studio](https://aistudio.google.com/apikey)) |
 | `GROQ_API_KEY` | (bắt buộc) | LLM dự phòng ([console.groq.com](https://console.groq.com)) |
@@ -100,9 +106,14 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `AGENT_IMPL` | `graph` | Web app dùng `graph.py` (có trạng thái, giỏ hàng) hay `agent.py` |
 | `AUTO_INGEST` | `true` | Tự nạp chính sách khi Qdrant rỗng hoặc đã cũ |
 | `PII_KEY` | (bắt buộc để đặt hàng) | Khóa Fernet mã hóa số điện thoại, email của khách trong database, xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii). Tạo: `uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Sao lưu khóa**: mất khóa là không đọc lại được dữ liệu đã mã hóa |
+| `SMTP_HOST` | (trống: không gửi email) | Máy chủ SMTP gửi email xác nhận đơn. Chạy trên máy với Mailpit: `localhost` |
+| `SMTP_PORT` | `1025` | Cổng SMTP (Mailpit 1025; Gmail 587) |
+| `SMTP_USER`, `SMTP_PASSWORD` | trống | Đăng nhập SMTP (để trống với Mailpit) |
+| `SMTP_STARTTLS`, `SMTP_SSL` | `false` | STARTTLS (cổng 587) hoặc SSL (cổng 465) |
+| `MAIL_FROM` | `PhoneShop Demo <no-reply@phoneshop.example>` | Người gửi; phần tên cũng là tên cửa hàng trong email. Không dùng tên miền `.local` (thư viện kiểm tra email từ chối) |
 | `LANGSMITH_*` | tắt | Trace LangSmith (tùy chọn) |
 
-Trong Docker, compose tự đặt `DATABASE_URL` và `QDRANT_URL` trỏ tới các container.
+Trong Docker, compose tự đặt `DATABASE_URL`, `QDRANT_URL`, `SMTP_HOST=mailpit` trỏ tới các container và `ROUTER9_BASE_URL` trỏ tới `host.docker.internal` (9Router chạy trên máy host).
 
 ## API
 
@@ -241,6 +252,7 @@ flowchart LR
    - ghi `orders` (mã `DH…`, `subtotal`, `discount_amount`, `promo_id`, `total` = tạm tính − giảm giá) và `order_items`; có khuyến mãi thì ghi `promotion_usages` và tăng `used_count`.
 5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền; số điện thoại, email đã che) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
 6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
+7. Gửi email xác nhận (xem [Email xác nhận đơn hàng](#email-xác-nhận-đơn-hàng)) sau khi đã trả kết quả cho khách.
 
 Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng là áp dụng, không gửi cả form). Mở form là hỏi giá ngay (`POST /order/quote`) để hiện khuyến mãi tự động (nếu có). Thẻ xác nhận đơn có thêm dòng tạm tính và giảm giá.
 
@@ -253,6 +265,17 @@ Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng 
 | Bấm "Bỏ mã" | Xóa mã, mở lại ô nhập, giá quay về như không có mã (vẫn giữ khuyến mãi tự động nếu có) |
 
 Ô mã và nút cùng chiều cao; nút rộng cố định 104px để đổi chữ không làm ô mã co giãn. Mã đã áp dụng chỉ là xem trước: `POST /order` kiểm tra lại đầy đủ khi đặt hàng.
+
+### Email xác nhận đơn hàng
+
+`POST /order` tạo đơn xong thì lên lịch `mailer.send_order_email` bằng `BackgroundTasks`: khách nhận kết quả ngay, email gửi sau.
+
+- Đọc lại đơn từ database (`orders.get_order`, dữ liệu qua `orders.view`), không dùng dữ liệu form: email luôn khớp đơn đã lưu (tên món, giảm giá, tổng tiền), giống thẻ xác nhận trên khung chat.
+- Template `src/phone_sales/templates/order_confirmation.html` (Jinja2, tự escape tên, địa chỉ khách nhập): CSS viết inline và bố cục bảng vì Gmail, Outlook bỏ qua thẻ `<style>`. Kèm bản chữ thuần (`render_text`) cho trình đọc email không hiển thị HTML. Template nằm ngoài `static/` để không bị phục vụ công khai.
+- Kết quả ghi vào `orders.email_status`: `pending` (đang chờ) → `sent`, `failed` (lỗi SMTP, chỉ ghi mã đơn vào log), hoặc `skipped` (khách không nhập email, chưa đặt `SMTP_HOST`). Gửi lỗi không ảnh hưởng đơn đã tạo.
+- Đây là email **xác nhận đơn hàng**, không phải hóa đơn GTGT: hóa đơn điện tử phải phát hành qua nhà cung cấp dịch vụ hóa đơn (Nghị định 123/2020/NĐ-CP).
+
+Thử trên máy: `docker compose up -d`, đặt một đơn có điền email, mở http://localhost:8025 để xem bản HTML và chữ thuần. Chạy thật thì đổi `SMTP_*` sang Gmail (App Password) hoặc dịch vụ email giao dịch (Amazon SES, SendGrid, Resend), code giữ nguyên.
 
 ### Khuyến mãi
 
@@ -446,11 +469,14 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 | Thứ tự | Model |
 |---|---|
-| Chính | OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free` |
-| Dự phòng 1 | NVIDIA `nvidia/nemotron-3.5-super-vl-120b-a12b` (bật thinking) |
-| Dự phòng 2 | `gemini-3.1-flash-lite` |
-| Dự phòng 3 | `gemini-3.5-flash-lite` |
-| Dự phòng 4 | Groq `qwen/qwen3.8-27b` |
+| Chính | 9Router (`ROUTER9_MODEL`, mặc định combo `super_duper_free_combo`) |
+| Dự phòng 1 | OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| Dự phòng 2 | NVIDIA `nvidia/nemotron-3.5-super-vl-120b-a12b` (bật thinking) |
+| Dự phòng 3 | `gemini-3.1-flash-lite` |
+| Dự phòng 4 | `gemini-3.5-flash-lite` |
+| Dự phòng 5 | Groq `qwen/qwen3.8-27b` |
+
+9Router và OpenRouter được bật gọi tool song song (`parallel_tool_calls=True`). 9Router chờ tối đa 60 giây, thử lại 1 lần: combo chọn trúng model chậm (đã gặp `glm-5` mất ~83 giây) thì khách chờ tới ~2 phút mới sang OpenRouter.
 
 `FallbackMiddleware` thử lần lượt các model tới khi có model trả lời. Model gặp lỗi lặp lại sẽ tạm bị bỏ qua: hết quota ngày hoặc lỗi cấu hình (sai key, sai tên model) 1 giờ, giới hạn theo phút 1 phút, lỗi chứng chỉ SSL 10 phút. Lỗi tạm thời (mất mạng, 5xx) chỉ chuyển model cho lần gọi đó. Mỗi lần chuyển model đều ghi log (`docker compose logs api | grep LLM`).
 
@@ -524,6 +550,8 @@ sales_agent/
 │   ├── data_prep.py            # Tách chính sách thành đoạn
 │   ├── vector_db.py            # Embedding và Qdrant
 │   ├── orders.py               # Lưu đơn đặt hàng, tóm tắt đơn
+│   ├── mailer.py               # Email xác nhận đơn hàng
+│   ├── templates/              # Template email (order_confirmation.html)
 │   ├── api.py                  # FastAPI
 │   └── static/                 # Giao diện chat (index.html), mẫu form đặt hàng (order_form.html)
 ├── tests/                      # Unit test
@@ -542,7 +570,7 @@ sales_agent/
 uv run pytest
 ```
 
-247 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+258 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
@@ -581,6 +609,7 @@ Kết quả gần nhất (`graph.py`, chạy ngày 29–30/10/2026, mỗi câu l
 - Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`), kể cả câu từ chối phụ kiện bán kèm.
 - Kiểm tra bịa số liệu chỉ xét số kèm đơn vị và chỉ trong `graph.py`: không bắt được câu bịa không có số ("máy chống nước tốt", sai tên màu), số trùng ngẫu nhiên với một số có trong nguồn, hay câu trả lời của `agent.py`.
 - API chưa có xác thực và giới hạn request.
+- Email xác nhận gửi bằng `BackgroundTasks` trong tiến trình API: server khởi động lại đúng lúc đang gửi thì mất email, đơn kẹt ở `email_status = 'pending'`, không tự gửi lại. Làm thật nên dùng outbox (ghi yêu cầu gửi trong cùng transaction tạo đơn, worker riêng gửi và thử lại) hoặc hàng đợi (Celery, ARQ).
 - Nhận diện số điện thoại, email bằng regex: cách viết lạ ("không chín một hai…", "a [at] gmail") không bị che. Chưa có cách đổi `PII_KEY` (xoay khóa) cho dữ liệu đã mã hóa.
 - Bộ eval nhỏ, chưa có câu hỏi nhiều lượt; judge là LLM nên có thể chấm sai.
 

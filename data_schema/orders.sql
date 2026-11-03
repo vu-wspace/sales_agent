@@ -65,13 +65,16 @@ CREATE TABLE IF NOT EXISTS public.orders (
     recipient_email text,
     subtotal integer,
     discount_amount integer DEFAULT 0 NOT NULL,
-    promo_id text REFERENCES public.promotions(promo_id)
+    promo_id text REFERENCES public.promotions(promo_id),
+    email_status text DEFAULT 'pending' NOT NULL
 );
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS recipient_email text;
 -- total = subtotal - discount_amount (đơn trước khi có khuyến mãi: subtotal NULL)
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS subtotal integer;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS discount_amount integer DEFAULT 0 NOT NULL;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS promo_id text REFERENCES public.promotions(promo_id);
+-- Email xác nhận đơn (mailer.py): pending (chờ gửi) | sent | failed | skipped (không có email / chưa cấu hình SMTP)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS email_status text DEFAULT 'pending' NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON public.orders USING btree (customer_id);
 
 CREATE TABLE IF NOT EXISTS public.order_items (

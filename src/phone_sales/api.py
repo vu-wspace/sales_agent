@@ -10,7 +10,7 @@ from typing import Literal
 
 import groq
 import psycopg
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from langchain_core.exceptions import ModelError
 from langchain_core.messages import AIMessage, HumanMessage
@@ -19,9 +19,9 @@ from langgraph.errors import GraphRecursionError
 from openrouter import errors as openrouter_errors
 from pydantic import BaseModel, Field, field_validator
 
-from phone_sales import orders, pii, promotions
+from phone_sales import mailer, orders, pii, promotions
 from phone_sales.agent import build_agent
-from phone_sales.config import AGENT_IMPL, AUTO_INGEST, PII_KEY
+from phone_sales.config import AGENT_IMPL, AUTO_INGEST, PII_KEY, SMTP_HOST
 from phone_sales.graph import build_graph
 from phone_sales.llm import is_rate_limited
 from phone_sales.textnorm import normalize_user_text
@@ -161,6 +161,8 @@ async def lifespan(app: FastAPI):
     pii.install_log_filter()  # che số điện thoại, email trong log (handler của uvicorn đã có lúc này)
     if not PII_KEY:
         log.error('Chưa đặt PII_KEY trong .env: POST /order sẽ lỗi (không mã hóa được thông tin khách)')
+    if not SMTP_HOST:
+        log.warning('Chưa đặt SMTP_HOST trong .env: không gửi email xác nhận đơn hàng')
     n = await asyncio.to_thread(prepare_vector_db)
     log.info('Qdrant sẵn sàng: %d tài liệu', n)
     try:
@@ -277,9 +279,10 @@ def chat_stream(req: ChatRequest, request: Request):
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 @app.post('/order', response_model=OrderResponse)
-def order(req: OrderRequest, request: Request):
+def order(req: OrderRequest, request: Request, background: BackgroundTasks):
     """Khách gửi form đặt hàng: tạo đơn từ giỏ hàng của thread (không tin giỏ do trình duyệt gửi lên),
-    trả tóm tắt đơn lấy từ database + 1-2 câu cảm ơn do LLM viết, và ghi vào lịch sử hội thoại."""
+    trả tóm tắt đơn lấy từ database + 1-2 câu cảm ơn do LLM viết, và ghi vào lịch sử hội thoại.
+    Email xác nhận gửi sau khi đã trả kết quả (BackgroundTasks, mailer.send_order_email) nên khách không phải chờ."""
     agent = request.app.state.agent
     config = {'configurable': {'thread_id': req.thread_id}}
     cart = agent.get_state(config).values.get('cart') or []
@@ -295,6 +298,7 @@ def order(req: OrderRequest, request: Request):
     except pii.PiiKeyError as e:
         log.error('Không mã hóa được thông tin khách: %s', e)
         raise HTTPException(503, 'Dạ, em chưa lưu được đơn hàng, anh/chị thử lại sau ít phút giúp em nha.')
+    background.add_task(mailer.send_order_email, order_id)
     thanks = orders.thank_you(req.name)
     answer = f'{orders.summary(saved)}\n\n{thanks}'
     # Lượt sau agent biết đơn đã đặt; giỏ hàng làm trống để khách mua tiếp không bị cộng dồn

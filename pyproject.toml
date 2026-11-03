@@ -29,6 +29,7 @@ dependencies = [
     "langchain-nvidia-ai-endpoints>=1.5.0",
     "cryptography>=50.0.2",
     "langchain-openai>=1.7.3",
+    "fastapi-mail>=1.6.8",
 ]
 
 [build-system]

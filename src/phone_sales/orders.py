@@ -153,6 +153,13 @@ def get_order(order_id: str) -> dict:
     # Giải mã ở đây; summary/view tự che khi hiển thị
     return {**order, 'phone': pii.decrypt(order['phone']), 'email': pii.decrypt(order['email']), 'items': items}
 
+EMAIL_STATUSES = ('pending', 'sent', 'failed', 'skipped')
+
+def set_email_status(order_id: str, status: str) -> None:
+    assert status in EMAIL_STATUSES
+    with _connect() as conn:
+        conn.execute('UPDATE orders SET email_status = %s WHERE order_id = %s', (status, order_id))
+
 def _price(v: int) -> str:
     return f'{v:,}'.replace(',', '.') + 'đ'
 

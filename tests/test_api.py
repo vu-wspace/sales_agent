@@ -291,7 +291,9 @@ class CartAgent(FakeAgent):
 
 @pytest.fixture
 def fake_orders(monkeypatch):
-    saved = []
+    class Saved(list):
+        pass
+    saved = Saved()
     def create_order(cart, *args, thread_id=None, email=None, promo_code=None):
         if not cart:
             raise api.orders.OrderError('Giỏ hàng đang trống')
@@ -302,6 +304,11 @@ def fake_orders(monkeypatch):
     monkeypatch.setattr(api.orders, 'summary', lambda order: f"Đơn #{order['order_id']}")
     monkeypatch.setattr(api.orders, 'view', lambda order: {'order_id': order['order_id'], 'total': 1})
     monkeypatch.setattr(api.orders, 'thank_you', lambda name: f'Cảm ơn {name}!')
+    # Email xác nhận chạy nền sau khi trả kết quả: ghi lại mã đơn thay vì gửi thật
+    saved.emails = []
+    async def send_order_email(order_id):
+        saved.emails.append(order_id)
+    monkeypatch.setattr(api.mailer, 'send_order_email', send_order_email)
     return saved
 
 
@@ -321,6 +328,13 @@ def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
     thread, values, node = agent.updates[0]
     assert thread == 't1' and node == 'track_reply'
     assert values['cart'] == [] and values['cross_sell'] is None and values['orders'] == ['DH0000000C'] and values['messages'][1].text == r.json()['answer']
+    assert fake_orders.emails == ['DH0000000C']   # email xác nhận được lên lịch gửi nền
+
+
+def test_order_error_does_not_send_email(fake_orders):
+    api.app.state.agent = CartAgent([])
+    assert TestClient(api.app).post('/order', json=ORDER_FORM).status_code == 409
+    assert fake_orders.emails == []
 
 
 def test_order_empty_cart_returns_409(fake_orders):
