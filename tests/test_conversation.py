@@ -139,7 +139,8 @@ def test_cross_sell_steps():
 
 def test_cross_sell_only_chargers_when_cable_in_box():
     text = conv.cross_sell_hint({'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'cable_in_box': True}]})
-    assert "accessory_type='củ sạc', genuine_only=True" in text and 'bên em có củ sạc chính hãng (2-3 món' in text
+    assert "accessory_type='củ sạc', genuine_only=True" in text and 'Mời 2-3 củ sạc chính hãng' in text
+    assert 'bên em có củ sạc chính hãng:' in text
     assert 'rẻ tới đắt' in text and 'đã có cáp sạc' in text and 'không mời cáp' in text
 
 
@@ -148,7 +149,7 @@ def test_cross_sell_starts_with_accessories_when_charger_in_box_or_cart():
         state = {'stage': 'closing', 'cart': cart}
         assert conv.cross_sell_step(state) == 'accessories'
         text = conv.cross_sell_hint(state)
-        assert text.startswith('Bán kèm (bước 1/2, ốp lưng, cường lực)') and 'em đã thêm [máy' in text and 'Gợi ý nhẹ, không ép' in text
+        assert text.startswith('Bán kèm (bước 1/2, ốp lưng, cường lực)') and 'em đã thêm **[máy' in text and 'Gợi ý nhẹ, không ép' in text
     # Máy kèm củ sạc: mời phụ kiện xong là xác nhận đơn
     done = {'stage': 'closing', 'cart': [{**PHONE_IN_CART, 'charger_in_box': True}], 'cross_sell': ['accessories']}
     assert conv.cross_sell_step(done) == 'confirm'
@@ -384,3 +385,20 @@ def test_remove_wanted_accessory_forgets_request(fake_catalog):
     cmd = tools.remove_from_cart.invoke({'type': 'tool_call', 'name': 'remove_from_cart', 'id': 'r1',
                                          'args': {'product': 'ốp lưng s26', 'state': {'cart': [case]}}})
     assert cmd.update['wanted'] == {'drop': ['case']} and cmd.update['cart'] == {'remove': ['OP']}
+
+
+def test_cross_sell_templates_do_not_leak_instructions():
+    # Lỗi cũ: chỉ dẫn "(2 món, từ rẻ tới đắt; dòng tool có ghi công suất...)" nằm trong dòng mẫu, model chép cho khách.
+    # Phần mẫu (sau "Trả lời theo mẫu:") bỏ [chỗ điền] đi thì chỉ còn chữ gửi khách
+    import re
+    phone = {**PHONE_IN_CART, 'cable_in_box': True}
+    states = [{'stage': 'closing', 'cart': [phone]},
+              {'stage': 'closing', 'cart': [PHONE_IN_CART]},
+              {'stage': 'closing', 'cart': [phone], 'cross_sell': ['charger']},
+              {'stage': 'closing', 'cart': [phone], 'cross_sell': ['charger', 'accessories']}]
+    for state in states:
+        hint = conv.cross_sell_hint(state)
+        template = re.sub(r'\[[^\]]*\]', '', hint.split('Trả lời theo mẫu:', 1)[1])
+        for word in ('tool', 'find_accessories', 'genuine', 'từ rẻ tới đắt', 'Mời ', 'show_order_form', '2-3'):
+            assert word not in template, (word, template)
+        assert '**' in template                                       # tên món / tổng tiền in đậm theo quy tắc 11b

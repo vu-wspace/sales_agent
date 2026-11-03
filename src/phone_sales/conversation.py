@@ -458,41 +458,45 @@ def cross_sell_hint(state: dict) -> str | None:
     cart = state.get('cart') or []
     phone = _phone_in_cart(cart)
     name = phone['name']
+    # Mẫu trả lời: chỉ dẫn cho model đặt TRƯỚC "Trả lời theo mẫu", trong mẫu chỉ có chữ gửi khách và [chỗ điền];
+    # chỉ dẫn nằm trong dòng mẫu thì model chép nguyên văn cho khách. Định dạng theo quy tắc 11b (prompts.py)
+    added = "Dạ, em đã thêm **[máy, dung lượng, màu]** ([giá]) vào giỏ rồi nha."
+    item = "- **[tên món]**: [giá] – [ghi chú ngắn nếu tool có, vd đủ công suất sạc nhanh]"
     if step == 'charger':
         if phone.get('cable_in_box'):
             # Hộp đã có cáp: chỉ mời củ sạc (tool bỏ loại kèm cáp), vài lựa chọn từ rẻ tới đắt
-            call, box = 'củ sạc', f"Hộp {name} đã có cáp sạc nhưng chưa kèm củ sạc.\n"
-            group = ("củ sạc chính hãng (2-3 món, từ rẻ tới đắt; tool chỉ có 1 thì mời 1; không mời cáp; dòng tool "
-                     "có ghi công suất thì nói ngắn củ nào đủ sạc nhanh, củ nào chỉ sạc thường):\n")
+            call, box = 'củ sạc', f"Hộp {name} đã có cáp sạc nhưng chưa kèm củ sạc."
+            pick = ("Mời 2-3 củ sạc chính hãng từ rẻ tới đắt (tool chỉ có 1 thì mời 1), không mời cáp; dòng tool có "
+                    "ghi công suất thì giữ ghi chú ngắn củ nào đủ sạc nhanh, củ nào chỉ sạc thường.")
+            group = 'củ sạc chính hãng'
         else:
-            call, box = 'sạc, cáp', f"{name} không kèm củ sạc trong hộp (nói đúng như dòng 'Trong hộp').\n"
-            group = "củ sạc, cáp chính hãng (1 củ sạc + 1 cáp; củ sạc đã kèm cáp thì không cần cáp):\n"
+            call, box = 'sạc, cáp', f"{name} không kèm củ sạc trong hộp."
+            pick = ("Mời 1 củ sạc và 1 cáp chính hãng (củ sạc đã kèm cáp thì không cần cáp); nói đúng như dòng "
+                    "'Trong hộp'.")
+            group = 'củ sạc, cáp chính hãng'
         return (f"Bán kèm (bước 1/3, củ sạc): gọi find_accessories(phone='{name}', accessory_type='{call}', "
-                f"genuine_only=True). {LIGHT_OFFER} Chỉ gợi ý củ sạc trong lượt này, chưa gợi ý ốp lưng, cường lực; "
-                "chưa gọi show_order_form. Trả lời theo mẫu:\n"
-                "Dạ, em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ rồi nha.\n" + box
-                + "Nếu anh/chị cần thì bên em có " + group + "- [tên món]: [giá]\n"
+                f"genuine_only=True). {pick} {LIGHT_OFFER} Chỉ gợi ý củ sạc trong lượt này, chưa gợi ý ốp lưng, "
+                "cường lực; chưa gọi show_order_form. Trả lời theo mẫu:\n"
+                f"{added}\n\n{box} Nếu anh/chị cần thì bên em có {group}:\n{item}\n\n"
                 "Anh/chị không cần thì cũng không sao, cứ nói em một tiếng nha.")
     if step == 'accessories':
         done = set(state.get('cross_sell') or [])
         first = 'charger' not in done  # máy đã kèm củ sạc: lượt chọn máy mời luôn ốp lưng, cường lực
-        opening = ("Dạ, em đã thêm [máy, dung lượng, màu] ([giá]) vào giỏ rồi nha.\n" if first else
-                   "[1 câu: đã thêm món khách chọn và tổng giỏ; khách không lấy gì thì bỏ câu này]\n")
+        opening = (f"{added}\n\n" if first else
+                   "[1 câu: đã thêm món khách chọn và tổng giỏ; khách không lấy gì thì bỏ câu này]\n\n")
         return (f"Bán kèm (bước {'1/2' if first else '2/3'}, ốp lưng, cường lực): "
                 + ('' if first else "khách chọn củ sạc trong tin nhắn thì add_to_cart món đó. ")
                 + f"Gọi find_accessories(phone='{name}', accessory_type='ốp lưng, cường lực', genuine_only=True), "
-                f"gợi ý 2-3 món. {LIGHT_OFFER} Món không ghi 'chính hãng' (vd miếng dán Belkin cho iPhone) thì nói "
-                "đúng tên hãng, không gọi là chính hãng; không nhắc lại củ sạc. Tool không có món nào thì nói ngắn chưa "
-                "có ốp lưng, cường lực "
-                "cho máy này rồi hỏi khách xác nhận đặt hàng. Chưa gọi show_order_form, kể cả khi khách nói xác nhận. "
-                "Trả lời theo mẫu:\n" + opening
-                + f"Anh/chị muốn giữ {name} kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em:\n"
-                "- [tên món]: [giá]\n"
+                f"gợi ý 2-3 món. {LIGHT_OFFER} Món không ghi 'chính hãng' (vd miếng dán Belkin cho iPhone) thì ghi "
+                "đúng tên hãng trong ngoặc, không gọi là chính hãng; không nhắc lại củ sạc. Tool không có món nào thì "
+                "nói ngắn chưa có ốp lưng, cường lực cho máy này rồi hỏi khách xác nhận đặt hàng. Chưa gọi "
+                "show_order_form, kể cả khi khách nói xác nhận. Trả lời theo mẫu:\n" + opening
+                + f"Anh/chị muốn giữ {name} kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em:\n{item}\n\n"
                 "Không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha.")
     return ("Bán kèm đã xong, không mời thêm phụ kiện. Khách chọn món nào trong tin nhắn thì add_to_cart món "
             "đó. Khách đã nói xác nhận/chốt đơn trong tin nhắn này mà không thêm món mới thì gọi show_order_form. "
-            "Còn lại trả lời theo mẫu (giỏ hàng, tổng tiền lấy từ trạng thái hoặc kết quả tool):\n"
+            "Giỏ hàng, tổng tiền lấy từ trạng thái hoặc kết quả tool. Trả lời theo mẫu:\n"
             "Đơn hàng của anh/chị:\n"
-            "- [số lượng] x [tên, dung lượng, màu]: [giá]\n"
-            "Tổng cộng: [tổng tiền]\n"
+            "- [số lượng] x **[tên, dung lượng, màu]**: [giá]\n\n"
+            "Tổng cộng: **[tổng tiền]**\n\n"
             "Anh/chị xác nhận đặt hàng giúp em, em mở form để mình điền thông tin nhận hàng nha.")

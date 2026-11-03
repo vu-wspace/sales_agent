@@ -385,6 +385,19 @@ Câu trả lời cuối được dọn: bỏ phần `<think>…</think>` một s
 
 Ví dụ: Galaxy S26 chưa có thông số trong dữ liệu, model tra web rồi trả lời "camera chính 200 MP" → bị yêu cầu viết lại → "dữ liệu cửa hàng chưa có thông số camera của Galaxy S26".
 
+### Định dạng câu trả lời
+
+Quy tắc 11b trong prompt và các mẫu bán kèm (`cross_sell_hint`) dùng chung 1 kiểu, trang chat (`renderMarkdown` trong `index.html`) hiển thị theo đó:
+
+| Thành phần | Quy ước | Hiển thị |
+|---|---|---|
+| Danh sách | Mỗi món 1 dòng `- **Tên máy/món**: giá – ghi chú ngắn`; không chép nguyên dòng kết quả tool (dấu `\|`) | Dòng liên tiếp bắt đầu bằng `- ` (hoặc `1. `) thành danh sách thật, dòng dài xuống hàng thẳng lề với chữ |
+| In đậm | Chỉ tên máy/món trong danh sách, mã khuyến mãi, mã đơn, tổng tiền; không in đậm giá lẻ, cả câu, tiêu đề | `<strong>`; dấu `**` model quên đóng thì bỏ, không hiện cho khách |
+| Đoạn | Câu mở đầu, danh sách, câu hỏi cuối cách nhau 1 dòng trống | Mỗi đoạn 1 khối, cách nhau 8px (dòng trống không thành khoảng rộng gấp đôi) |
+| Khác | Không dùng tiêu đề `#`, bảng, in nghiêng, emoji | `#` đầu dòng bị bỏ; link http(s) bấm được |
+
+Trong mẫu câu trả lời, chỉ dẫn cho model đặt trước chữ "Trả lời theo mẫu", phần mẫu chỉ có chữ gửi khách và `[chỗ điền]`: chỉ dẫn nằm trong dòng mẫu (vd "(2 món, từ rẻ tới đắt; dòng tool có ghi công suất…)") thì model chép nguyên văn cho khách. `test_cross_sell_templates_do_not_leak_instructions` kiểm tra điều này.
+
 ### Thông tin cá nhân (PII)
 
 Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 chỗ:
@@ -528,7 +541,7 @@ sales_agent/
 uv run pytest
 ```
 
-244 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+245 test, không gọi LLM, mạng hay database thật (dùng model và dữ liệu giả). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 

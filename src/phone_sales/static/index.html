@@ -29,6 +29,12 @@
   .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; background: var(--card);
          border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
   .me { align-self: flex-end; background: var(--me); border-color: transparent; }
+  /* Câu trả lời dạng markdown (renderMarkdown): đoạn, danh sách, chữ đậm cách đều nhau */
+  .msg .p + .p, .msg .p + ul, .msg .p + ol, .msg ul + .p, .msg ol + .p { margin-top: 8px; }
+  .msg ul, .msg ol { margin: 0; padding-left: 20px; }
+  .msg li + li { margin-top: 4px; }
+  .msg li::marker { color: var(--muted); }
+  .msg strong { font-weight: 600; }
   .err { color: var(--err); }
   .msg a { color: var(--accent); overflow-wrap: anywhere; }
   #form { display: flex; gap: 8px; }
@@ -194,19 +200,58 @@
     if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
   }
 
-  // Model trả lời bằng markdown: hiển thị **in đậm** và link, bỏ dấu # của tiêu đề.
-  function renderMarkdown(div, text) {
-    text = text.replace(/^#{1,6}\s+/gm, '');
+  // Trong 1 dòng: **in đậm** và link; dấu ** lẻ (model quên đóng) thì bỏ, không hiện ra cho khách
+  function renderInline(el, text) {
     text.split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
+      part = part.replace(/\*\*/g, '');
       if (!part) return;
       if (i % 2) {
         const b = document.createElement('strong');
         appendLinked(b, part);
-        div.appendChild(b);
+        el.appendChild(b);
       } else {
-        appendLinked(div, part);
+        appendLinked(el, part);
       }
     });
+  }
+
+  // Model trả lời bằng markdown: đoạn chữ, danh sách "- " / "1. " thành <ul>/<ol> thật (dòng dài xuống hàng
+  // thẳng lề với chữ, không lùi về sát mép), **in đậm**, link; bỏ dấu # của tiêu đề.
+  // Dòng trống quanh danh sách bỏ đi: khoảng cách do CSS lo, câu nào cũng cách đều nhau.
+  function renderMarkdown(div, text) {
+    const LIST = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/;
+    let para = [], list = null;
+    const flushPara = () => {
+      const t = para.join('\n').replace(/^\n+|\n+$/g, '');
+      para = [];
+      if (!t) return;
+      const p = document.createElement('div');
+      p.className = 'p';
+      renderInline(p, t);
+      div.appendChild(p);
+    };
+    for (const raw of text.replace(/^#{1,6}\s+/gm, '').split('\n')) {
+      const m = raw.match(LIST);
+      if (m) {
+        flushPara();
+        const tag = m[2] ? 'OL' : 'UL';
+        if (!list || list.tagName !== tag) {
+          list = document.createElement(tag);
+          div.appendChild(list);
+        }
+        const li = document.createElement('li');
+        renderInline(li, m[3]);
+        list.appendChild(li);
+      } else if (!raw.trim()) {
+        // Dòng trống: giữa các mục thì vẫn là 1 danh sách; giữa 2 đoạn thì tách đoạn (cách nhau bằng CSS,
+        // không để cả 1 dòng trống rộng gấp đôi chỗ khác)
+        if (!list) flushPara();
+      } else {
+        list = null;
+        para.push(raw);
+      }
+    }
+    flushPara();
   }
 
   // Điền nội dung cho 1 bong bóng: tin của khách và lỗi giữ nguyên chữ, câu trả lời hiển thị markdown

@@ -65,6 +65,12 @@ AGENT_PROMPTS = {
             thông tin, và đề nghị khách liên hệ hotline hoặc cửa hàng.
         11. Trả lời ngắn gọn, tối đa khoảng 100 từ. Liệt kê nhiều sản phẩm thì mỗi sản phẩm 1 dòng, tối đa 5 dòng
             (vd 5 ốp lưng rẻ nhất), rồi hỏi khách có muốn xem thêm không.
+        11b. Định dạng (giao diện chỉ hiểu **in đậm**, gạch đầu dòng "- " và link):
+            - Danh sách: mỗi món 1 dòng "- **Tên máy/món**: giá – ghi chú ngắn" (dung lượng, màu, còn hàng, chính
+              hãng); không chép nguyên dòng kết quả tool, không dùng dấu "|" của kết quả tool.
+            - Chỉ in đậm: tên máy/món trong danh sách, mã khuyến mãi, mã đơn và dòng tổng tiền. Không in đậm giá lẻ,
+              cả câu hay tiêu đề đoạn; không dùng tiêu đề #, bảng, in nghiêng, emoji.
+            - Câu mở đầu, danh sách, câu hỏi cuối cách nhau 1 dòng trống.
 
         Chuyển nhân viên:
         12. Khách khiếu nại, máy lỗi cần xử lý, đơn hàng giao sai/chậm/thiếu, muốn hủy đơn đã thanh toán,
