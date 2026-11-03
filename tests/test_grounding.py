@@ -89,7 +89,7 @@ class ScriptedModel(GenericFakeChatModel):
 def test_graph_rewrites_answer_with_ungrounded_price(monkeypatch):
     script = iter([AIMessage('Dạ iPhone 17 giá 25.000.000đ ạ.'),           # bịa giá
                    AIMessage('Dạ em chưa tra giá, anh/chị chờ em chút ạ.')])  # viết lại
-    monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=script))
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
     from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('iphone 17 giá bn')]}, {'configurable': {'thread_id': 'g'}})
@@ -99,7 +99,7 @@ def test_graph_rewrites_answer_with_ungrounded_price(monkeypatch):
 
 def test_graph_keeps_grounded_answer(monkeypatch):
     script = iter([AIMessage('Dạ anh/chị cho em biết ngân sách khoảng 20 triệu đúng không ạ?')])
-    monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=script))
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
     from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('tầm 20tr')]}, {'configurable': {'thread_id': 'g'}})

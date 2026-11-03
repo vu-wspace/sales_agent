@@ -54,11 +54,14 @@ services:
     container_name: phone_sales_api
     ports:
       - "8000:8000"   # Web chat + API (docs tại /docs)
-    env_file: .env    # OPENROUTER_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, TAVILY_API_KEY, LANGSMITH_*
+    env_file: .env    # ROUTER9_*, OPENROUTER_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, TAVILY_API_KEY, LANGSMITH_*
     environment:
       QDRANT_URL: http://qdrant:6333   # ghi đè QDRANT_URL=localhost trong .env
       AUTO_INGEST: "true"              # collection rỗng thì tự nạp chính sách (data_schema/policies) khi khởi động
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
+      ROUTER9_BASE_URL: http://host.docker.internal:20128/v1   # 9Router chạy trên máy host, không phải trong container
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux cần dòng này; Docker Desktop (Windows/Mac) có sẵn
     depends_on:
       qdrant:
         condition: service_started

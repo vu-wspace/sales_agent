@@ -128,7 +128,7 @@ class ScriptedModel(GenericFakeChatModel):
 
 
 def test_graph_tracks_objection_steps(monkeypatch):
-    monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=iter([AIMessage('Dạ vâng.')] * 6)))
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=iter([AIMessage('Dạ vâng.')] * 6)))
     from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     cfg = {'configurable': {'thread_id': 'o'}}

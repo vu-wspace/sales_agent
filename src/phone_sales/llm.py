@@ -1,11 +1,14 @@
 import re
 import groq
+import openai
 from langchain_core.exceptions import (ModelAuthenticationError, ModelNotFoundError, ModelPermissionDeniedError,
                                        ModelRateLimitError)
+from langchain_openai import ChatOpenAI
 from langchain_openrouter import ChatOpenRouter
 from openrouter import errors as openrouter_errors
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_groq import ChatGroq
+from phone_sales.config import ROUTER9_API_KEY, ROUTER9_BASE_URL, ROUTER9_MODEL
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # Số lần SDK tự thử lại khi lỗi tạm thời (5xx, quá tải, mất kết nối) trước khi báo lỗi.
@@ -13,6 +16,18 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 # model cuối chuỗi (Groq) thử lại nhiều hơn vì sau nó không còn model nào.
 RETRIES_IN_CHAIN = 1
 RETRIES_LAST = 3
+
+# 9Router (router chạy trên máy, API kiểu OpenAI) - model chính của graph. Địa chỉ, key, tên model đọc từ .env
+# (config.py), không ghi thẳng key vào code. Chạy trong Docker thì docker-compose.yml đổi localhost thành host.docker.internal.
+openai_llm = ChatOpenAI(
+    base_url=ROUTER9_BASE_URL,
+    api_key=ROUTER9_API_KEY or 'missing-9router-key',   # để trống thì ChatOpenAI báo lỗi ngay lúc import
+    model=ROUTER9_MODEL,                                 # tên model hoặc tên combo tạo trên 9Router
+    temperature=0,
+    max_tokens=1024,
+    timeout=60,                                          # giây (khác ChatOpenRouter tính bằng mili giây)
+    max_retries=RETRIES_IN_CHAIN,
+)
 
 open_llm = ChatOpenRouter(
     model='nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -70,7 +85,7 @@ groq_llm = ChatGroq(
 
 # Model chính hỏng/hết quota thì thử lần lượt các model này (xem fallback.py).
 # Xếp theo tốc độ đo được; Groq nhanh nhưng quota token/phút nhỏ nên để cuối.
-FALLBACK_LLMS = [nvidia_llm, google_llm, google_llm_alt, groq_llm]
+FALLBACK_LLMS = [open_llm, nvidia_llm, google_llm, google_llm_alt, groq_llm]
 
 def model_name(llm) -> str:
     return getattr(llm, 'model', None) or getattr(llm, 'model_name', None) or type(llm).__name__
@@ -85,7 +100,8 @@ def is_rate_limited(e: Exception) -> bool:
     # Gemini (langchain-google-genai) ném ModelRateLimitError chung của langchain_core.
     # Groq ném lỗi riêng: 429, hoặc 413 "Request too large" kèm code rate_limit_exceeded.
     # OpenRouter (SDK openrouter) cũng ném lỗi riêng, không kế thừa ModelError. NVIDIA: xem nvidia_status.
-    if isinstance(e, (ModelRateLimitError, groq.RateLimitError, openrouter_errors.TooManyRequestsResponseError)):
+    if isinstance(e, (ModelRateLimitError, groq.RateLimitError, openai.RateLimitError,
+                      openrouter_errors.TooManyRequestsResponseError)):
         return True
     if nvidia_status(e) == 429:
         return True
@@ -108,6 +124,7 @@ def is_permanent_error(e: Exception) -> bool:
     return isinstance(e, (
         ModelNotFoundError, ModelAuthenticationError, ModelPermissionDeniedError,     # Gemini (langchain_core)
         groq.NotFoundError, groq.AuthenticationError, groq.PermissionDeniedError,
+        openai.NotFoundError, openai.AuthenticationError, openai.PermissionDeniedError,   # 9Router
         openrouter_errors.NotFoundResponseError, openrouter_errors.UnauthorizedResponseError,
         openrouter_errors.ForbiddenResponseError, openrouter_errors.PaymentRequiredResponseError,
     ))

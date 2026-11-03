@@ -221,7 +221,7 @@ def test_graph_parallel_add_to_cart_keeps_both(monkeypatch, fake_catalog):
             {'name': 'add_to_cart', 'id': 't2', 'args': {'product': 'ốp lưng trong suốt s26'}}]),
         AIMessage('Dạ em đã thêm máy và ốp lưng vào giỏ.'),
     ])
-    monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=script))
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
     from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('lấy galaxy s26 256gb đen với ốp lưng trong suốt')]},
@@ -273,7 +273,7 @@ def test_graph_keeps_state_across_turns(monkeypatch, fake_catalog):
                                    'args': {'product': 'galaxy s26', 'storage': '256GB', 'color': 'đen'}}]),
         AIMessage('Dạ em đã thêm Galaxy S26 vào giỏ ạ.'),                            # lượt 2 sau khi gọi tool
     ])
-    monkeypatch.setattr(llm, 'open_llm', ScriptedModel(messages=script))
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
     from phone_sales.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     cfg = {'configurable': {'thread_id': 't'}}
@@ -329,7 +329,7 @@ def test_show_order_form_waits_for_cross_sell():
     assert form({'cart': [acc_only]})['order_form'] is True                                          # giỏ không có máy
 
 
-def test_openrouter_allows_parallel_tool_calls(monkeypatch):
+def test_primary_allows_parallel_tool_calls(monkeypatch):
     # State chịu được nhiều tool cập nhật cùng bước (cart_update...) nên model chính được gọi tool song song
     seen = {}
 
@@ -338,7 +338,7 @@ def test_openrouter_allows_parallel_tool_calls(monkeypatch):
             seen.update(kwargs)
             return self
 
-    monkeypatch.setattr(llm, 'open_llm', Recording(messages=iter([])))
+    monkeypatch.setattr(llm, 'openai_llm', Recording(messages=iter([])))
     from phone_sales.graph import build_graph
     build_graph(fallback=False)
     assert seen == {'parallel_tool_calls': True}

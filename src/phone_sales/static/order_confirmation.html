@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+<body style="font-family:Arial,sans-serif;color:#1f1e1d;max-width:560px;margin:auto">
+  <h2 style="color:#185fa5">Xác nhận đơn hàng #{{ order.order_id }}</h2>
+  <p>Chào {{ order.recipient_name }},</p>
+  <p>Cảm ơn anh/chị đã đặt hàng tại PhoneShop Demo. Thông tin đơn hàng:</p>
+
+  <table width="100%" cellpadding="8" style="border-collapse:collapse;font-size:14px">
+    <tr style="background:#f5f4ef">
+      <th align="left">Sản phẩm</th><th align="center">SL</th><th align="right">Thành tiền</th>
+    </tr>
+    {% for item in order["items"] %}
+    <tr style="border-bottom:1px solid #eee">
+      <td>{{ item.name }}</td>
+      <td align="center">{{ item.qty }}</td>
+      <td align="right">{{ (item.unit_price * item.qty) | vnd }}</td>
+    </tr>
+    {% endfor %}
+    <tr><td colspan="2">Tạm tính</td><td align="right">{{ order.subtotal | vnd }}</td></tr>
+    {% if order.discount_amount %}
+    <tr><td colspan="2">Giảm giá</td><td align="right">-{{ order.discount_amount | vnd }}</td></tr>
+    {% endif %}
+    <tr style="font-weight:bold"><td colspan="2">Tổng cộng</td><td align="right">{{ order.total | vnd }}</td></tr>
+  </table>
+
+  <p><b>Giao tới:</b> {{ order.address }}<br>
+     <b>Thanh toán:</b> Thanh toán khi nhận hàng</p>
+  <p>Nhân viên sẽ gọi xác nhận trước khi giao. Mọi thắc mắc, anh/chị vui lòng phản hồi email này.</p>
+</body>
+</html>

@@ -10,7 +10,8 @@ langchain[mcp]>=1.4.7
 langchain-core>=1.7.0
 langgraph>=1.2.16
 
-# LLM
+# LLM (langchain-openai: 9Router, API kiểu OpenAI)
+langchain-openai>=1.7.3
 langchain-openrouter>=0.2.9
 langchain-google-genai>=4.4.2
 langchain-groq>=1.1.3

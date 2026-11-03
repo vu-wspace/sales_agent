@@ -33,3 +33,8 @@ AUTO_INGEST = os.getenv('AUTO_INGEST', 'true').lower() == 'true'
 #   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # Mất khóa là không đọc lại được thông tin khách đã lưu
 PII_KEY = os.getenv('PII_KEY', '')
+
+# 9Router (model chính của graph, xem llm.py). Chạy trên máy: http://localhost:20128/v1
+ROUTER9_BASE_URL = os.getenv('ROUTER9_BASE_URL', 'http://localhost:20128/v1')
+ROUTER9_API_KEY = os.getenv('ROUTER9_API_KEY', '')
+ROUTER9_MODEL = os.getenv('ROUTER9_MODEL', 'super_duper_free_combo')
