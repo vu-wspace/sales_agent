@@ -104,6 +104,28 @@ def _storage_key(s: str) -> tuple:
     nums = [(int(n) * (1024 if u.upper() == 'TB' else 1)) for n, u in re.findall(r'(\d+)\s*(GB|TB)', s, re.I)]
     return tuple(nums) or (0,)
 
+def _same_storage(label: str, storage: str) -> bool:
+    """Phiên bản có khớp dung lượng khách/agent nêu không. "256gb" khớp mọi RAM ("256GB - RAM 8GB", "... RAM 12GB");
+    nêu cả RAM ("256GB - RAM 12GB", "12GB/256GB", "256GB 12GB RAM") thì chỉ khớp đúng bản đó."""
+    have, want = _storage_key(label or ''), _storage_key(storage)
+    if len(want) < 2 or len(have) < 2:
+        return have[:1] == want[:1]
+    return have[:2] in (want[:2], want[1::-1])   # nhận cả kiểu viết RAM trước ("12GB/256GB")
+
+def _filter_storage(variants: list[dict], storage: str) -> list[dict]:
+    # Nêu cả RAM mà không khớp bản nào (vd RAM ghi sai) thì quay về chỉ so dung lượng
+    if not storage.strip():
+        return variants
+    exact = [v for v in variants if _same_storage(v['storage'], storage)]
+    if exact:
+        return exact
+    want = _storage_key(storage)
+    same = [v for v in variants if _storage_key(v['storage'] or '')[:1] in (want[:1], want[1:2])]
+    if same or len(want) != 1:
+        return same
+    # Chỉ nêu RAM ("RAM 8GB", "8GB"): khớp phần RAM của nhãn "128GB - RAM 8GB"
+    return [v for v in variants if _storage_key(v['storage'] or '')[1:2] == want]
+
 def _price(v: int) -> str:
     return f'{v:,}'.replace(',', '.') + 'đ'
 
@@ -194,10 +216,10 @@ def get_product_details(product: str, storage: str = '', color: str = '') -> str
     attrs = p['attributes'] or {}
     bigger = []
     if storage.strip():
-        # "256gb" khớp cả "256GB - RAM 8GB" và "256GB - RAM 12GB"
+        # "256gb" khớp cả "256GB - RAM 8GB" và "256GB - RAM 12GB"; nêu cả RAM thì chỉ bản đó
         want = _storage_key(storage)[:1]
         bigger = [v for v in variants if _storage_key(v['storage'] or '')[:1] > want]
-        variants = [v for v in variants if _storage_key(v['storage'] or '')[:1] == want]
+        variants = _filter_storage(variants, storage)
     if color.strip():
         variants = [v for v in variants if _norm_text(color) in _norm_text(v['color'] or '')]
     estimated = set(attrs.get('estimated_price_skus', []))
@@ -376,8 +398,7 @@ def find_cheaper_alternatives(product: str, state: Annotated[dict, InjectedState
                      f"Không tìm thấy điện thoại '{product}' (tool chỉ áp dụng cho điện thoại).")
     base_id = hits[0]['product_id']
     own = [r for r in phones if r['product_id'] == base_id]
-    chosen = [r for r in own if not storage.strip()
-              or _storage_key(r['storage'] or '')[:1] == _storage_key(storage)[:1]] or own
+    chosen = _filter_storage(own, storage) or own
     base = min(chosen, key=lambda r: r['price'])
     budget = (state.get('slots') or {}).get('budget_max')
     low, high = base['price'] * (1 - high_pct), base['price'] * (1 - low_pct)
@@ -561,9 +582,7 @@ def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_i
                           (p['product_id'],))
     except Exception as e:
         return _cart_reply(tool_call_id, DB_ERROR.format(type(e).__name__))
-    if storage.strip():
-        want = _storage_key(storage)[:1]
-        variants = [v for v in variants if _storage_key(v['storage'] or '')[:1] == want]
+    variants = _filter_storage(variants, storage)
     if color.strip():
         variants = [v for v in variants if _norm_text(color) in _norm_text(v['color'] or '')]
     if len(variants) != 1:

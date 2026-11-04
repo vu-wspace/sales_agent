@@ -259,10 +259,10 @@ flowchart LR
     model -- "trả lời xong" --> track_reply --> finish((END))
 ```
 
-1. `track_user` đọc tin nhắn của khách: nhu cầu, lo ngại, cảm xúc, có cần chuyển nhân viên không.
+1. `track_user` đọc tin nhắn của khách: nhu cầu, lo ngại, cảm xúc, có cần chuyển nhân viên không. Từ khóa chuyển nhân viên (`HANDOFF`) khớp cả bản bỏ dấu (`_has_loose`: "gap quan ly", "CHUYEN NV"): gặp nhân viên/quản lý/người phụ trách, gọi staff, khiếu nại, giao sai/trễ/thiếu, bị trừ tiền 2 lần, sai màu, máy đã hỏng; không tính "quản lý pin/bộ nhớ", "nhắn nhân viên gọi xác nhận".
 2. `model` gọi LLM với system prompt, tóm tắt trạng thái hội thoại và lịch sử đã cắt gọn (4 lượt gần nhất).
 3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng. Model được gọi nhiều tool song song trong 1 bước (9Router và OpenRouter bật `parallel_tool_calls=True`, model dự phòng khác mặc định cũng song song), vd tra giá 2 máy khi so sánh, thêm máy và củ sạc cùng lúc; các khóa state mà tool ghi (`cart`, `order_form`, `offered_alternatives`) đều có reducer nên nhận được nhiều cập nhật cùng bước.
-4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời.
+4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời. Câu trả lời báo đã/sẽ chuyển nhân viên, quản lý (`announces_handoff`, vd prompt quy tắc 12 với máy lỗi cần đổi trả) thì bật `handoff` thật, để lời báo không thành lời hứa suông khi từ khóa của khách không khớp.
 
 `agent.py` dựng bằng `create_agent`, dùng chung tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng; model chính vẫn là OpenRouter (`llm.open_llm`), không qua 9Router.
 
@@ -434,7 +434,7 @@ Viết tắt chỉ thay cả từ và không thay ngay sau số (`100 k` là ti�
 3. Không tính làm nguồn: câu trả lời cũ của model (số bịa ở lượt trước không thành có nguồn) và kết quả `web_search` (giá, thông số, chính sách chỉ theo dữ liệu cửa hàng).
 4. Có số không rõ nguồn: ghi log `Câu trả lời có số liệu không rõ nguồn [...]`, gửi lại model bản nháp kèm yêu cầu viết lại (chỉ dùng số từ công cụ, cần thì gọi tool, không có thì nói chưa có thông tin). Chỉ viết lại 1 lần; bản nháp sai không lưu vào lịch sử. Viết lại vẫn sai thì ghi log và giữ bản viết lại.
 
-Câu trả lời cuối được dọn: bỏ phần `<think>…</think>` một số model để lộ, bỏ dòng trống thừa, bỏ chữ "ạ" đứng riêng ("không ạ?" → "không?"; "Dạ", "lạ" giữ nguyên). Prompt cũng dặn không dùng "ạ"; bỏ trong code là chốt chặn khi model vẫn viết.
+Câu trả lời cuối được dọn: bỏ phần `<think>…</think>` một số model để lộ, đổi nhãn che PII model chép lại ("qua số [SỐ ĐIỆN THOẠI]" → "qua số điện thoại anh/chị đã cung cấp"), bỏ dòng trống thừa, bỏ chữ "ạ" đứng riêng ("không ạ?" → "không?"; "Dạ", "lạ" giữ nguyên). Prompt cũng dặn không dùng "ạ"; bỏ trong code là chốt chặn khi model vẫn viết.
 
 Ví dụ: Galaxy S26 chưa có thông số trong dữ liệu, model tra web rồi trả lời "camera chính 200 MP" → bị yêu cầu viết lại → "dữ liệu cửa hàng chưa có thông số camera của Galaxy S26".
 
@@ -457,7 +457,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 | Chỗ | Cách xử lý |
 |---|---|
-| Trước khi tới LLM | `ChatRequest` (`api.py`) thay số điện thoại, email trong tin nhắn bằng `[SỐ ĐIỆN THOẠI]`, `[EMAIL]` (`pii.redact`), nên model, LangSmith và lịch sử hội thoại chỉ có bản đã che. `graph.py` che lại khi gọi graph trực tiếp (`langgraph dev`, eval). Prompt dặn model không hỏi lại, thông tin nhận hàng khách điền ở form |
+| Trước khi tới LLM | `ChatRequest` (`api.py`) thay số điện thoại, email trong tin nhắn bằng `[SỐ ĐIỆN THOẠI]`, `[EMAIL]` (`pii.redact`), nên model, LangSmith và lịch sử hội thoại chỉ có bản đã che. `graph.py` che lại khi gọi graph trực tiếp (`langgraph dev`, eval). Prompt dặn model không hỏi lại, không chép nhãn vào câu trả lời (`clean_answer` đổi nhãn còn sót thành "số điện thoại anh/chị đã cung cấp"), thông tin nhận hàng khách điền ở form |
 | Khi hiển thị | Thẻ xác nhận (`orders.view`) và tóm tắt đơn (`orders.summary`, cũng nằm trong lịch sử gửi LLM ở lượt sau) hiện `0912 *** 678`, `ng***@gmail.com` |
 | Trong log | `RedactFilter` gắn vào handler của uvicorn và root khi khởi động: che trong nội dung log, tham số (kể cả path của access log) và traceback (lỗi psycopg có thể in tham số SQL) |
 | Trong database | `customers.phone`, `customers.email`, `orders.recipient_phone`, `orders.recipient_email` lưu dạng `enc:…` (Fernet, khóa `PII_KEY`). Fernet mỗi lần mã hóa ra chuỗi khác nên tra khách cũ, chặn trùng email bằng `phone_hash`, `email_hash` (HMAC-SHA256, khóa sinh từ `PII_KEY`; số điện thoại chuẩn hóa `+84…` → `0…`, email chuyển chữ thường trước khi băm) |
@@ -483,6 +483,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 - Tên máy được chuẩn hóa (bỏ dấu, viết tắt như `ip`, `promax`, `17pro`). Khi nhiều sản phẩm khớp, tool trả danh sách để model hỏi lại khách.
 - Tồn kho chỉ trả `còn hàng` / `sắp hết` / `hết hàng`, không trả số lượng.
+- Dung lượng (`_filter_storage`, dùng trong `get_product_details`, `add_to_cart`, `find_cheaper_alternatives`): "128GB" khớp mọi bản RAM ("128GB - RAM 4GB/6GB/8GB" của Galaxy A07, A18, A27, A37, A57); nêu cả RAM thì chỉ khớp đúng bản đó, nhận cả "128GB - RAM 6GB", "6GB/128GB", "RAM 8GB". RAM không có bản nào thì quay về so dung lượng.
 - Thông số chỉ có trong `get_product_details`. `search_products` và máy chưa có thông số (dòng Galaxy S/Z) kèm dòng nhắc model không tự nêu chip, camera, pin, vì model hay bịa theo trí nhớ.
 - Khách nêu tên 1 máy cụ thể ("muốn mua iPhone 17", "cho xem Galaxy S26") thì model gọi `get_product_details` và liệt kê từng dung lượng kèm giá, màu, tình trạng hàng rồi hỏi khách chọn phiên bản. `search_products` khớp đúng tên 1 máy cũng kèm dòng nhắc gọi `get_product_details`, vì model hay coi "Galaxy S26" là cả dòng máy và chỉ đưa khoảng giá.
 - Mọi tool tự bắt lỗi hệ thống và báo cho model, để lượt chat không bị hỏng.
@@ -584,7 +585,7 @@ sales_agent/
 │   ├── api.py                  # FastAPI
 │   └── static/                 # Giao diện chat (index.html), mẫu form đặt hàng (order_form.html)
 ├── tests/                      # Unit test
-├── evals/                      # Bộ câu hỏi, script đánh giá, user simulator (simulate.py, personas.jsonl)
+├── evals/                      # Bộ câu hỏi, script đánh giá, user simulator (simulate.py, simulate_batch.py, personas.jsonl, scenarios.jsonl)
 ├── certs/                      # CA nội bộ cho mạng có SSL inspection (không commit)
 ├── Dockerfile, docker-compose.yml
 ├── langgraph.json
@@ -599,7 +600,7 @@ sales_agent/
 uv run pytest
 ```
 
-286 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+308 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
@@ -668,12 +669,61 @@ Mỗi lần chạy ghi vào `evals/results/`: `…-sim.json` (hội thoại, k�
 - Khách giả lập mặc định `temperature=0` (`--sim-temperature` để đa dạng hơn). LLM vẫn không hoàn toàn xác định: nên chạy `--runs` nhiều lần và xem tỷ lệ đạt.
 - Kiểm tra giá chỉ xét số tiền viết dạng `…đ` (không xét "8 triệu"); số tiền tính từ % khuyến mãi agent tự nói ra bị đánh dấu sai giá.
 
+### User simulator hàng loạt (200–300 kịch bản)
+
+`evals/simulate_batch.py`: Gemini brainstorm kịch bản từ catalog thật, chạy song song qua API, chấm 2 lớp, đo độ lệch của judge so với lớp kiểm tra xác định, xuất CSV. Dùng chung khách giả lập, kiểm tra và judge với `simulate.py`.
+
+```bash
+docker compose up -d
+uv run python evals/simulate_batch.py brainstorm                       # -> evals/scenarios.jsonl
+uv run python evals/simulate_batch.py run --workers 4                  # -> evals/results/<ts>-batch.jsonl
+uv run python evals/simulate_batch.py run --workers 4 --resume evals/results/<ts>-batch.jsonl   # chạy tiếp phần còn thiếu
+uv run python evals/simulate_batch.py recheck   evals/results/<ts>-batch.jsonl                  # tính lại lớp 1 (sau khi sửa kiểm tra)
+uv run python evals/simulate_batch.py rejudge   evals/results/<ts>-batch.jsonl --rubric v3 --workers 3   # --force: chấm lại hết
+uv run python evals/simulate_batch.py calibrate evals/results/<ts>-batch.jsonl --rubric v3
+uv run python evals/simulate_batch.py summary   evals/results/<ts>-batch.jsonl                  # tỷ lệ đạt theo nhóm
+uv run python evals/simulate_batch.py export    evals/results/<ts>-batch.jsonl                  # -> <ts>-batch.csv
+```
+
+- **Kịch bản** (`evals/scenarios.jsonl`, 250): 12 nhóm: `budget_buy`, `specific_model`, `compare_undecided`, `multi_item`, `accessory_only`, `price_haggle`, `fake_promo`, `real_promo`, `policy_question`, `complaint_handoff`, `change_mind`, `out_of_scope`. Mỗi kịch bản có persona, mục tiêu ẩn, luật đạt (`order_created`, `order_multi`, `handoff`, `no_fake_discount`, `order_or_compare`, `info_only`).
+- **Chạy**: mỗi hội thoại xong ghi ngay 1 dòng (bị dừng thì `--resume`), đặt hàng bằng số điện thoại riêng `09009xxxxx`, đơn bị xóa ngay sau khi kiểm tra. `rejudge` lưu sau mỗi 10 hội thoại.
+- **Lớp 1** bổ sung so với `simulate.py`: báo lỗi hệ thống (`system_errors`), gọi `add_to_cart` lặp ≥ 4 lần trong 1 lượt (`tool_loops`), nói đã ghi nhận/tạo đơn khi chưa có đơn (`fake_order_claims`), hứa gọi lại khi chưa có đơn và chưa chuyển nhân viên (`unbacked_promises`), và `failure_cause`: `agent` (lỗi của chatbot) hay `customer_choice` (khách tự chọn không mua, mục tiêu không khả thi như ngân sách dưới máy rẻ nhất).
+- **Đo độ lệch** (`calibrate`): từ kết quả lớp 1 suy ra mức trần điểm (vd sai giá → recommendation ≤ 2, nói đã có đơn khi chưa có → needs ≤ 2). Báo % hội thoại judge chấm vượt trần, % bỏ sót (điểm TB ≥ 4.5 dù lớp 1 thấy lỗi của agent), % chấm rất thấp hội thoại sạch. Lệch nhiều (vượt trần > 15% hoặc bỏ sót > 30%) thì viết rubric chặt hơn rồi `rejudge`.
+- **Rubric**: `v1` (rubric của `simulate.py`), `v2` (thêm mức trần theo kết quả lớp 1), `v3` (thêm `failure_cause` và các kiểm tra mới, không trừ điểm khi khách tự chọn không mua). Lần chạy 250 kịch bản:
+
+  | Rubric | Hội thoại | Vượt trần | Bỏ sót |
+  |---|---|---|---|
+  | v1 | 248 | 19% | 48% |
+  | v2 (mẫu 64) | 64 | 14% | 48% |
+  | v3 | 248 | 3% | 11% |
+
+- **CSV** (`utf-8-sig`, mở được bằng Excel): 1 dòng / hội thoại: kết quả lớp 1, điểm và lý do của từng rubric, cột `<rubric>_over_cap`, cột `human_*` để trống cho người chấm, hội thoại (cắt ở 30.000 ký tự).
+- Chuỗi model của khách giả lập, judge và brainstorm: Gemini 3.1 → Gemini 3.5 → NVIDIA → Groq → OpenRouter → 9Router (riêng judge: `max_tokens=4096`, timeout 180 giây). Khi các model miễn phí hết quota ngày, gần như mọi lượt dồn về 9Router: chậm (1–3 phút/lượt), có lượt timeout hoặc 503; chạy lại `rejudge` để chấm phần còn thiếu.
+
+**Kết quả lần chạy 250 kịch bản** (`evals/results/20261103-153030-batch.csv`): đạt 159/250 (64%), 67 hội thoại trượt do agent. Tốt: `policy_question` 100%, `out_of_scope` 93%, `price_haggle` 92%. Yếu: `complaint_handoff` 15%, `multi_item` 20%, `accessory_only` 25%, `change_mind` 40%. Độ trễ mỗi lượt p50 25s, p95 86s.
+
+Lỗi agent tìm được và cách sửa:
+
+| Lỗi | Số hội thoại | Sửa |
+|---|---|---|
+| Không chuyển nhân viên khi khách viết không dấu, đòi "quản lý", "người phụ trách", "staff" | 17 | `HANDOFF` thêm cụm từ, khớp cả bản bỏ dấu |
+| Không thêm được bản có RAM ("128GB - RAM 8GB": chỉ so số đầu) → báo lỗi hệ thống, gọi `add_to_cart` lặp, nói đã ghi nhận đơn khi chưa có | 14 / 12 / 5 | `_filter_storage` |
+| Nói "đã chuyển nhân viên" nhưng `handoff` không bật | | `announces_handoff` trong `track_reply` |
+| Chép nhãn `[SỐ ĐIỆN THOẠI]` vào câu trả lời | | `clean_answer` |
+| Bịa hotline, hứa "quản lý ra gặp ngay", giờ giao | | Prompt quy tắc 12 (chỉ prompt) |
+| Không trả lời kịp (request tới API quá thời gian chờ của simulator) | 12 | Chưa sửa |
+| Nói khuyến mãi trước khi gọi `get_promotions` | 7 | Chưa sửa |
+| Trả lời rỗng | 5 | Chưa sửa |
+
+Chạy lại 29 kịch bản lỗi sau 2 sửa đầu (`evals/results/20261104-152937-batch.jsonl`): đạt 3 → 25, chuyển nhân viên 3 → 17/20, gọi `add_to_cart` lặp 6 → 0, nói đã có đơn khi chưa có 3 → 0, điểm judge v3 trung bình 3.75 → 4.36. Các sửa còn lại chưa chạy lại simulator.
+
 ## Hạn chế
 
 - State hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker.
 - Khách quen nhận ra theo trình duyệt (`localStorage`), không có đăng nhập: máy dùng chung thì người sau thấy tên và món đơn gần nhất của người trước; xóa dữ liệu trang hoặc đổi trình duyệt thì thành khách mới. Đóng tab không gọi `/session` nên lịch sử cuộc cũ vẫn nằm trong RAM tới khi restart.
 - Form đặt hàng chỉ hỗ trợ giao tận nơi và thanh toán khi nhận hàng; chưa có trang quản lý đơn, đơn chỉ nằm trong database.
-- Luật nhận diện từ khóa không hiểu mọi cách nói (viết không dấu, mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`), kể cả câu từ chối phụ kiện bán kèm.
+- Luật nhận diện từ khóa không hiểu mọi cách nói (mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`; viết không dấu mới chỉ xử lý cho chuyển nhân viên), kể cả câu từ chối phụ kiện bán kèm. Khách báo máy vừa mua bị lỗi ("màn hình bị lỗi cảm ứng") không tự chuyển nhân viên vì "bị lỗi" trùng câu hỏi "máy có hay bị lỗi không"; chỉ chuyển khi model báo chuyển (`announces_handoff`).
+- Shop không có dữ liệu hotline, địa chỉ chi nhánh: chống bịa chỉ bằng prompt, model vẫn có thể bịa.
 - Kiểm tra bịa số liệu chỉ xét số kèm đơn vị và chỉ trong `graph.py`: không bắt được câu bịa không có số ("máy chống nước tốt", sai tên màu), số trùng ngẫu nhiên với một số có trong nguồn, hay câu trả lời của `agent.py`.
 - API chưa có xác thực và giới hạn request.
 - Email xác nhận gửi bằng `BackgroundTasks` trong tiến trình API: server khởi động lại đúng lúc đang gửi thì mất email, đơn kẹt ở `email_status = 'pending'`, không tự gửi lại. Làm thật nên dùng outbox (ghi yêu cầu gửi trong cùng transaction tạo đơn, worker riêng gửi và thử lại) hoặc hàng đợi (Celery, ARQ).

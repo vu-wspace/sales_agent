@@ -5,8 +5,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Checkpointer
 from phone_sales import llm, pii
-from phone_sales.conversation import (AgentState, append_unique, cross_sell_step, decide_stage, describe,
-                                    needs_handoff, products_mentioned, track_tool_results, track_user_message)
+from phone_sales.conversation import (AgentState, announces_handoff, append_unique, cross_sell_step, decide_stage,
+                                    describe, needs_handoff, products_mentioned, track_tool_results, track_user_message)
 from phone_sales.fallback import FallbackMiddleware
 from phone_sales.grounding import correction, sources_of, ungrounded
 from phone_sales.history import trim_history
@@ -65,6 +65,10 @@ def track_reply(state: AgentState) -> dict:
     step = cross_sell_step(state)
     # Lượt này đã xử lý phản đối -> lần sau khách phản đối cùng loại thì sang bậc kế tiếp
     handled = {'objection_step': (state.get('objection_step') or 0) + 1} if state.get('objection') else {}
+    # Câu trả lời báo chuyển nhân viên -> bật handoff thật (nhân viên nhận được), không chỉ là lời hứa
+    answer = messages[-1].text if messages and isinstance(messages[-1], AIMessage) else ''
+    if not state.get('handoff') and announces_handoff(answer):
+        after['handoff'] = handled['handoff'] = True  # handled: các trường trả về thêm
     return {'shown_products': shown, 'cross_sell': [step] if step else [], 'stage': _stage_now(after), **handled}
 
 def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):

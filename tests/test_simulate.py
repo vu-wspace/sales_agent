@@ -107,3 +107,27 @@ def test_budget_difference_is_not_a_price_mismatch():
     f = sim.check(r, {'success': 'info_only'}, ref)
     assert not f['price_mismatches']
     assert sim.customer_amounts('tầm 6-9 cu, tối đa 500k') >= {6_000_000, 9_000_000, 500_000}
+
+
+def test_agent_issues_and_failure_cause():
+    r = run(chat('lấy a27 8gb', 'Dạ, hệ thống đang gặp sự cố khi thêm vào giỏ.', ['add_to_cart'] * 4),
+            chat('chốt đơn đi', 'Dạ, em đã ghi nhận đơn hàng cho anh/chị, bên em sẽ gọi lại xác nhận nha.'))
+    f = sim.check(r, {'success': 'order_created'}, REF)
+    assert f['system_errors'] == [1] and f['tool_loops'] == [1]
+    assert f['fake_order_claims'] == [2] and f['unbacked_promises'] == [2]
+    assert not f['success'] and f['failure_cause'] == 'agent'
+
+
+def test_customer_choice_is_not_agent_failure():
+    # Ngân sách thấp hơn máy rẻ nhất, khách tự rời đi: không có đơn nhưng không phải lỗi agent
+    r = run(chat('có máy nào 2 triệu ko', 'Dạ, máy rẻ nhất bên em là 999.000đ... không có máy 2 triệu nha.'),
+            chat('vậy thôi để suy nghĩ', 'Dạ không sao, khi cần anh/chị nhắn em nha.'))
+    f = sim.check(r, {'success': 'order_created'}, REF)
+    assert not f['success'] and f['failure_cause'] == 'customer_choice'
+
+
+def test_form_guidance_is_not_a_fake_order_claim():
+    r = run(chat('ok chốt', 'Dạ, anh/chị điền form bên dưới để em lên đơn cho mình nha. Nhân viên gọi xác nhận trước khi giao.',
+                 ['show_order_form'], [PHONE], order_form=True))
+    f = sim.check(r, {'success': 'info_only'}, REF)
+    assert not f['fake_order_claims'] and not f['unbacked_promises']

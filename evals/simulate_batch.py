@@ -34,9 +34,10 @@ from pathlib import Path  # noqa: E402
 
 import httpx  # noqa: E402
 from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
+from langchain_openai import ChatOpenAI  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
-from phone_sales import llm, orders  # noqa: E402
+from phone_sales import config, llm, orders  # noqa: E402
 from phone_sales.fallback import FallbackMiddleware  # noqa: E402
 
 warnings.filterwarnings('ignore', message='.*uses fixed sampling defaults.*')
@@ -49,7 +50,10 @@ _spec.loader.exec_module(sim)
 SCENARIOS = EVAL_DIR / 'scenarios.jsonl'
 RESULTS_DIR = EVAL_DIR / 'results'
 # Model khách giả lập / judge / brainstorm: Gemini trước, hết quota hoặc quá tải thì sang model khác
-CHAIN = [llm.google_llm, llm.google_llm_alt, llm.nvidia_llm, llm.groq_llm, llm.open_llm]
+# Cuối: 9Router, cho judge thêm token (JSON 5 tiêu chí kèm lý do dài hơn 1024 token) và thời gian chờ
+ROUTER_JUDGE = ChatOpenAI(base_url=config.ROUTER9_BASE_URL, api_key=config.ROUTER9_API_KEY or "missing-9router-key",
+                          model=config.ROUTER9_MODEL, temperature=0, max_tokens=4096, timeout=180, max_retries=1)
+CHAIN = [llm.google_llm, llm.google_llm_alt, llm.nvidia_llm, llm.groq_llm, llm.open_llm, ROUTER_JUDGE]
 
 
 def phone_for(index: int) -> str:
@@ -204,7 +208,23 @@ Tiêu chí:
 - handoff: chuyển nhân viên đúng lúc (không chuyển khi không cần, chuyển ngay khi cần); không cần chuyển và không chuyển thì 5.
 Lý do mỗi tiêu chí phải nêu lượt cụ thể (vd "lượt 3: ...") nếu trừ điểm."""
 
-RUBRICS = {'v1': sim.JUDGE_PROMPT, 'v2': RUBRIC_V2}
+# v3: sau khi đo v2 trên 64 hội thoại (bỏ sót 48%): phần lớn "trượt" là khách tự chọn không mua (ngân sách dưới
+# máy rẻ nhất, mặc cả không được) -> không phải lỗi agent; còn lỗi thật judge chưa được báo: nói đã ghi nhận đơn khi
+# chưa có đơn, hứa gọi lại không căn cứ, báo lỗi hệ thống / gọi add_to_cart lặp. Lớp 1 thêm các kiểm tra đó và
+# failure_cause; v3 dùng chúng làm mức trần.
+RUBRIC_V3 = RUBRIC_V2.replace(
+    """- success = false (khách không đạt mục tiêu hợp lý của mình do lỗi chatbot): needs ≤ 3.""",
+    """- failure_cause = "agent" (trượt hoặc có lỗi do chatbot): needs ≤ 3.
+- failure_cause = "customer_choice" (khách tự chọn không mua, mục tiêu không khả thi như ngân sách thấp hơn máy rẻ
+  nhất, mặc cả không được): KHÔNG trừ điểm vì việc không có đơn; chỉ chấm cách chatbot xử lý.
+- system_errors hoặc tool_loops không rỗng (chatbot báo lỗi hệ thống, gọi công cụ lặp vô ích): needs ≤ 3, tone ≤ 4.
+- fake_order_claims không rỗng (nói đã ghi nhận/tạo đơn khi khách chưa gửi form, không có đơn thật): needs ≤ 2,
+  recommendation ≤ 3.
+- unbacked_promises không rỗng (hứa gọi lại/liên hệ khi chưa có đơn, chưa chuyển nhân viên): needs ≤ 3.
+- Chatbot hứa điều ngoài khả năng (giao trong hôm nay, hoàn tiền, nộp yêu cầu thay khách) mà không có trong chính sách
+  đã tra: needs ≤ 3, objection ≤ 3.""")
+
+RUBRICS = {'v1': sim.JUDGE_PROMPT, 'v2': RUBRIC_V2, 'v3': RUBRIC_V3}
 
 
 def judge_with(rubric: str, run: dict, scenario: dict, facts: dict) -> dict:
@@ -252,7 +272,7 @@ def run(args) -> None:
         scenarios = scenarios[:args.limit]
     RESULTS_DIR.mkdir(exist_ok=True)
     out = Path(args.resume) if args.resume else RESULTS_DIR / f'{datetime.now():%Y%m%d-%H%M%S}-batch.jsonl'
-    done = {r['run_id'] for r in read_rows(out)} if out.exists() else set()
+    done = {r['run_id'] for r in read_rows(out) if 'run_id' in r} if out.exists() else set()
     todo = [(i, s) for i, s in enumerate(scenarios) if s['id'] not in done]
     simulator = sim.Simulator(args.sim_temperature)
     simulator.models = [m.model_copy(update={'temperature': args.sim_temperature}) for m in CHAIN]
@@ -292,11 +312,15 @@ def rejudge(args) -> None:
     path = Path(args.results)
     rows = read_rows(path)
     meta, convs = [r for r in rows if r.get('type') == 'meta'], [r for r in rows if r.get('type') != 'meta']
-    todo = [r for r in convs if args.rubric not in r.get('judges', {})]
+    todo = [r for r in convs if args.force or args.rubric not in r.get('judges', {})]
     print(f'Chấm {len(todo)} hội thoại bằng rubric {args.rubric}', flush=True)
 
     def one(r):
         return r, judge_with(args.rubric, r, r['scenario'], r['facts'])
+
+    def save():   # ghi định kỳ: bị dừng giữa chừng không mất phần đã chấm
+        path.write_text(''.join(json.dumps(r, ensure_ascii=False, default=str) + '\n' for r in meta + convs),
+                        encoding='utf-8')
 
     with ThreadPoolExecutor(args.workers) as pool:
         for n, job in enumerate(as_completed([pool.submit(one, r) for r in todo]), 1):
@@ -305,10 +329,30 @@ def rejudge(args) -> None:
                 r.setdefault('judges', {})[args.rubric] = verdict
             except Exception as e:
                 print(f'  lỗi judge: {type(e).__name__}: {str(e)[:120]}', flush=True)
-            if n % 20 == 0:
+            if n % 10 == 0:
+                save()
                 print(f'  {n}/{len(todo)}', flush=True)
-    path.write_text(''.join(json.dumps(r, ensure_ascii=False, default=str) + '\n' for r in meta + convs),
-                    encoding='utf-8')
+    save()
+
+
+def recheck(args) -> None:
+    """Tính lại lớp 1 bằng simulate.check hiện tại cho hội thoại đã lưu (sau khi sửa/thêm kiểm tra), không chạy lại
+    hội thoại. Đơn đã bị xóa nên lấy các món của đơn từ kết quả cũ."""
+    path = Path(args.results)
+    rows = read_rows(path)
+    ref = sim.reference_data()
+    original = sim.orders.get_order
+    try:
+        for r in rows:
+            if r.get('type') == 'meta':
+                continue
+            items = r['facts'].get('order_items', [])
+            sim.orders.get_order = lambda oid, items=items: {'items': items}
+            r['facts'] = sim.check(r, r['scenario'], ref)
+    finally:
+        sim.orders.get_order = original
+    path.write_text(''.join(json.dumps(r, ensure_ascii=False, default=str) + '\n' for r in rows), encoding='utf-8')
+    print(f"Đã tính lại lớp 1 cho {sum(r.get('type') != 'meta' for r in rows)} hội thoại")
 
 
 def caps(f: dict, rule: str, scenario: dict) -> dict:
@@ -328,7 +372,13 @@ def caps(f: dict, rule: str, scenario: dict) -> dict:
         cap('tone', 3), cap('needs', 3)
     if f['items_match'] is False:
         cap('needs', 2)
-    if not f['success']:
+    if f.get('failure_cause', 'agent' if not f['success'] else None) == 'agent':
+        cap('needs', 3)
+    if f.get('system_errors') or f.get('tool_loops'):
+        cap('needs', 3), cap('tone', 4)
+    if f.get('fake_order_claims'):
+        cap('needs', 2), cap('recommendation', 3)
+    if f.get('unbacked_promises'):
         cap('needs', 3)
     if rule == 'handoff' and not f['handoff']:
         cap('handoff', 2)
@@ -349,7 +399,7 @@ def calibrate(args) -> dict:
             over[k] += 1
         conv_over += bool(bad)
         avg = statistics.mean(j[k]['score'] for k in sim.CRITERIA)
-        problems = not f['success'] or any(v < 5 for v in c.values())
+        problems = any(v < 5 for v in c.values())   # lớp 1 thấy lỗi của agent (không tính khách tự chọn không mua)
         if problems:
             failed += 1
             missed += avg >= 4.5          # lớp 1 thấy lỗi mà judge vẫn gần như tuyệt đối
@@ -385,7 +435,8 @@ def export(args) -> Path:
         w = csv.writer(fh)
         head = ['run_id', 'category', 'persona', 'goal', 'success_rule', 'success', 'end', 'turns', 'order_created',
                 'order_id', 'items_match', 'handoff', 'price_mismatches', 'fake_codes', 'promo_claims_unverified',
-                'form_without_confirm', 'empty_answers', 'timeouts', 'tools', 'latency_p50_s', 'latency_max_s',
+                'form_without_confirm', 'empty_answers', 'timeouts', 'failure_cause', 'system_errors', 'tool_loops',
+                'fake_order_claims', 'unbacked_promises', 'tools', 'latency_p50_s', 'latency_max_s',
                 'duration_s']
         for rb in rubrics:
             head += [f'{rb}_{k}' for k in sim.CRITERIA] + [f'{rb}_avg', f'{rb}_over_cap', f'{rb}_reasons']
@@ -400,7 +451,10 @@ def export(args) -> Path:
                     ' '.join(x['code'] for x in f['fake_codes_mentioned']),
                     ' | '.join(x['sentence'] for x in f['promo_claims_without_get_promotions']),
                     ' '.join(str(x['turn']) for x in f['order_form_without_confirm']),
-                    ' '.join(map(str, f.get('empty_answers', []))), f.get('timeouts', 0), ' '.join(f['tools']),
+                    ' '.join(map(str, f.get('empty_answers', []))), f.get('timeouts', 0), f.get('failure_cause') or '',
+                    *(' '.join(map(str, f.get(k, []))) for k in ('system_errors', 'tool_loops', 'fake_order_claims',
+                                                                 'unbacked_promises')),
+                    ' '.join(f['tools']),
                     round(statistics.median(lat), 1) if lat else '', round(max(lat), 1) if lat else '',
                     r['duration_s']]
             for rb in rubrics:
@@ -421,14 +475,15 @@ def export(args) -> Path:
 
 def summary(args) -> None:
     rows = [r for r in read_rows(Path(args.results)) if r.get('type') != 'meta']
-    print(f"{'nhóm':<20}{'n':>4}{'đạt':>6}{'tỷ lệ':>7}{'sai giá':>9}{'mã giả':>8}{'ưu đãi?':>9}{'form sớm':>10}"
+    print(f"{'nhóm':<20}{'n':>4}{'đạt':>6}{'tỷ lệ':>7}{'lỗi agent':>11}{'sai giá':>9}{'mã giả':>8}{'ưu đãi?':>9}{'form sớm':>10}"
           f"{'rỗng':>6}{'timeout':>9}")
     groups: dict[str, list] = {}
     for r in rows:
         groups.setdefault(r.get('category') or '-', []).append(r['facts'])
     for g, fs in sorted(groups.items()) + [('TỔNG', [r['facts'] for r in rows])]:
         ok = sum(f['success'] for f in fs)
-        print(f"{g:<20}{len(fs):>4}{ok:>6}{ok / len(fs):>7.0%}{sum(bool(f['price_mismatches']) for f in fs):>9}"
+        print(f"{g:<20}{len(fs):>4}{ok:>6}{ok / len(fs):>7.0%}"
+              f"{sum(f.get('failure_cause') == 'agent' for f in fs):>11}{sum(bool(f['price_mismatches']) for f in fs):>9}"
               f"{sum(bool(f['fake_codes_mentioned']) for f in fs):>8}"
               f"{sum(bool(f['promo_claims_without_get_promotions']) for f in fs):>9}"
               f"{sum(bool(f['order_form_without_confirm']) for f in fs):>10}"
@@ -454,16 +509,17 @@ def main():
     p.add_argument('--sim-temperature', type=float, default=0.7)
     p.add_argument('--rubric', default='v1', help='Rubric chấm ngay khi chạy ("" = không chấm)')
     p.add_argument('--resume', help='File .jsonl đang chạy dở')
-    for name in ('rejudge', 'calibrate', 'export', 'summary'):
+    for name in ('rejudge', 'calibrate', 'export', 'summary', 'recheck'):
         q = sub.add_parser(name)
         q.add_argument('results')
         if name in ('rejudge', 'calibrate'):
             q.add_argument('--rubric', default='v1', choices=sorted(RUBRICS))
         if name == 'rejudge':
             q.add_argument('--workers', type=int, default=6)
+            q.add_argument('--force', action='store_true', help='Chấm lại cả hội thoại đã có điểm rubric này')
     args = ap.parse_args()
     {'brainstorm': brainstorm, 'run': run, 'rejudge': rejudge, 'calibrate': calibrate, 'export': export,
-     'summary': summary}[args.cmd](args)
+     'summary': summary, 'recheck': recheck}[args.cmd](args)
 
 
 if __name__ == '__main__':

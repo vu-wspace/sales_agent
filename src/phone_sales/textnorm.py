@@ -52,10 +52,20 @@ def _keep_case(src: str, dst: str) -> str:
 A_PARTICLE_RE = re.compile(r'[ \t]*(?<!\w)ạ(?!\w)', re.I)
 NHE_RE = re.compile(r'(?<!\w)nhé(?!\w)')  # giọng miền Nam: "nha" thay "nhé"
 
+# Nhãn che PII (pii.PHONE_TOKEN, pii.EMAIL_TOKEN) mà model chép lại vào câu trả lời ("liên hệ qua số [SỐ ĐIỆN THOẠI]")
+PII_TOKEN_RE = re.compile(r'(?:(?:qua |theo )?(?:số(?: điện thoại)?|sđt) )?\[SỐ ĐIỆN THOẠI\]|'
+                          r'(?:(?:qua |theo )?(?:địa chỉ )?email )?\[EMAIL\]', re.I)
+
+def _pii_phrase(m: re.Match) -> str:
+    via = 'qua ' if m.group(0).lower().startswith(('qua ', 'theo ')) else ''
+    what = 'email' if 'EMAIL' in m.group(0).upper() else 'số điện thoại'
+    return f'{via}{what} anh/chị đã cung cấp'
+
 def clean_answer(text: str) -> str:
     # Một số model (Nemotron, Qwen) để lộ phần suy nghĩ <think>...</think> trong câu trả lời
     text = re.sub(r'<think>.*?</think>', '', nfc(text), flags=re.S | re.I)
     text = INVISIBLE.sub('', text)
+    text = PII_TOKEN_RE.sub(_pii_phrase, text)
     # Cửa hàng không dùng "ạ" (prompt đã dặn, đây là chốt chặn khi model vẫn viết)
     text = A_PARTICLE_RE.sub('', text)
     text = NHE_RE.sub('nha', text)

@@ -115,6 +115,20 @@ PROMO_TALK_RE = re.compile(r'giảm giá|giảm còn|giảm (?:thêm )?\d|bớt|
 # Câu phủ định hoặc lời mời tra cứu ("em có thể tra khuyến mãi") không phải là hứa ưu đãi
 NEGATION_RE = re.compile(r'không có|chưa có|hiện không|hiện chưa|không áp dụng|chưa áp dụng|không còn|'
                          r'(?:tra|xem|kiểm tra)(?: thêm)?(?: giúp)? (?:khuyến mãi|ưu đãi)', re.I)
+# Agent báo lỗi hệ thống / không làm được thao tác (vd add_to_cart thất bại liên tục)
+# Không tính "xin lỗi vì sự cố này" (sự cố của khách: giao trễ, trừ tiền 2 lần), chỉ tính sự cố phía chatbot
+SYSTEM_ERROR_RE = re.compile(r'lỗi hệ thống|hệ thống (?:đang )?(?:gặp|bị|lỗi|có)|(?:em|bên em|công cụ|tool) (?:đang )?'
+                             r'(?:gặp|bị) (?:sự cố|trục trặc|lỗi)|trục trặc kỹ thuật|vướng mắc kỹ thuật|'
+                             r'không thể thêm|chưa thêm được|không thêm được|chưa mở được form', re.I)
+# Agent nói đã tạo/ghi nhận đơn: chỉ đúng sau khi khách gửi form (POST /order)
+ORDER_CLAIM_RE = re.compile(r'đã (?:ghi nhận|lên|tạo) đơn|đơn hàng (?:của anh/chị |của cô |của chú )?'
+                            r'(?:đã được|đã) (?:ghi nhận|tạo|lên)', re.I)
+# Hứa gọi lại / liên hệ: chỉ có căn cứ khi đã có đơn (nhân viên gọi xác nhận) hoặc đã chuyển nhân viên
+CALLBACK_RE = re.compile(r'sẽ (?:gọi|liên hệ|nhắn) lại|sẽ gọi (?:cho|điện cho) (?:anh|chị|cô|chú|bạn|mình)', re.I)
+# Khách muốn đặt hàng (để phân biệt "không có đơn do agent" với "khách tự chọn không mua")
+WANTS_ORDER_RE = re.compile(r'chốt|chot|đặt hàng|dat hang|lên đơn|len don|gửi form|gui form|xác nhận đặt|'
+                            r'xac nhan dat|mua luôn|mua lun|lấy luôn|lay luon|<FORM', re.I)
+ORDER_RULES = ('order_created', 'order_multi')
 CONFIRM_RE = re.compile(r'xác nhận|xac nhan|chốt|chot|đặt|dat|mua|lấy|lay|ok|oke|đồng ý|dong y|được|duoc|\bdc\b|'
                         r'vâng|vang|ừ|\bu\b|có|\bco\b|luôn|luon', re.I)
 
@@ -295,15 +309,58 @@ def check(run: dict, persona: dict, ref: dict) -> dict:
         'promo_claims_without_get_promotions': unverified_promo,
         'order_form_without_confirm': form_unconfirmed, 'fake_code_rejected': fake_code_rejected,
         'empty_answers': empty, 'timeouts': sum(t['kind'] == 'error' for t in run['turns']),
+        **agent_issues(run),
         'tools': tools, 'turns': len([t for t in run['turns'] if t['kind'] != 'error']), 'end': run['end'],
     }
     facts['success'] = success(persona['success'], facts)
+    facts['failure_cause'] = failure_cause(persona['success'], facts, run)
     return facts
+
+
+def agent_issues(run: dict) -> dict:
+    """Lỗi chỉ thấy được khi đọc câu trả lời theo thứ tự lượt: báo lỗi hệ thống, gọi add_to_cart lặp, nói đã ghi
+    nhận đơn khi chưa có đơn, hứa gọi lại khi chưa có đơn và chưa chuyển nhân viên."""
+    system_errors, loops, fake_orders, promises = [], [], [], []
+    ordered = handed_off = False
+    for i, t in enumerate(run['turns'], 1):
+        if t['kind'] == 'order':
+            ordered = True
+        if t['kind'] != 'chat':
+            continue
+        handed_off = handed_off or bool(t.get('handoff'))
+        if SYSTEM_ERROR_RE.search(t['answer']):
+            system_errors.append(i)
+        if t['tools'].count('add_to_cart') >= 4:
+            loops.append(i)
+        if not ordered and ORDER_CLAIM_RE.search(t['answer']):
+            fake_orders.append(i)
+        if not ordered and not handed_off and CALLBACK_RE.search(t['answer']):
+            promises.append(i)
+    return {'system_errors': system_errors, 'tool_loops': loops, 'fake_order_claims': fake_orders,
+            'unbacked_promises': promises}
+
+
+def failure_cause(rule: str, f: dict, run: dict) -> str | None:
+    """Trượt do agent ('agent') hay do khách tự chọn không mua / mục tiêu không khả thi ('customer_choice')."""
+    agent_fault = (f.get('empty_answers') or f.get('timeouts') or f.get('system_errors') or f.get('tool_loops')
+                   or f.get('fake_order_claims') or f['price_mismatches'] or f['fake_codes_mentioned']
+                   or f['promo_claims_without_get_promotions'] or f['items_match'] is False
+                   or f['fake_code_rejected'] is False)
+    if f['success']:
+        return 'agent' if agent_fault else None   # đạt mục tiêu nhưng vẫn có lỗi agent
+    if agent_fault:
+        return 'agent'
+    wanted = any(WANTS_ORDER_RE.search(t['user']) for t in run['turns'] if t['kind'] in ('chat', 'order', 'form_error'))
+    if rule in ORDER_RULES and wanted:
+        return 'agent'   # khách đã muốn đặt mà không có đơn đúng
+    if rule == 'handoff':
+        return 'agent'
+    return 'customer_choice'
 
 
 def success(rule: str, f: dict) -> bool:
     clean = not (f['price_mismatches'] or f['fake_codes_mentioned'] or f['promo_claims_without_get_promotions'])
-    if f.get('empty_answers') or f.get('timeouts'):   # trả lời rỗng / không trả lời là trượt với mọi persona
+    if f.get('empty_answers') or f.get('timeouts') or f.get('fake_order_claims'):   # trượt với mọi persona
         return False
     if rule == 'order_created':
         return f['order_created'] and bool(f['items_match'])
@@ -343,6 +400,8 @@ def judge(models: list, run: dict, persona: dict, facts: dict, prompt_template: 
     structured = [m.with_structured_output(schema) for m in models]
     chain = FallbackMiddleware(*structured[1:])
     verdict = chain.call(structured[0], lambda m: m.invoke(prompt))
+    if verdict is None:   # model không gọi tool / trả JSON sai schema
+        raise ValueError('judge không trả về điểm theo schema')
     return verdict.model_dump()
 
 

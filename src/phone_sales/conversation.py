@@ -1,6 +1,7 @@
 # Trạng thái hội thoại bán hàng (dùng trong graph.py) và các luật cập nhật nó.
 # Cập nhật bằng luật (từ khóa + kết quả tool), không gọi thêm LLM: không tốn quota, chạy tức thì, test được.
 import re
+import unicodedata
 from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langgraph.graph.message import add_messages
@@ -113,8 +114,15 @@ OBJECTIONS = {
 }
 NEGATIVE = r'bực|tức (quá|ghê|thật|chết)|tệ|chán|thất vọng|khó chịu|lừa đảo|vô lý|làm ăn kiểu|quá đáng|sao lâu vậy|chậm quá'
 POSITIVE = r'cảm ơn|cám ơn|thanks|tuyệt|ok|oke|okela|thích|được đó|ưng|hài lòng|chốt'
-HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư vấn viên|khiếu nại|giao sai|giao thiếu|giao chậm|'
-           r'chưa nhận được hàng|chưa giao|hủy đơn|huỷ đơn|đòi tiền|hoàn tiền ngay')
+# Khớp cả khi khách viết không dấu ("gap quan ly"), xem _has_loose
+HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư vấn viên|khiếu nại|giao sai|giao thiếu|giao chậm|giao trễ|'
+           r'chưa nhận được hàng|chưa giao|hủy đơn|huỷ đơn|đòi tiền|hoàn tiền ngay|'
+           # "quản lý" là người, không phải "quản lý pin/bộ nhớ/ứng dụng"
+           r'quản lý(?! (?:pin|bộ nhớ|ứng dụng|app|tệp|file|dữ liệu|thiết bị|mật khẩu|tài khoản|nhiệt|năng lượng))|'
+           r'người phụ trách|người chịu trách nhiệm|cấp trên|'
+           # "nhắn nhân viên gọi xác nhận" là việc của đơn hàng, không phải xin gặp người
+           r'(?:gặp|gọi|chuyển|nhắn|nói)(?: \w+){0,4} (?:nhân viên|staff|nv)(?! gọi)|staff thật|'
+           r'bị trừ (?:2 |hai )?tiền|trừ tiền (?:2|hai) lần|trừ (?:2|hai) lần|bóc phốt|sai màu|đã bị lỗi|đã hỏng|hỏng sau')
 COMPARE = r'so sánh|khác gì|khác nhau|nên chọn|nên lấy cái nào|hơn không|với .+ thì sao'
 CLOSING = r'chốt|lấy máy|lấy cái|mua luôn|đặt hàng|đặt mua|thanh toán|giao cho|ship cho|lên đơn'
 # Phản đối cần xử lý theo chiến lược (OBJECTION_GUIDE). Khác OBJECTIONS ở trên (lo ngại cụ thể để trả lời thẳng).
@@ -144,6 +152,14 @@ def _has(pattern: str, text: str) -> bool:
     # Ranh giới từ: tránh "ông" khớp trong "không", "ip" khớp trong "chip"
     return re.search(rf'(?<!\w)(?:{pattern})(?!\w)', text) is not None
 
+def _strip_accents(text: str) -> str:
+    text = unicodedata.normalize('NFD', text.replace('đ', 'd').replace('Đ', 'D'))
+    return ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+
+def _has_loose(pattern: str, text: str) -> bool:
+    # Khớp cả bản bỏ dấu: khách viết "gap quan ly", "CHUYEN NV" vẫn nhận ra
+    return _has(pattern, text) or _has(_strip_accents(pattern), _strip_accents(text))
+
 def sentiment_of(text: str) -> Sentiment:
     t = text.lower()
     if _has(NEGATIVE, t) or t.count('!') >= 2:
@@ -171,7 +187,7 @@ def track_user_message(text: str) -> dict:
         'slots': slots,
         'objections': [o for o, pat in OBJECTIONS.items() if _has(pat, t)],
         'sentiment_history': [sentiment_of(t)],
-        'wants_handoff': _has(HANDOFF, t),
+        'wants_handoff': _has_loose(HANDOFF, t),
         'wants_compare': _has(COMPARE, t),
         'wants_close': _has(CLOSING, t),
         'declined': _has(DECLINE, t),
@@ -294,6 +310,14 @@ def decide_stage(state: dict, wants_compare: bool = False, wants_close: bool = F
     if len(shown) >= 2 and (wants_compare or state.get('stage') == 'comparing'):
         return 'comparing'
     return 'recommending' if shown else 'discovery'
+
+# Chatbot báo đã/sẽ chuyển nhân viên (prompt quy tắc 12: máy lỗi cần xử lý, thủ tục đổi trả...). Lời báo phải đi kèm
+# handoff thật, không thì khách chờ mà không ai nhận (lỗi thấy ở user simulator: nói "đã chuyển" nhưng handoff=False).
+ANNOUNCES_HANDOFF = re.compile(r'(?:đã|sẽ|đang|em) (?:\w+ ){0,2}chuyển(?! khoản) (?:\S+ ){0,5}(?:nhân viên|quản lý|bộ phận)|'
+                               r'chuyển (?:khẩn|ngay|gấp) (?:\w+ ){0,3}(?:nhân viên|quản lý|bộ phận)', re.I)
+
+def announces_handoff(answer: str) -> bool:
+    return ANNOUNCES_HANDOFF.search(answer or '') is not None
 
 def needs_handoff(state: dict, wants_handoff: bool) -> bool:
     recent = (state.get('sentiment_history') or [])[-NEGATIVE_STREAK:]

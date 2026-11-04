@@ -46,6 +46,26 @@ def test_objections_and_sentiment():
 def test_handoff_on_request_or_two_negative_turns():
     assert conv.needs_handoff({}, wants_handoff=True)
     assert conv.track_user_message('cho tôi gặp nhân viên')['wants_handoff']
+
+
+@pytest.mark.parametrize('text, expected', [
+    # Từ simulator: không dấu, viết hoa, "quản lý", "người phụ trách", "staff", bị trừ tiền 2 lần
+    ('khong can ho tro, anh muon gap quan ly ngay lap tuc', True),
+    ('TOI MUON GAP NGUOI PHU TRACH NGAY', True),
+    ('chị muốn gặp quản lý để làm rõ chính sách đổi trả', True),
+    ('10tr không được à? gọi staff thật đi', True),
+    ('em mua a07s bị trừ tiền 2 lần rồi', True),
+    ('don hang bi giao tre 3 ngay roi', True),
+    ('chuyển nv giúp mình', True),
+    # Không phải xin gặp người
+    ('iphone 17 quản lý pin tốt không', False),
+    ('quan ly pin tot ko', False),
+    ('nhớ nhắn nhân viên gọi xác nhận giúp chú', False),
+    ('máy này có hay bị lỗi không', False),
+])
+def test_handoff_phrases_with_and_without_accents(text, expected):
+    from phone_sales.textnorm import normalize_user_text
+    assert conv.track_user_message(normalize_user_text(text))['wants_handoff'] is expected
     assert not conv.needs_handoff({'sentiment_history': ['neutral', 'negative']}, False)
     assert conv.needs_handoff({'sentiment_history': ['negative', 'negative']}, False)
     assert conv.needs_handoff({'handoff': True, 'sentiment_history': ['positive']}, False)  # đã bật thì giữ

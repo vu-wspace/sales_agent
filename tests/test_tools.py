@@ -42,6 +42,20 @@ def test_storage_key_orders_by_capacity():
     assert sorted(labels, key=tools._storage_key) == ['64GB', '256GB - RAM 8GB', '256GB - RAM 12GB', '1TB', '2TB']
 
 
+@pytest.mark.parametrize('storage, expected', [
+    ('', ['256GB - RAM 12GB', '256GB - RAM 8GB', '512GB - RAM 12GB', '128GB']),
+    ('256GB', ['256GB - RAM 12GB', '256GB - RAM 8GB']),            # chỉ dung lượng: mọi RAM
+    ('256GB - RAM 8GB', ['256GB - RAM 8GB']),                       # nêu cả RAM: đúng bản đó (lỗi từ simulator)
+    ('12GB/256GB', ['256GB - RAM 12GB']),                           # RAM viết trước
+    ('RAM 8GB', ['256GB - RAM 8GB']),                               # chỉ nêu RAM
+    ('256GB - RAM 16GB', ['256GB - RAM 12GB', '256GB - RAM 8GB']),  # RAM không có: quay về so dung lượng
+    ('1TB', []),
+])
+def test_filter_storage_distinguishes_ram(storage, expected):
+    variants = [{'storage': s} for s in ['256GB - RAM 12GB', '256GB - RAM 8GB', '512GB - RAM 12GB', '128GB']]
+    assert [v['storage'] for v in tools._filter_storage(variants, storage)] == expected
+
+
 @pytest.mark.parametrize('text, expected', [
     ('ốp lưng', 'case'), ('cường lực', 'screen-protector'), ('sạc dự phòng', 'power-bank'),
     ('củ sạc', 'charger'), ('cáp', 'cable'), ('case', 'case'), ('bàn phím', None),
