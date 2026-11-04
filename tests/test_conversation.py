@@ -513,3 +513,26 @@ def test_exclamation_with_praise_is_not_negative():
 ])
 def test_storage_slot_ignores_ram(text, storage):
     assert conv.track_user_message(text)['slots'].get('storage') == storage
+
+
+@pytest.mark.parametrize('text, expected', [
+    ('giao hàng 3 ngày rồi chưa nhận được, bực quá', True),     # thấy khi chạy thử API thật
+    ('đặt máy tuần trước mà vẫn chưa thấy đâu', True),
+    ('hàng chưa tới nữa shop ơi', True),
+    ('dat hang tu thu 2 ma chua nhan duoc', True),             # không dấu
+    ('iphone 18 máy chưa về hả shop', False),                  # hỏi hàng về
+    ('em muốn đặt mà chưa nhận được form', False),
+    ('đặt rồi mà chưa nhận được mã giảm giá', False),
+])
+def test_handoff_when_order_not_arrived(text, expected):
+    assert conv.track_user_message(text)['wants_handoff'] is expected
+
+
+def test_products_mentioned_without_5g_suffix():
+    messages = [HumanMessage('a57 256gb giá sao'),
+                AIMessage('', tool_calls=[{'name': 'get_product_details', 'args': {}, 'id': 'c1'}]),
+                ToolMessage('Galaxy A57 5G (Samsung)\n...', tool_call_id='c1'),
+                AIMessage('Bên em còn **Galaxy A57** 256GB nha.')]
+    assert conv.products_mentioned(messages) == ['Galaxy A57 5G']
+    messages[-1] = AIMessage('Bên em có Galaxy A57 5G nha.')
+    assert conv.products_mentioned(messages) == ['Galaxy A57 5G']

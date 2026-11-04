@@ -547,7 +547,7 @@ Schema đơn hàng ở `data_schema/orders.sql` (`CREATE TABLE IF NOT EXISTS`, c
 Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_schema/scrape_phone.py`. Lưu ý:
 
 - Tồn kho là số giả lập.
-- Một số giá Samsung là ước tính; tool ghi "(giá tham khảo)" cho các SKU này.
+- Một số giá Samsung là ước tính (web chỉ có giá vài SKU): SKU thiếu giá lấy giá bản cùng dung lượng, nên các bản khác RAM (vd Galaxy A57 256GB RAM 8GB và 12GB) cùng giá; tool ghi "(giá tham khảo)" cho các SKU này.
 - Chưa có thông số chi tiết cho dòng Galaxy S/Z.
 - Chính sách của cửa hàng (lãi suất, phí, đối tác) là giả lập; phần bảo hành của hãng là tóm tắt tham khảo.
 
@@ -601,7 +601,7 @@ sales_agent/
 uv run pytest
 ```
 
-344 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+352 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
@@ -720,6 +720,8 @@ Lỗi agent tìm được và cách sửa:
 | Tin có "!!" luôn tính là bực: "đẹp quá, chốt luôn!!" 2 lượt liền bị chuyển nhân viên | | Chỉ tính khi không kèm lời khen |
 | Slot `storage` lấy số đầu tiên: "12gb ram 256gb" thành dung lượng 12GB | | Lấy số lớn nhất, dưới 32GB thì coi là RAM |
 | "hỏi thêm cáp…" bị coi là yêu cầu mua cáp (`wanted_of`) | | "thêm" sau "hỏi/xem/tư vấn" không phải mua |
+| "giao hàng 3 ngày rồi chưa nhận được, bực quá" không chuyển nhân viên (chỉ có từ khóa "chưa nhận được hàng"; thấy khi chạy thử API) | | `HANDOFF` thêm "giao/đặt/ship/gửi/đơn … chưa nhận/thấy/tới", "hàng chưa tới"; không tính "chưa nhận được form/mã", "máy chưa về" |
+| Máy tên "Galaxy A57 5G" không được tính là đã giới thiệu khi câu trả lời viết "Galaxy A57" → bước bán hàng kẹt ở `discovery` | | `products_mentioned` bỏ qua đuôi " 5G" |
 | Lỗi API 429/502 (mọi model hết quota khi 4 luồng simulator + judge chạy cùng lúc), 2 lượt quá 400s do vòng lặp RAM | 12 | Không phải lỗi logic; vòng lặp RAM đã sửa |
 | Tự nhắc khuyến mãi khi chưa tra (6/7 là lớp 1 báo nhầm câu mời tra, câu phủ định) | 1 | Prompt quy tắc 4b; sửa `NEGATION_RE` |
 | Trả lời rỗng (phần lớn sau vòng lặp RAM) | 5 | `call_model` hỏi lại 1 lần, vẫn rỗng thì câu mặc định |

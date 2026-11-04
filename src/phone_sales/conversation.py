@@ -116,7 +116,11 @@ NEGATIVE = r'bực|tức (quá|ghê|thật|chết)|tệ|chán|thất vọng|khó
 POSITIVE = r'cảm ơn|cám ơn|thanks|tuyệt|ok|oke|okela|thích|được đó|ưng|hài lòng|chốt'
 # Khớp cả khi khách viết không dấu ("gap quan ly"), xem _has_loose
 HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư vấn viên|khiếu nại|giao sai|giao thiếu|giao chậm|giao trễ|'
-           r'chưa nhận được hàng|chưa giao|hủy đơn|huỷ đơn|đòi tiền|hoàn tiền ngay|'
+           r'chưa nhận được hàng|chưa giao|hủy đơn|'
+           # "giao hàng 3 ngày rồi chưa nhận được", "đặt máy tuần trước mà hàng chưa tới"
+           # ("máy chưa về", "chưa nhận được form/mã" là hỏi hàng, hỏi form: không chuyển)
+           r'(?:giao|đặt|ship|gửi|đơn)(?: \S+){0,6} (?:mà )?(?:vẫn )?chưa (?:nhận|thấy|tới|đến)'
+           r'(?! (?:được )?(?:form|mã|email|mail|báo giá))|hàng (?:vẫn )?chưa (?:tới|đến)|huỷ đơn|đòi tiền|hoàn tiền ngay|'
            # "quản lý" là người, không phải "quản lý pin/bộ nhớ/ứng dụng"
            r'quản lý(?! (?:pin|bộ nhớ|ứng dụng|app|tệp|file|dữ liệu|thiết bị|mật khẩu|tài khoản|nhiệt|năng lượng))|'
            r'người phụ trách|người chịu trách nhiệm|cấp trên|'
@@ -301,7 +305,9 @@ def products_mentioned(messages: list[AnyMessage]) -> list[str]:
     found = []
     # "Galaxy S26" không được tính khi câu trả lời chỉ nói "Galaxy S26 Ultra"/"S26+"; "iPhone 17" không tính trong "iPhone 17e"
     for name in sorted(_candidate_products(messages), key=len, reverse=True):
-        pat = re.escape(name.lower()) + r'(?![\w+])(?! (ultra|pro|plus|fe|max|edge|air)\b)'
+        # Tên trong database "Galaxy A57 5G", câu trả lời hay chỉ viết "Galaxy A57"
+        base = re.escape(re.sub(r' 5g$', '', name.lower())) + r'(?: 5g)?'
+        pat = base + r'(?![\w+])(?! (ultra|pro|plus|fe|max|edge|air)\b)'
         if re.search(pat, text):
             found.append(name)
     return found

@@ -4,11 +4,13 @@
 # Phạm vi (scope / scope_value): 'all' cả đơn; 'brand' theo hãng ('Apple', 'Samsung'); 'product' theo product_id;
 # 'category' theo loại ('phone', 'accessory'). Giảm trên phần giỏ thuộc phạm vi; min_order so với tạm tính cả đơn.
 # Khuyến mãi không có code là tự động: khách không nhập mã thì áp mã tự động giảm nhiều nhất.
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 DISCOUNT_TYPES = ('percent', 'fixed')
 SCOPE_LABELS = {'brand': 'sản phẩm {}', 'product': 'sản phẩm {}', 'category': '{}'}
 CATEGORY_LABELS = {'phone': 'điện thoại', 'accessory': 'phụ kiện'}
+# Ngày hết hạn in theo giờ Việt Nam (không có giờ mùa hè), không theo giờ máy chủ (container chạy UTC)
+VN_TZ = timezone(timedelta(hours=7))
 
 
 class PromoError(Exception):
@@ -77,7 +79,7 @@ def describe(promo: dict) -> str:
     parts = [f"{promo['description']}: {amount} cho {target}"]
     if promo.get('min_order'):
         parts.append(f"đơn từ {_price(promo['min_order'])}")
-    parts.append(f"đến hết {promo['ends_at'].astimezone().strftime('%d/%m/%Y')}")
+    parts.append(f"đến hết {promo['ends_at'].astimezone(VN_TZ).strftime('%d/%m/%Y')}")
     code = f"mã {promo['code']}" if promo.get('code') else 'tự động áp dụng, không cần mã'
     return f"{', '.join(parts)} ({code})"
 

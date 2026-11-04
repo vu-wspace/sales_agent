@@ -110,3 +110,9 @@ def test_summary_and_view_show_discount():
     assert (card['subtotal'], card['discount'], card['promo'], card['total']) == (31_000_000, 500_000, 'GIAM500K', 30_500_000)
     old = {**order, 'subtotal': None, 'discount_amount': 0}           # đơn trước khi có khuyến mãi
     assert 'Tạm tính' not in orders.summary(old) and orders.view(old)['promo'] is None
+
+
+def test_describe_prints_end_date_in_vietnam_time():
+    # Hết hạn 00:00 ngày 01/12 giờ VN = 17:00 ngày 30/11 UTC: phải in 01/12 dù máy chủ chạy UTC
+    ends = datetime(2026, 11, 30, 17, 0, tzinfo=timezone.utc)
+    assert 'đến hết 01/12/2026' in promotions.describe(promo(ends_at=ends))
