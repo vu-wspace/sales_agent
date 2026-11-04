@@ -93,7 +93,7 @@ def clean(s: str | None) -> str:
     s = re.sub(r"<sup.*?</sup>", "", s, flags=re.S)
     s = re.sub(r"<br\s*/?>", " ", s)
     s = re.sub(r"<[^>]+>", " ", s)
-    s = html.unescape(s).replace("\xa0", " ").replace("​", "")
+    s = html.unescape(s).replace("\xa0", " ").replace("\u200b", "")
     return re.sub(r"\s+", " ", s).strip()
 
 

@@ -114,7 +114,8 @@ CODE_RE = re.compile(r'\bmã(?: khuyến mãi| giảm giá| ưu đãi)?\s*:?\s*\
 PROMO_TALK_RE = re.compile(r'giảm giá|giảm còn|giảm (?:thêm )?\d|bớt|khuyến mãi|ưu đãi|quà tặng|tặng kèm|voucher', re.I)
 # Câu phủ định hoặc lời mời tra cứu ("em có thể tra khuyến mãi") không phải là hứa ưu đãi
 NEGATION_RE = re.compile(r'không có|chưa có|hiện không|hiện chưa|không áp dụng|chưa áp dụng|không còn|'
-                         r'(?:tra|xem|kiểm tra)(?: thêm)?(?: giúp)? (?:khuyến mãi|ưu đãi)', re.I)
+                         r'(?:tra|xem|kiểm tra)(?: thêm)?(?: giúp)? (?:\S+ ){0,3}(?:khuyến mãi|ưu đãi)|'
+                         r'không (?:\S+ ){0,4}(?:bớt|giảm|tặng|khớp giá)|\(nếu có\)', re.I)
 # Agent báo lỗi hệ thống / không làm được thao tác (vd add_to_cart thất bại liên tục)
 # Không tính "xin lỗi vì sự cố này" (sự cố của khách: giao trễ, trừ tiền 2 lần), chỉ tính sự cố phía chatbot
 SYSTEM_ERROR_RE = re.compile(r'lỗi hệ thống|hệ thống (?:đang )?(?:gặp|bị|lỗi|có)|(?:em|bên em|công cụ|tool) (?:đang )?'
@@ -130,7 +131,7 @@ WANTS_ORDER_RE = re.compile(r'chốt|chot|đặt hàng|dat hang|lên đơn|len d
                             r'xac nhan dat|mua luôn|mua lun|lấy luôn|lay luon|<FORM', re.I)
 ORDER_RULES = ('order_created', 'order_multi')
 CONFIRM_RE = re.compile(r'xác nhận|xac nhan|chốt|chot|đặt|dat|mua|lấy|lay|ok|oke|đồng ý|dong y|được|duoc|\bdc\b|'
-                        r'vâng|vang|ừ|\bu\b|có|\bco\b|luôn|luon', re.I)
+                        r'vâng|vang|ừ|\bu\b|có|\bco\b|luôn|luon|form|lên đơn|len don', re.I)
 
 
 def reference_data() -> dict:
@@ -145,6 +146,8 @@ def reference_data() -> dict:
             allowed.update((abs(a - b), a + b))
     for p in promos:
         allowed.update(v for v in (p['value'], p['max_discount'], p['min_order']) if v)
+    for f in (config.ROOT / 'data_schema' / 'policies').glob('*.md'):   # phí giao, ví dụ trả góp trong chính sách
+        allowed.update(money(f.read_text(encoding='utf-8')))
     return {'allowed': allowed, 'prices': set(prices), 'codes': {p['code'].upper() for p in promos if p['code']}}
 
 
@@ -162,7 +165,7 @@ def customer_amounts(text: str) -> set[int]:
         value = float(num.replace(',', '.'))
         out.add(round(value * (1000 if unit.lower() in ('k', 'nghìn', 'nghin', 'ngàn', 'ngan') else 1_000_000)))
     # "6-9 cu": số đứng trước dấu gạch dùng chung đơn vị với số sau
-    for lo, hi, unit in re.findall(r'(\d+)\s*-\s*(\d+)\s*(triệu|trieu|tr|củ|cu)\b', text, re.I):
+    for lo, _hi, _unit in re.findall(r'(\d+)\s*-\s*(\d+)\s*(triệu|trieu|tr|củ|cu)\b', text, re.I):
         out.add(int(lo) * 1_000_000)
     return out
 
@@ -378,9 +381,6 @@ def success(rule: str, f: dict) -> bool:
     raise ValueError(f'Không rõ tiêu chí thành công: {rule}')
 
 
-SUCCESS_RULES = ('order_created', 'order_multi', 'handoff', 'no_fake_discount', 'order_or_compare', 'info_only')
-
-
 # ---------------------------------------------------------------- lớp 2: LLM-as-judge
 
 def render_transcript(run: dict) -> str:
@@ -485,10 +485,12 @@ def report(results: list[dict], meta: dict) -> None:
             ([f"form khi chưa chốt (lượt {f['order_form_without_confirm'][0]['turn']})"]
              if f['order_form_without_confirm'] else []) + \
             (['đơn không khớp giỏ'] if f['items_match'] is False else []) + \
-            (['mã giả được nhận'] if f['fake_code_rejected'] is False else []) +             ([f"trả lời rỗng ở lượt {f['empty_answers']}"] if f.get('empty_answers') else []) +             ([f"lỗi/hết thời gian chờ API ({f['end']})"] if f.get('timeouts') else [])
+            (['mã giả được nhận'] if f['fake_code_rejected'] is False else []) + \
+            ([f"trả lời rỗng ở lượt {f['empty_answers']}"] if f.get('empty_answers') else []) + \
+            ([f"lỗi/hết thời gian chờ API ({f['end']})"] if f.get('timeouts') else [])
         if not f['success'] or problems:
             print(f"\n[{r['run_id']}] {'ĐẠT' if f['success'] else 'TRƯỢT'} ({r['success_rule']}), kết thúc: {f['end']}, "
-                  f"{f['turns']} lượt" + (f"\n  - " + '\n  - '.join(problems) if problems else ''))
+                  f"{f['turns']} lượt" + ("\n  - " + '\n  - '.join(problems) if problems else ''))
 
 
 def write_outputs(results: list[dict], meta: dict) -> Path:
@@ -517,7 +519,8 @@ def write_outputs(results: list[dict], meta: dict) -> Path:
 
 def agreement(path: str) -> None:
     """So điểm judge với điểm người chấm (cột human). Lệch nhiều thì cần viết lại rubric."""
-    rows = [r for r in csv.DictReader(open(path, encoding='utf-8-sig')) if r['human'].strip()]
+    with open(path, encoding='utf-8-sig') as fh:
+        rows = [r for r in csv.DictReader(fh) if r['human'].strip()]
     if not rows:
         sys.exit('Chưa có điểm nào ở cột human.')
     print(f"{'tiêu chí':<16}{'n':>4}{'trùng':>8}{'lệch ≤1':>9}{'MAE':>6}")

@@ -79,6 +79,7 @@ docker compose run --rm db-seed                           # nạp lại dữ li�
 docker compose exec api python -m phone_sales.vector_db   # nạp lại chính sách
 docker compose down                                       # dừng, giữ dữ liệu
 docker compose down -v                                    # dừng và xóa dữ liệu
+docker builder prune                                      # xóa build cache cũ (mỗi lần build lại tích thêm vài GB)
 ```
 
 | Container | Cổng | Vai trò |
@@ -262,7 +263,7 @@ flowchart LR
 1. `track_user` đọc tin nhắn của khách: nhu cầu, lo ngại, cảm xúc, có cần chuyển nhân viên không. Từ khóa chuyển nhân viên (`HANDOFF`) khớp cả bản bỏ dấu (`_has_loose`: "gap quan ly", "CHUYEN NV"): gặp nhân viên/quản lý/người phụ trách, gọi staff, khiếu nại, giao sai/trễ/thiếu, bị trừ tiền 2 lần, sai màu, máy đã hỏng; không tính "quản lý pin/bộ nhớ", "nhắn nhân viên gọi xác nhận".
 2. `model` gọi LLM với system prompt, tóm tắt trạng thái hội thoại và lịch sử đã cắt gọn (4 lượt gần nhất).
 3. `tools` chạy tool; `track_tools` cập nhật nhu cầu từ tham số tool và tính lại bước bán hàng. Model được gọi nhiều tool song song trong 1 bước (9Router và OpenRouter bật `parallel_tool_calls=True`, model dự phòng khác mặc định cũng song song), vd tra giá 2 máy khi so sánh, thêm máy và củ sạc cùng lúc; các khóa state mà tool ghi (`cart`, `order_form`, `offered_alternatives`) đều có reducer nên nhận được nhiều cập nhật cùng bước.
-4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời. Câu trả lời báo đã/sẽ chuyển nhân viên, quản lý (`announces_handoff`, vd prompt quy tắc 12 với máy lỗi cần đổi trả) thì bật `handoff` thật, để lời báo không thành lời hứa suông khi từ khóa của khách không khớp.
+4. `track_reply` ghi lại các sản phẩm thật sự được giới thiệu trong câu trả lời. Câu trả lời báo đã/sẽ chuyển nhân viên, quản lý (`announces_handoff`, vd prompt quy tắc 12 với máy lỗi cần đổi trả) thì bật `handoff` thật, để lời báo không thành lời hứa suông khi từ khóa của khách không khớp. Không tính câu hỏi, lời mời, điều kiện, phủ định ("anh/chị có muốn em chuyển cho nhân viên không?", "nếu cần em sẽ chuyển…", "em chưa chuyển…") và việc bình thường của đơn ("chuyển đơn cho nhân viên xác nhận", "bộ phận kho"). Chạy trên câu trả lời của 2 lần simulator: 9 câu trước đây bị tính nhầm giờ không còn, thêm 2 câu "ghi nhận … và chuyển cho nhân viên" trước đây bị bỏ sót.
 
 `agent.py` dựng bằng `create_agent`, dùng chung tool tra cứu và prompt nhưng không có trạng thái hội thoại và giỏ hàng; model chính vẫn là OpenRouter (`llm.open_llm`), không qua 9Router.
 
@@ -409,7 +410,7 @@ Khách chê đắt, so giá với nơi khác hoặc do dự được nhận di�
 
 - **Khoảng giá theo phần trăm**, không theo số tiền cố định: "rẻ hơn 5-10 triệu" hợp với máy 30 triệu nhưng với máy 7 triệu thì tụt phân khúc hoặc không có máy nào. Khách đã nói ngân sách thì lấy ngân sách làm trần.
 - `find_cheaper_alternatives`: chỉ máy còn hàng, mỗi máy 1 phiên bản (dung lượng lớn nhất trong khoảng giá), cùng hãng trước rồi giá gần máy gốc nhất; kèm dung lượng thấp hơn của chính máy đó nếu có. Không có máy nào thì báo để agent nói thật, không gợi ý máy quá rẻ. Máy đã gợi ý lưu ở `offered_alternatives`, lần sau không lặp lại.
-- `objection_step` tăng sau mỗi lượt xử lý; khách đổi loại phản đối (đang do dự thì chê đắt) thì chiến lược mới làm lại từ bước đầu. Khách bực liên tiếp 2 lượt thì chuyển nhân viên như cũ.
+- `objection_step` tăng sau mỗi lượt xử lý; khách đổi loại phản đối (đang do dự thì chê đắt) thì chiến lược mới làm lại từ bước đầu. Khách bực liên tiếp 2 lượt thì chuyển nhân viên như cũ (tin có "!!" chỉ tính là bực khi không kèm lời khen: "đẹp quá, chốt luôn!!" là vui).
 - Lượt khách phản đối thì tạm dừng bán kèm (không ghi là đã mời), lượt sau mời tiếp.
 - **Khuyến mãi:** chỉ lấy từ bảng `promotions` qua `get_promotions` (xem [Khuyến mãi](#khuyến-mãi)); không có khuyến mãi nào áp dụng thì agent không nhắc khuyến mãi, giảm giá, quà tặng. Trả góp 0% chỉ nhắc khi đã tra `search_policy`. Chưa có phần "lưu lại để báo khi có ưu đãi" (chưa có hệ thống gửi thông báo, số điện thoại gõ trong chat bị che).
 
@@ -600,7 +601,7 @@ sales_agent/
 uv run pytest
 ```
 
-308 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
+344 test, không gọi LLM, mạng, database hay máy chủ email thật (dùng model, dữ liệu giả; email chỉ dựng, không gửi). Khi thêm thư viện bằng `uv add`, cập nhật `requirements.txt` cho khớp (`tests/test_requirements.py` kiểm tra).
 
 ### Eval
 
@@ -700,7 +701,7 @@ uv run python evals/simulate_batch.py export    evals/results/<ts>-batch.jsonl  
 - **CSV** (`utf-8-sig`, mở được bằng Excel): 1 dòng / hội thoại: kết quả lớp 1, điểm và lý do của từng rubric, cột `<rubric>_over_cap`, cột `human_*` để trống cho người chấm, hội thoại (cắt ở 30.000 ký tự).
 - Chuỗi model của khách giả lập, judge và brainstorm: Gemini 3.1 → Gemini 3.5 → NVIDIA → Groq → OpenRouter → 9Router (riêng judge: `max_tokens=4096`, timeout 180 giây). Khi các model miễn phí hết quota ngày, gần như mọi lượt dồn về 9Router: chậm (1–3 phút/lượt), có lượt timeout hoặc 503; chạy lại `rejudge` để chấm phần còn thiếu.
 
-**Kết quả lần chạy 250 kịch bản** (`evals/results/20261103-153030-batch.csv`): đạt 159/250 (64%), 67 hội thoại trượt do agent. Tốt: `policy_question` 100%, `out_of_scope` 93%, `price_haggle` 92%. Yếu: `complaint_handoff` 15%, `multi_item` 20%, `accessory_only` 25%, `change_mind` 40%. Độ trễ mỗi lượt p50 25s, p95 86s.
+**Kết quả lần chạy 250 kịch bản** (`evals/results/20261103-153030-batch.csv`): đạt 161/250 (64%), 59 hội thoại trượt do agent (sau `recheck` với lớp 1 đã sửa). Tốt: `policy_question` 100%, `out_of_scope` 100%, `price_haggle` 92%. Yếu: `complaint_handoff` 15%, `multi_item` 20%, `accessory_only` 25%, `change_mind` 40%. Độ trễ mỗi lượt p50 25s, p95 86s.
 
 Lỗi agent tìm được và cách sửa:
 
@@ -711,19 +712,45 @@ Lỗi agent tìm được và cách sửa:
 | Nói "đã chuyển nhân viên" nhưng `handoff` không bật | | `announces_handoff` trong `track_reply` |
 | Chép nhãn `[SỐ ĐIỆN THOẠI]` vào câu trả lời | | `clean_answer` |
 | Bịa hotline, hứa "quản lý ra gặp ngay", giờ giao | | Prompt quy tắc 12 (chỉ prompt) |
-| Không trả lời kịp (request tới API quá thời gian chờ của simulator) | 12 | Chưa sửa |
-| Nói khuyến mãi trước khi gọi `get_promotions` | 7 | Chưa sửa |
-| Trả lời rỗng | 5 | Chưa sửa |
+| Khuyên khách "liên hệ hotline" (chính prompt quy tắc 10, `POLICY_GUIDE` và câu lỗi của tool dặn model nói vậy) | 3 | Đổi thành hỏi khách có cần nhân viên hỗ trợ thêm không |
+| `orders.thank_you`: `open_llm` bị gọi 2 lần (model chính và đầu chuỗi dự phòng), câu cảm ơn không qua `clean_answer` | | Bỏ khỏi chuỗi dự phòng, dọn bằng `clean_answer` |
+| `AGENT_IMPL=agent`: `/order/cancel` ghi lịch sử với `as_node='track_reply'` (node chỉ có trong `graph.py`) → lỗi 500 | | `AS_NODE` theo `AGENT_IMPL` |
+| Bản viết lại sau kiểm tra số liệu rỗng → gửi chuỗi rỗng | | Trả `EMPTY_FALLBACK` |
+| `announces_handoff` tính cả câu hỏi, lời mời, điều kiện ("có muốn em chuyển cho nhân viên không?", "nếu cần em sẽ chuyển") là đã chuyển | 9 câu | Bỏ câu hỏi, điều kiện, phủ định, chuyển đơn cho bộ phận xác nhận/giao/kho |
+| Tin có "!!" luôn tính là bực: "đẹp quá, chốt luôn!!" 2 lượt liền bị chuyển nhân viên | | Chỉ tính khi không kèm lời khen |
+| Slot `storage` lấy số đầu tiên: "12gb ram 256gb" thành dung lượng 12GB | | Lấy số lớn nhất, dưới 32GB thì coi là RAM |
+| "hỏi thêm cáp…" bị coi là yêu cầu mua cáp (`wanted_of`) | | "thêm" sau "hỏi/xem/tư vấn" không phải mua |
+| Lỗi API 429/502 (mọi model hết quota khi 4 luồng simulator + judge chạy cùng lúc), 2 lượt quá 400s do vòng lặp RAM | 12 | Không phải lỗi logic; vòng lặp RAM đã sửa |
+| Tự nhắc khuyến mãi khi chưa tra (6/7 là lớp 1 báo nhầm câu mời tra, câu phủ định) | 1 | Prompt quy tắc 4b; sửa `NEGATION_RE` |
+| Trả lời rỗng (phần lớn sau vòng lặp RAM) | 5 | `call_model` hỏi lại 1 lần, vẫn rỗng thì câu mặc định |
+| Mở form sớm (khách đã nói "gửi form", "lên đơn": lớp 1 báo nhầm) | 5 | Sửa `CONFIRM_RE` |
+| Sai giá (30.000đ là phí giao nhanh trong chính sách: lớp 1 báo nhầm) | 2 | `reference_data` lấy thêm số tiền trong `data_schema/policies/` |
+| Khách báo đồ đã mua bị lỗi không được chuyển nhân viên | 3 | `HANDOFF` thêm "đã/mới/vừa mua … bị lỗi/hỏng/sạc không vào" |
+| Lời cảm ơn sau đặt hàng đổi dấu tên khách ("Tran Thi Bich" → "Trần Thị Bích") | 1 | `keep_name` trả lại đúng tên khách điền |
+| `agent.py`: `open_llm` vừa là model chính vừa đứng đầu chuỗi dự phòng | | Bỏ khỏi chuỗi dự phòng |
 
-Chạy lại 29 kịch bản lỗi sau 2 sửa đầu (`evals/results/20261104-152937-batch.jsonl`): đạt 3 → 25, chuyển nhân viên 3 → 17/20, gọi `add_to_cart` lặp 6 → 0, nói đã có đơn khi chưa có 3 → 0, điểm judge v3 trung bình 3.75 → 4.36. Các sửa còn lại chưa chạy lại simulator.
+Chạy lại 29 kịch bản lỗi sau 2 sửa đầu (`evals/results/20261104-152937-batch.jsonl`): đạt 3 → 25, chuyển nhân viên 3 → 17/20, gọi `add_to_cart` lặp 6 → 0, nói đã có đơn khi chưa có 3 → 0, điểm judge v3 trung bình 3.75 → 4.36.
+
+Chạy lại 38 kịch bản sau mọi sửa (`evals/results/20261104-190507-batch.jsonl`: 20 `complaint_handoff`, 7 `change_mind` và các kịch bản từng lỗi), so với chính các kịch bản đó trong lần chạy 250:
+
+| Chỉ số | Trước | Sau |
+|---|---|---|
+| Đạt | 3/38 | 36/38 |
+| Chuyển nhân viên (`complaint_handoff`) | 3/20 | 20/20 |
+| Nói "đã/sẽ chuyển" nhưng `handoff` không bật | 17 | 0 |
+| Trả lời rỗng / timeout | 5 / 12 | 0 / 0 |
+| Hứa khi chưa có cơ sở / mở form sớm | 1 / 1 | 0 / 0 |
+| Điểm judge v3 trung bình | 3,77 | 4,66 |
+
+2 kịch bản trượt đều do khách bỏ đi vì chê giá (`accessory_only-11`, `change_mind-13`). Model vẫn có lúc khuyên "liên hệ hotline" (không bịa số): đã sửa ở prompt và câu lỗi của tool, chưa chạy lại để đo. Chưa chạy lại cả 250 kịch bản; lần chạy này Gemini quá tải (503/504) nên một phần lượt của khách giả lập và judge dùng model dự phòng.
 
 ## Hạn chế
 
 - State hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker.
 - Khách quen nhận ra theo trình duyệt (`localStorage`), không có đăng nhập: máy dùng chung thì người sau thấy tên và món đơn gần nhất của người trước; xóa dữ liệu trang hoặc đổi trình duyệt thì thành khách mới. Đóng tab không gọi `/session` nên lịch sử cuộc cũ vẫn nằm trong RAM tới khi restart.
 - Form đặt hàng chỉ hỗ trợ giao tận nơi và thanh toán khi nhận hàng; chưa có trang quản lý đơn, đơn chỉ nằm trong database.
-- Luật nhận diện từ khóa không hiểu mọi cách nói (mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`; viết không dấu mới chỉ xử lý cho chuyển nhân viên), kể cả câu từ chối phụ kiện bán kèm. Khách báo máy vừa mua bị lỗi ("màn hình bị lỗi cảm ứng") không tự chuyển nhân viên vì "bị lỗi" trùng câu hỏi "máy có hay bị lỗi không"; chỉ chuyển khi model báo chuyển (`announces_handoff`).
-- Shop không có dữ liệu hotline, địa chỉ chi nhánh: chống bịa chỉ bằng prompt, model vẫn có thể bịa.
+- Luật nhận diện từ khóa không hiểu mọi cách nói (mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`; viết không dấu mới chỉ xử lý cho chuyển nhân viên), kể cả câu từ chối phụ kiện bán kèm. Khách báo đồ đã mua bị lỗi chỉ được nhận ra khi có dấu hiệu đã mua ("mới mua", "mua tuần trước"); cách nói khác chỉ chuyển khi model báo chuyển (`announces_handoff`).
+- Shop không có dữ liệu hotline, địa chỉ chi nhánh: chống bịa chỉ bằng prompt, model vẫn có thể bịa hoặc khuyên khách "gọi hotline".
 - Kiểm tra bịa số liệu chỉ xét số kèm đơn vị và chỉ trong `graph.py`: không bắt được câu bịa không có số ("máy chống nước tốt", sai tên màu), số trùng ngẫu nhiên với một số có trong nguồn, hay câu trả lời của `agent.py`.
 - API chưa có xác thực và giới hạn request.
 - Email xác nhận gửi bằng `BackgroundTasks` trong tiến trình API: server khởi động lại đúng lúc đang gửi thì mất email, đơn kẹt ở `email_status = 'pending'`, không tự gửi lại. Làm thật nên dùng outbox (ghi yêu cầu gửi trong cùng transaction tạo đơn, worker riêng gửi và thử lại) hoặc hàng đợi (Celery, ARQ).

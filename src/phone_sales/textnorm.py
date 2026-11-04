@@ -4,7 +4,7 @@ import re
 import unicodedata
 
 # Ký tự vô hình hay dính khi copy/paste (zero-width, BOM, soft hyphen)
-INVISIBLE = re.compile('[​-‏⁠﻿­]')
+INVISIBLE = re.compile('[\u200b-\u200f\u2060\ufeff\u00ad]')
 
 # Bỏ dấu kiểu cũ -> kiểu mới ở cuối từ: "hoà" -> "hòa", "huỷ" -> "hủy", "khoẻ" -> "khỏe".
 # Luật từ khóa viết theo kiểu mới; "hoàng", "toàn" (còn chữ phía sau) giữ nguyên.
@@ -36,6 +36,17 @@ REPEAT_RE = re.compile(r'([^\W\d_])\1{2,}')  # "đẹppppp" -> "đẹp", "quáá
 def nfc(text: str) -> str:
     # Bàn phím iOS/macOS, một số bộ gõ gửi dấu rời (NFD): "ố" = "o" + 2 dấu -> regex có dấu không khớp
     return unicodedata.normalize('NFC', text)
+
+def strip_accents(text: str) -> str:
+    text = unicodedata.normalize('NFD', text.replace('đ', 'd').replace('Đ', 'D'))
+    return ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+
+def keep_name(text: str, name: str) -> str:
+    """Trả lại đúng tên khách điền khi LLM tự thêm/bỏ dấu ("Tran Thi Bich" -> "Trần Thị Bích")."""
+    text, name = nfc(text), nfc(name).strip()
+    plain = ''.join(strip_accents(c) or c for c in text).lower()  # mỗi ký tự NFC -> 1 ký tự, giữ đúng vị trí
+    m = re.search(rf'(?<!\w){re.escape(strip_accents(name).lower())}(?!\w)', plain) if name else None
+    return text[:m.start()] + name + text[m.end():] if m else text
 
 def normalize_user_text(text: str) -> str:
     text = INVISIBLE.sub('', nfc(text))

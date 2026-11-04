@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from phone_sales import llm, pii, promotions
 from phone_sales.config import DATABASE_URL, ROOT
 from phone_sales.fallback import FallbackMiddleware
+from phone_sales.textnorm import clean_answer, keep_name
 
 log = logging.getLogger(__name__)
 SCHEMA = ROOT / 'data_schema' / 'orders.sql'
@@ -246,7 +247,7 @@ def view(order: dict) -> dict:
         'note': CALLBACK_NOTE,
     }
 
-_chain = FallbackMiddleware(*llm.FALLBACK_LLMS)
+_chain = FallbackMiddleware(*(m for m in llm.FALLBACK_LLMS if m is not llm.open_llm))
 
 def thank_you(name: str) -> str:
     # Chỉ đưa tên khách cho LLM: thông tin đơn đã có trong phần tóm tắt, không để LLM viết lại số liệu
@@ -256,4 +257,4 @@ def thank_you(name: str) -> str:
     except Exception as e:
         log.warning('Không tạo được lời cảm ơn bằng LLM (%s), dùng câu mặc định', type(e).__name__)
         return THANKS_FALLBACK
-    return text or THANKS_FALLBACK
+    return keep_name(clean_answer(text), name) if text else THANKS_FALLBACK

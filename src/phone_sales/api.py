@@ -49,6 +49,8 @@ TOOL_STATUS = {
     'get_promotions': 'Đang xem khuyến mãi…',
 }
 THINKING_STATUS = 'Em đang cân nhắc…'
+# Ghi lịch sử như lượt trả lời của agent; agent.py (create_agent) không có node track_reply
+AS_NODE = 'track_reply' if AGENT_IMPL == 'graph' else None
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
@@ -319,7 +321,7 @@ def order(req: OrderRequest, request: Request, background: BackgroundTasks):
     agent.update_state(config, {'messages': [HumanMessage('Đã gửi thông tin đặt hàng'), AIMessage(answer)],
                                 'cart': [], 'order_form': False, 'orders': [order_id], 'cross_sell': None,
                                 'wanted': None},
-                       as_node='track_reply')
+                       as_node=AS_NODE)
     return OrderResponse(thread_id=req.thread_id, order_id=order_id, answer=answer, order=orders.view(saved),
                          thanks=thanks,
                          customer_token=pii.customer_token(saved['customer_id']) if saved.get('customer_id') else None)
@@ -367,7 +369,7 @@ def new_session(req: SessionRequest, request: Request):
     values = {'messages': [AIMessage(greeting)]}
     if AGENT_IMPL == 'graph':
         values['customer'] = profile
-    agent.update_state({'configurable': {'thread_id': thread_id}}, values, as_node='track_reply' if AGENT_IMPL == 'graph' else None)
+    agent.update_state({'configurable': {'thread_id': thread_id}}, values, as_node=AS_NODE)
     return SessionResponse(thread_id=thread_id, greeting=greeting, returning=True,
                            customer_token=pii.customer_token(customer_id))
 
@@ -379,5 +381,5 @@ def cancel_order(req: CancelRequest, request: Request):
     config = {'configurable': {'thread_id': req.thread_id}}
     agent.update_state(config, {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(orders.CANCEL_MESSAGE)],
                                 'cart': [], 'order_form': False, 'cross_sell': None, 'wanted': None},
-                       as_node='track_reply')
+                       as_node=AS_NODE)
     return CancelResponse(thread_id=req.thread_id, answer=orders.CANCEL_MESSAGE)

@@ -1,10 +1,10 @@
 # Trạng thái hội thoại bán hàng (dùng trong graph.py) và các luật cập nhật nó.
 # Cập nhật bằng luật (từ khóa + kết quả tool), không gọi thêm LLM: không tốn quota, chạy tức thì, test được.
 import re
-import unicodedata
 from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langgraph.graph.message import add_messages
+from phone_sales.textnorm import strip_accents
 
 Stage = Literal['discovery', 'recommending', 'comparing', 'closing', 'handoff']
 Sentiment = Literal['positive', 'neutral', 'negative']
@@ -122,7 +122,11 @@ HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư 
            r'người phụ trách|người chịu trách nhiệm|cấp trên|'
            # "nhắn nhân viên gọi xác nhận" là việc của đơn hàng, không phải xin gặp người
            r'(?:gặp|gọi|chuyển|nhắn|nói)(?: \w+){0,4} (?:nhân viên|staff|nv)(?! gọi)|staff thật|'
-           r'bị trừ (?:2 |hai )?tiền|trừ tiền (?:2|hai) lần|trừ (?:2|hai) lần|bóc phốt|sai màu|đã bị lỗi|đã hỏng|hỏng sau')
+           r'bị trừ (?:2 |hai )?tiền|trừ tiền (?:2|hai) lần|trừ (?:2|hai) lần|bóc phốt|sai màu|đã bị lỗi|đã hỏng|hỏng sau|'
+           # Máy/phụ kiện đã mua bị lỗi: cần dấu hiệu đã mua, để "máy này có hay bị lỗi không" không chuyển nhầm
+           r'(?:(?:đã|mới|vừa) (?:mua|nhận)|mua (?:\S+ ){0,8}(?:hôm|tuần|tháng) (?:trước|qua))'
+           # ranh giới từ: bản bỏ dấu "hong" không được khớp trong "khong"
+           r'(?=.{0,120}?(?<!\w)(?:bị lỗi|hỏng|không lên nguồn|không vào điện|sạc không vào|không sạc được|bị đơ|treo máy)(?!\w))')
 COMPARE = r'so sánh|khác gì|khác nhau|nên chọn|nên lấy cái nào|hơn không|với .+ thì sao'
 CLOSING = r'chốt|lấy máy|lấy cái|mua luôn|đặt hàng|đặt mua|thanh toán|giao cho|ship cho|lên đơn'
 # Phản đối cần xử lý theo chiến lược (OBJECTION_GUIDE). Khác OBJECTIONS ở trên (lo ngại cụ thể để trả lời thẳng).
@@ -152,20 +156,20 @@ def _has(pattern: str, text: str) -> bool:
     # Ranh giới từ: tránh "ông" khớp trong "không", "ip" khớp trong "chip"
     return re.search(rf'(?<!\w)(?:{pattern})(?!\w)', text) is not None
 
-def _strip_accents(text: str) -> str:
-    text = unicodedata.normalize('NFD', text.replace('đ', 'd').replace('Đ', 'D'))
-    return ''.join(c for c in text if unicodedata.category(c) != 'Mn')
-
 def _has_loose(pattern: str, text: str) -> bool:
     # Khớp cả bản bỏ dấu: khách viết "gap quan ly", "CHUYEN NV" vẫn nhận ra
-    return _has(pattern, text) or _has(_strip_accents(pattern), _strip_accents(text))
+    return _has(pattern, text) or _has(strip_accents(pattern), strip_accents(text))
 
 def sentiment_of(text: str) -> Sentiment:
     t = text.lower()
-    if _has(NEGATIVE, t) or t.count('!') >= 2:
+    if _has(NEGATIVE, t):
         return 'negative'
     t = re.sub(r'(không|chẳng|chưa) (thích|ưng|ok)', '', t)  # "không thích màu" không phải khen
-    return 'positive' if _has(POSITIVE, t) else 'neutral'
+    positive = _has(POSITIVE, t)
+    # "!!" chỉ là bực khi không kèm lời khen: "đẹp quá, chốt luôn!!" 2 lượt liền không được chuyển nhân viên
+    if t.count('!') >= 2 and not positive:
+        return 'negative'
+    return 'positive' if positive else 'neutral'
 
 def track_user_message(text: str) -> dict:
     """Cập nhật state từ 1 tin nhắn của khách (chưa tính stage, xem decide_stage)."""
@@ -180,9 +184,10 @@ def track_user_message(text: str) -> dict:
     purposes = [p for p, pat in PURPOSES.items() if _has(pat, t)]
     if purposes:
         slots['purposes'] = purposes
-    storage = re.search(r'\b(\d+)\s*(gb|tb)\b', t)
-    if storage:
-        slots['storage'] = f'{storage.group(1)}{storage.group(2).upper()}'
+    # "s26 12gb ram 256gb", "ram 8gb 128gb": dung lượng là số lớn nhất; chỉ có số dưới 32GB thì đó là RAM
+    sizes = [(int(n) * (1024 if u == 'tb' else 1), f'{n}{u.upper()}') for n, u in re.findall(r'\b(\d+)\s*(gb|tb)\b', t)]
+    if sizes and max(sizes)[0] >= 32:
+        slots['storage'] = max(sizes)[1]
     return {
         'slots': slots,
         'objections': [o for o, pat in OBJECTIONS.items() if _has(pat, t)],
@@ -197,7 +202,7 @@ def track_user_message(text: str) -> dict:
 
 # Khách liệt kê phụ kiện muốn mua ("đặt ip17, củ sạc 40W, ốp lưng silicon, kính cường lực belkin"): nhớ lại để
 # thêm thẳng vào giỏ và không mời lại như gợi ý bán kèm. Chỉ tính khi có ý mua: "iphone 17 có củ sạc nào" là hỏi
-BUY = r'mua|lấy|đặt|chốt|thêm|order|cho (?:tui|tôi|mình|em|anh|chị) (?:xin|luôn)?'
+BUY = r'mua|lấy|đặt|chốt|(?<!hỏi )(?<!xem )(?<!vấn )thêm|order|cho (?:tui|tôi|mình|em|anh|chị) (?:xin|luôn)?'
 WANTED_KINDS = {
     'charger': r'củ sạc|cục sạc|bộ sạc|sạc nhanh|sạc \d+\s*w|adapter|tiếp hợp',
     'case': r'ốp|bao da',
@@ -313,11 +318,28 @@ def decide_stage(state: dict, wants_compare: bool = False, wants_close: bool = F
 
 # Chatbot báo đã/sẽ chuyển nhân viên (prompt quy tắc 12: máy lỗi cần xử lý, thủ tục đổi trả...). Lời báo phải đi kèm
 # handoff thật, không thì khách chờ mà không ai nhận (lỗi thấy ở user simulator: nói "đã chuyển" nhưng handoff=False).
-ANNOUNCES_HANDOFF = re.compile(r'(?:đã|sẽ|đang|em) (?:\w+ ){0,2}chuyển(?! khoản) (?:\S+ ){0,5}(?:nhân viên|quản lý|bộ phận)|'
-                               r'chuyển (?:khẩn|ngay|gấp) (?:\w+ ){0,3}(?:nhân viên|quản lý|bộ phận)', re.I)
+# Từ đứng giữa "em ... chuyển" không phải phủ định, khả năng ("em có thể/chưa/không chuyển"); không tính chuyển đơn
+# cho nhân viên/bộ phận xác nhận, giao hàng, kho (việc bình thường của đơn hàng)
+ANNOUNCES_HANDOFF = re.compile(
+    r'(?:đã|sẽ|đang|em|và) (?:(?!(?:có|thể|chưa|không|ko|muốn|cần|nên|thử)\b)\w+ ){0,2}chuyển(?! khoản) (?:\S+ ){0,5}'
+    r'(?:nhân viên|quản lý|bộ phận)(?! (?:\S+ ){0,2}(?:xác nhận|giao|đóng gói|kho)\b)|'
+    r'chuyển (?:khẩn|ngay|gấp) (?:\w+ ){0,3}(?:nhân viên|quản lý|bộ phận)', re.I)
+# Hỏi, mời, điều kiện ("anh/chị có muốn em chuyển...", "nếu cần em sẽ chuyển...") đứng trước lời chuyển trong câu
+OFFER_BEFORE = re.compile(r'(?<!\w)(?:nếu|khi|trường hợp|có muốn|muốn em|có cần|cần em|có thể)(?!\w)', re.I)
 
 def announces_handoff(answer: str) -> bool:
-    return ANNOUNCES_HANDOFF.search(answer or '') is not None
+    """Câu trả lời báo đã/sẽ chuyển nhân viên. Không tính câu hỏi, lời mời, điều kiện ("có muốn em chuyển cho nhân
+    viên không?", "nếu cần em sẽ chuyển..."): khách chưa đồng ý thì chưa chuyển."""
+    for sentence in re.split(r'(?<=[.!?\n])', answer or ''):
+        s = sentence.strip()
+        m = ANNOUNCES_HANDOFF.search(s)
+        if not m or s.endswith('?') or re.search(r'(?<!\w)không[.!\s]*$', s):
+            continue
+        before = s[:m.start()]
+        # "em không thể chuyển ngay cho quản lý": phủ định đứng ngay trước "chuyển ngay/gấp"
+        if not OFFER_BEFORE.search(before) and not re.search(r'(?<!\w)(?:không|chưa|ko|thể)\s*$', before):
+            return True
+    return False
 
 def needs_handoff(state: dict, wants_handoff: bool) -> bool:
     recent = (state.get('sentiment_history') or [])[-NEGATIVE_STREAK:]

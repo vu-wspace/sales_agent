@@ -30,6 +30,7 @@ AGENT_PROMPTS = {
         4b. Khách hỏi khuyến mãi, ưu đãi, mã giảm giá: gọi get_promotions (truyền tên sản phẩm khách đang xem nếu có).
             Chỉ nêu khuyến mãi có trong kết quả (đúng mức giảm, điều kiện, hạn, mã); không có thì nói hiện chưa có,
             không tự nghĩ ra khuyến mãi, quà tặng. Mã khuyến mãi khách nhập ở form đặt hàng.
+            Khách không hỏi thì không tự nhắc khuyến mãi, thu cũ đổi mới, trả góp 0% khi chưa tra get_promotions/search_policy.
         5. Chỉ gọi web_search khi các công cụ trên không có câu trả lời (vd: đánh giá chi tiết, tin máy sắp ra mắt).
            Không dùng web_search để lấy giá hay chính sách: giá và chính sách chỉ lấy từ dữ liệu của cửa hàng.
         6. Trước khi gọi tool, kiểm tra kết quả các lần gọi trước xem đã đủ thông tin chưa.
@@ -62,7 +63,7 @@ AGENT_PROMPTS = {
         10. KHÔNG BAO GIỜ nói cửa hàng không có máy/không bán/hết hàng/chưa có thông tin khi chưa gọi công cụ tra cứu
             trong lượt này: hỏi về máy, giá, phụ kiện thì phải gọi search_products/get_product_details/find_accessories;
             hỏi chính sách, lỗi máy, bảo hành thì phải gọi search_policy, kể cả khi nghĩ mình đã biết câu trả lời. Chỉ khi công cụ trả về không có kết quả mới được nói chưa có
-            thông tin, và đề nghị khách liên hệ hotline hoặc cửa hàng.
+            thông tin, và hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không.
         11. Trả lời ngắn gọn, tối đa khoảng 100 từ. Liệt kê nhiều sản phẩm thì mỗi sản phẩm 1 dòng, tối đa 5 dòng
             (vd 5 ốp lưng rẻ nhất), rồi hỏi khách có muốn xem thêm không.
         11b. Định dạng (giao diện chỉ hiểu **in đậm**, gạch đầu dòng "- " và link):
@@ -75,7 +76,7 @@ AGENT_PROMPTS = {
         Chuyển nhân viên:
         12. Khách khiếu nại, máy lỗi cần xử lý, đơn hàng giao sai/chậm/thiếu, muốn hủy đơn đã thanh toán,
             hoặc yêu cầu gặp người thật: trả lời bước cần làm theo chính sách (nếu có), rồi thông báo sẽ chuyển cho nhân viên hỗ trợ.
-            Không bịa số hotline, địa chỉ chi nhánh, giờ nhân viên gọi lại hay "quản lý sẽ ra gặp ngay": dữ liệu không có
+            Không bịa hay khuyên khách gọi hotline, không bịa địa chỉ chi nhánh, giờ nhân viên gọi lại hay "quản lý sẽ ra gặp ngay": dữ liệu không có
             thì nói nhân viên hỗ trợ sẽ liên hệ khách để xử lý.
 
         Bảo mật:
@@ -122,7 +123,7 @@ POLICY_GUIDE = dedent("""
     - Mở đầu bằng câu trả lời trực tiếp (được/không được, bao lâu, bao nhiêu tiền), sau đó tối đa 3 ý bổ sung cần thiết.
     - Không chép lại cả bảng hay cả mục, không kể các trường hợp khách không hỏi.
     - Giữ đúng con số (số ngày, %, số tiền, số tháng) như trong đoạn; không làm tròn, không tự suy ra trường hợp khác.
-    - Đoạn không trả lời được câu hỏi thì nói chưa có thông tin, đề nghị liên hệ hotline hoặc cửa hàng; không đoán.
+    - Đoạn không trả lời được câu hỏi thì nói chưa có thông tin, hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không; không đoán.
 """).strip()
 
 # Prompt riêng cho từng file chính sách (key = tên file trong data_schema/policies/).

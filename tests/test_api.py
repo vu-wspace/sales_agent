@@ -158,7 +158,7 @@ def test_chat_same_thread_only_reports_tools_of_current_turn(client):
     assert len(api.app.state.agent.threads[tid]) == 8
 
 
-@pytest.mark.parametrize('body', [{'message': ''}, {'message': ' ​ '}, {'message': 'x' * 1001}, {}, {'message': 'hi', 'thread_id': 'x' * 101}])
+@pytest.mark.parametrize('body', [{'message': ''}, {'message': ' \u200b '}, {'message': 'x' * 1001}, {}, {'message': 'hi', 'thread_id': 'x' * 101}])
 def test_chat_validation(client, body):
     assert client.post('/chat', json=body).status_code == 422
 
@@ -380,6 +380,18 @@ def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
     thread, values, node = agent.updates[0]
     assert thread == 't1' and node == 'track_reply' and values['cart'] == [] and values['order_form'] is False and values['cross_sell'] is None
     assert [m.text for m in values['messages']] == ['Hủy đặt hàng', api.orders.CANCEL_MESSAGE]
+
+
+def test_order_cancel_with_create_agent(fake_orders, monkeypatch):
+    # AGENT_IMPL=agent: create_agent không có node track_reply (trước đây lỗi InvalidUpdateError -> 500)
+    from langgraph.checkpoint.memory import InMemorySaver
+    monkeypatch.setattr(api, 'AS_NODE', None)
+    agent = api.app.state.agent = api.build_agent(checkpointer=InMemorySaver(), fallback=False)
+    r = TestClient(api.app).post('/order/cancel', json={'thread_id': 'a1'})
+    assert r.status_code == 200 and r.json()['answer'] == api.orders.CANCEL_MESSAGE
+    messages = agent.get_state({'configurable': {'thread_id': 'a1'}}).values['messages']
+    assert [m.text for m in messages] == ['Hủy đặt hàng', api.orders.CANCEL_MESSAGE]
+    assert fake_orders == []
 
 
 def test_order_cancel_needs_thread(fake_orders):

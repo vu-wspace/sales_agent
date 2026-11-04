@@ -62,6 +62,11 @@ def test_handoff_on_request_or_two_negative_turns():
     ('quan ly pin tot ko', False),
     ('nhớ nhắn nhân viên gọi xác nhận giúp chú', False),
     ('máy này có hay bị lỗi không', False),
+    # Đồ đã mua bị lỗi -> chuyển; hỏi trước khi mua, mua chỗ khác -> không
+    ('chi moi mua iphone 17 hom qua ma man hinh bi loi cam ung', True),
+    ('anh mua bộ sạc tuần trước mà giờ sạc không vào điện', True),
+    ('mua iphone 17 xong có bị lỗi pin không em', False),
+    ('em mới mua củ sạc ở chỗ khác, có dùng được cho A57 không', False),
 ])
 def test_handoff_phrases_with_and_without_accents(text, expected):
     from phone_sales.textnorm import normalize_user_text
@@ -372,6 +377,7 @@ def test_primary_allows_parallel_tool_calls(monkeypatch):
     ('lấy thêm sạc dự phòng', ['power-bank']),        # sạc dự phòng không phải củ sạc
     ('iphone 17 có củ sạc nào không', []),            # hỏi, chưa có ý mua
     ('không cần củ sạc đâu', []),                     # từ chối
+    ('cho em hỏi thêm cáp sạc loại nào bền', []),     # "hỏi thêm" không phải mua thêm
 ])
 def test_wanted_of(text, kinds):
     assert list(conv.wanted_of(text)) == kinds
@@ -465,3 +471,45 @@ def test_customer_hint_for_returning_customer():
     text = conv.describe({'customer': profile})
     assert 'Khách quen: Nguyễn Văn A' in text and 'iPhone 17 512GB Đen' in text
     assert 'Khách quen' not in conv.describe({})
+
+
+# ---------------------------------------------------------------- chatbot báo chuyển nhân viên (announces_handoff)
+
+@pytest.mark.parametrize('answer, expected', [
+    ('Dạ em đã chuyển yêu cầu của chị cho nhân viên hỗ trợ rồi nha.', True),
+    ('Em sẽ chuyển thông tin cho bộ phận chăm sóc khách hàng ngay.', True),
+    ('Dạ, em đã ghi nhận khiếu nại và chuyển cho bộ phận kỹ thuật. Nhân viên sẽ liên hệ anh sớm nha.', True),
+    ('Em chuyển ngay cho quản lý cửa hàng xử lý nha.', True),
+    ('Để em chuyển anh sang nhân viên tư vấn, nếu cần gì thêm anh cứ nhắn nha.', True),   # "nếu" đứng sau
+    # Hỏi, mời, điều kiện, phủ định: chưa chuyển
+    ('Anh/chị có muốn em chuyển cho nhân viên tư vấn không?', False),
+    ('Anh/chị có muốn em chuyển cho nhân viên tư vấn không', False),
+    ('Em có thể chuyển anh/chị sang nhân viên tư vấn trực tiếp nha.', False),
+    ('Nếu anh cần, em sẽ chuyển cho nhân viên hỗ trợ ngay.', False),
+    ('Khi anh mang máy tới, bên em sẽ chuyển máy cho bộ phận kỹ thuật kiểm tra.', False),
+    ('Em chưa chuyển cho nhân viên được, anh chờ em chút nha.', False),
+    ('Em không thể chuyển ngay cho quản lý.', False),
+    # Việc bình thường của đơn hàng, không phải chuyển nhân viên
+    ('Em đã chuyển đơn cho nhân viên xác nhận, nhân viên sẽ gọi anh trước khi giao.', False),
+    ('Đơn đã chuyển sang bộ phận kho đóng gói nha.', False),
+    ('Anh chọn thanh toán chuyển khoản cho nhân viên giao hàng cũng được.', False),
+    ('', False),
+])
+def test_announces_handoff(answer, expected):
+    assert conv.announces_handoff(answer) is expected
+
+
+def test_exclamation_with_praise_is_not_negative():
+    assert conv.sentiment_of('đẹp quá, chốt luôn!!') == 'positive'
+    assert conv.sentiment_of('sao lâu vậy!!') == 'negative'
+    assert conv.sentiment_of('trả lời đi!!') == 'negative'
+    state = {'sentiment_history': ['positive', 'positive']}
+    assert not conv.needs_handoff(state, conv.track_user_message('ưng quá, lấy luôn!!')['wants_handoff'])
+
+
+@pytest.mark.parametrize('text, storage', [
+    ('s26 ultra 12gb ram 256gb', '256GB'), ('ram 8gb bản 128gb', '128GB'), ('lấy bản 1tb', '1TB'), ('ram 8gb', None),
+    ('512gb hay 1tb', '1TB'), ('iphone 17', None),
+])
+def test_storage_slot_ignores_ram(text, storage):
+    assert conv.track_user_message(text)['slots'].get('storage') == storage

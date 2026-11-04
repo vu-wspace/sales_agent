@@ -23,7 +23,7 @@ from phone_sales.textnorm import clean_answer, normalize_user_text
     ('đẹppppp quááá', 'đẹp quá'),
     ('100 k thì sao', '100 k thì sao'),                               # "k" sau số là tiền, không phải "không"
     ('Galaxy Z Fold 7', 'Galaxy Z Fold 7'),
-    ('  chip​  A19 \n ', 'chip A19'),
+    ('  chip\u200b  A19 \n ', 'chip A19'),
 ])
 def test_normalize_user_text(text, expected):
     assert normalize_user_text(text) == expected
@@ -109,3 +109,48 @@ def test_graph_keeps_grounded_answer(monkeypatch):
 def test_clean_answer_removes_a_particle():
     # Cửa hàng không dùng "ạ"; "Dạ", "lạ" giữ nguyên
     assert clean_answer('Dạ, anh/chị chọn màu nào ạ? Vâng ạ. Máy lạ ạ!') == 'Dạ, anh/chị chọn màu nào? Vâng. Máy lạ!'
+
+
+def test_clean_answer_replaces_pii_tokens():
+    # Model chép nhãn che PII vào câu trả lời (thấy ở user simulator)
+    assert clean_answer('Nhân viên sẽ gọi qua số [SỐ ĐIỆN THOẠI] nha.') == \
+        'Nhân viên sẽ gọi qua số điện thoại anh/chị đã cung cấp nha.'
+    assert clean_answer('Em gửi về [EMAIL] nha.') == 'Em gửi về email anh/chị đã cung cấp nha.'
+
+
+@pytest.mark.parametrize('text, name, expected', [
+    ('Dạ em cảm ơn chị Trần Thị Bích nha.', 'Tran Thi Bich', 'Dạ em cảm ơn chị Tran Thi Bich nha.'),
+    ('Cảm ơn anh Dang Van Duc nha.', 'Đặng Văn Đức', 'Cảm ơn anh Đặng Văn Đức nha.'),
+    ('Cảm ơn anh A!', 'A', 'Cảm ơn anh A!'),           # tên ngắn không khớp giữa từ ("Cảm")
+    ('Cảm ơn anh/chị nha.', 'Lan', 'Cảm ơn anh/chị nha.'),
+])
+def test_keep_name_restores_customer_spelling(text, name, expected):
+    from phone_sales.textnorm import keep_name
+    assert keep_name(text, name) == expected
+
+
+def test_graph_retries_empty_answer_then_falls_back(monkeypatch):
+    from phone_sales.graph import EMPTY_FALLBACK, build_graph
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=iter([AIMessage(''), AIMessage('Dạ em đây nha.')])))
+    g = build_graph(fallback=False, checkpointer=InMemorySaver())
+    res = g.invoke({'messages': [HumanMessage('alo')]}, {'configurable': {'thread_id': 'e1'}})
+    assert res['messages'][-1].text == 'Dạ em đây nha.'
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=iter([AIMessage(''), AIMessage('')])))
+    g = build_graph(fallback=False, checkpointer=InMemorySaver())
+    res = g.invoke({'messages': [HumanMessage('alo')]}, {'configurable': {'thread_id': 'e2'}})
+    assert res['messages'][-1].text == EMPTY_FALLBACK
+    # Bản viết lại sau kiểm tra số liệu cũng rỗng -> câu mặc định, không gửi chuỗi rỗng cho khách
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=iter([AIMessage('Pin 9999mAh nha.'), AIMessage('')])))
+    g = build_graph(fallback=False, checkpointer=InMemorySaver())
+    res = g.invoke({'messages': [HumanMessage('pin sao')]}, {'configurable': {'thread_id': 'e3'}})
+    assert res['messages'][-1].text == EMPTY_FALLBACK
+
+
+def test_graph_sets_handoff_when_answer_announces_it(monkeypatch):
+    # Khách không nói từ khóa chuyển nhân viên, model vẫn báo chuyển -> handoff phải bật thật
+    script = iter([AIMessage('Dạ em đã chuyển yêu cầu của chị cho nhân viên hỗ trợ rồi nha.')])
+    monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
+    from phone_sales.graph import build_graph
+    g = build_graph(fallback=False, checkpointer=InMemorySaver())
+    res = g.invoke({'messages': [HumanMessage('chị cần làm thủ tục đổi máy')]}, {'configurable': {'thread_id': 'h'}})
+    assert res['handoff'] and res['stage'] == 'handoff'

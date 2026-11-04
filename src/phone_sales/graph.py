@@ -20,6 +20,8 @@ log = logging.getLogger(__name__)
 #   START -> track_user -> model -> (có tool_call) tools -> track_tools -> model ... -> track_reply -> END
 TOOLS = get_agent_tools('agent_graph')
 SYSTEM_PROMPT = get_system_prompt('agent_graph')
+EMPTY_RETRY = 'Câu trả lời vừa rồi bị rỗng. Trả lời tin nhắn mới nhất của khách (gọi công cụ nếu cần).'
+EMPTY_FALLBACK = 'Dạ, em chưa trả lời được câu này, anh/chị nhắn lại giúp em nha.'
 
 def _last_user_text(state: AgentState) -> str:
     human = [m for m in state.get('messages', []) if isinstance(m, HumanMessage)]
@@ -94,8 +96,14 @@ def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
         system = SystemMessage(content=f'{SYSTEM_PROMPT}\n\nTrạng thái hội thoại:\n{status}')
         messages = [system] + trim_history(state['messages'])
         reply = invoke(messages)
+        if not reply.tool_calls and not reply.text.strip():
+            # Model trả chuỗi rỗng (thấy ở user simulator sau nhiều lượt tool): hỏi lại 1 lần
+            log.warning('Câu trả lời rỗng, yêu cầu model trả lời lại')
+            reply = invoke([*messages, HumanMessage(EMPTY_RETRY)])
         if reply.tool_calls:
             return {'messages': [reply]}
+        if not reply.text.strip():
+            return {'messages': [AIMessage(EMPTY_FALLBACK)]}
         # Câu trả lời cuối: số liệu (giá, pin, bảo hành...) phải có trong kết quả tool, trạng thái hoặc tin của khách.
         # Có số không rõ nguồn thì cho model viết lại 1 lần; bản nháp sai không lưu vào lịch sử.
         sources = sources_of(state['messages'], status)
@@ -105,6 +113,8 @@ def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
             reply = invoke([*messages, reply, HumanMessage(correction(bad))])
             if reply.tool_calls:
                 return {'messages': [reply]}  # model đi tra cứu thêm: tool chạy rồi model trả lời lại từ đầu
+            if not reply.text.strip():
+                return {'messages': [AIMessage(EMPTY_FALLBACK)]}
             if still := ungrounded(reply.text, sources):
                 log.warning('Viết lại vẫn còn số liệu không rõ nguồn %s', still)
         return {'messages': [reply.model_copy(update={'content': clean_answer(reply.text)})]}

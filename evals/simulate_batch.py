@@ -33,7 +33,6 @@ from datetime import datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import httpx  # noqa: E402
-from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
 from langchain_openai import ChatOpenAI  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 

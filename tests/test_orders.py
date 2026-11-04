@@ -184,7 +184,7 @@ def test_summary_template_from_database_row():
 
 def test_thank_you_uses_llm_and_falls_back(monkeypatch):
     def call(primary, invoke):
-        return invoke(SimpleNamespace(invoke=lambda messages: SimpleNamespace(text=' Cảm ơn anh A! ')))
+        return invoke(SimpleNamespace(invoke=lambda messages: SimpleNamespace(text=' Cảm ơn anh A ạ! ')))
     monkeypatch.setattr(orders._chain, 'call', call)
     assert orders.thank_you('A') == 'Cảm ơn anh A!'
 

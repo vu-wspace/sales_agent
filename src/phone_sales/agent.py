@@ -12,9 +12,9 @@ def build_agent(checkpointer: Checkpointer = None, fallback: bool = True):
     # Không truyền khi chạy qua `langgraph dev` vì server tự quản lý bộ nhớ.
     middleware = [TrimHistoryMiddleware()]
     if fallback:
-        # OpenRouter gói free hết quota ngày (hoặc lỗi) thì thử lần lượt Gemini 3.1 -> Gemini 3.5 -> Groq
-        # thay vì báo lỗi cho khách. Eval tắt fallback để điểm số phản ánh đúng model chính.
-        middleware.append(FallbackMiddleware(*llm.FALLBACK_LLMS))
+        # OpenRouter (model chính) hết quota hoặc lỗi thì thử các model dự phòng còn lại thay vì báo lỗi cho khách.
+        # Eval tắt fallback để điểm số phản ánh đúng model chính.
+        middleware.append(FallbackMiddleware(*(m for m in llm.FALLBACK_LLMS if m is not llm.open_llm)))
     return create_agent(
         model=llm.open_llm,
         tools=get_agent_tools('agent_main'),

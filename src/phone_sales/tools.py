@@ -1,5 +1,4 @@
 import re
-import unicodedata
 import psycopg
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, ToolMessage
@@ -12,6 +11,7 @@ from phone_sales import promotions
 from phone_sales.conversation import _current_turn, added_to_cart_this_turn, cart_update, cross_sell_step
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
+from phone_sales.textnorm import strip_accents
 from phone_sales.vector_db import get_vector_store
 from tavily import TavilyClient
 from functools import lru_cache
@@ -62,7 +62,7 @@ NO_SPECS = ('Thông số: chưa có thông số chi tiết của máy này trong
             'khách hỏi thì nói chưa có thông tin chi tiết.')
 
 DB_ERROR = ('Lỗi hệ thống khi tra cứu kho hàng ({}). Không tự đưa ra giá hay tình trạng hàng; '
-            'xin lỗi anh/chị và đề nghị liên hệ hotline hoặc cửa hàng gần nhất.')
+            'xin lỗi anh/chị và hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không.')
 
 @lru_cache
 def _policy_store():
@@ -76,8 +76,7 @@ def _relevant_policy_hits(scored: list[tuple]) -> list[tuple]:
     return [(d, s) for d, s in scored if s >= POLICY_MIN_SCORE and best - s <= POLICY_SCORE_MARGIN]
 
 def _norm_text(text: str) -> str:
-    text = unicodedata.normalize('NFD', text.lower().replace('đ', 'd').replace('+', ' plus '))
-    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+    text = strip_accents(text.lower().replace('+', ' plus '))
     return re.sub(r'[^a-z0-9]+', ' ', text).strip()
 
 def _tokens(text: str) -> set[str]:
@@ -493,11 +492,11 @@ def search_policy(query: str) -> str:
     except Exception as e:
         # ToolNode chỉ bắt lỗi sai tham số; lỗi khác (Qdrant sập...) sẽ làm hỏng cả lượt hội thoại
         return (f'Lỗi hệ thống khi tra cứu dữ liệu nội bộ ({type(e).__name__}). '
-                'Không tự đưa ra chính sách; xin lỗi anh/chị và đề nghị liên hệ hotline hoặc cửa hàng.')
+                'Không tự đưa ra chính sách; xin lỗi anh/chị và hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không.')
     hits = _relevant_policy_hits(scored)
     if not hits:
         return ('Không tìm thấy chính sách liên quan tới câu hỏi trong dữ liệu nội bộ. Không tự trả lời về chính sách; '
-                'nói chưa có thông tin và đề nghị liên hệ hotline hoặc cửa hàng.')
+                'nói chưa có thông tin và hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không.')
     # Gom đoạn theo file (thứ tự theo đoạn liên quan nhất), mỗi file kèm prompt riêng để model trả lời đúng phạm vi
     by_source: dict[str, list] = {}
     for doc, _ in hits:
