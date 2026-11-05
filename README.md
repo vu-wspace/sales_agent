@@ -627,6 +627,25 @@ Nguyên tắc:
 - Hội thoại trượt được phân biệt lỗi của chatbot với kịch bản không khả thi (khách tự không mua, đòi món cửa hàng không bán).
 - Mỗi lần chạy lưu commit và model của agent, khách giả lập, judge vào `evals/results/` (không commit).
 
+### Kết quả
+
+User simulator (tầng 4), 250 kịch bản. Lần đầu: 03/11/2026. Hiện tại: các kịch bản từng lỗi chạy lại ngày 04/11 sau khi sửa, còn lại giữ kết quả 03/11; cả hai đều chấm lại lớp 1 theo luật mới nhất.
+
+| Chỉ số | Lần đầu | Hiện tại |
+|---|---|---|
+| Đạt mục tiêu kịch bản | 169/250 (68%) | **210/250 (84%)** |
+| Chốt đơn đúng khi khách thật sự muốn mua | 72/83 (87%) | **79/82 (96%)** |
+| Đơn đúng giỏ hàng | 89/89 | **107/107** |
+| Số tiền bot nêu bị sai | 0/1.988 | **0/2.162** |
+| Mã khuyến mãi bịa | 0/250 | **0/250** |
+| Khiếu nại được chuyển nhân viên | 3/20 | **20/20** |
+| Chuyển đúng lượt khách đòi gặp người (hoặc sớm hơn) | 2/3 | **20/20** |
+| Hội thoại trượt do chatbot | 50 | **8** |
+| Điểm LLM judge trung bình (1–5) | 4,49 | **4,66** |
+| Thời gian trả lời mỗi lượt (trung vị / 95%) | 24,7 / 86,1 giây | 23,8 / 79,6 giây |
+
+Các bản sửa sau ngày 04/11 chưa được đo lại bằng simulator; giới hạn của các con số xem [Hạn chế](#hạn-chế), mục Đánh giá.
+
 ### Tầng 1: Unit test
 
 ```bash
@@ -897,7 +916,7 @@ Chỉ số là tỷ lệ đòn thành công theo nhóm, xếp theo mức nghiêm
 **Hiểu tin nhắn**
 
 - Luật nhận diện từ khóa không hiểu mọi cách nói (mỉa mai, viết tắt chưa có trong `ABBREVIATIONS`; viết không dấu mới chỉ xử lý cho chuyển nhân viên), kể cả câu từ chối phụ kiện bán kèm.
-- Khách chỉ nhắc chữ "hủy đơn" (vd "ko đc là a hủy đơn luôn đấy") vẫn bị chuyển nhân viên.
+- Khách chỉ nhắc chữ "hủy đơn" (vd "ko đc là a hủy đơn luôn đấy") vẫn bị chuyển nhân viên. Ngược lại, khách xin nhân viên gọi điện tư vấn ("muốn có người gọi điện nói chuyện trực tiếp") chưa được nhận ra là đòi gặp người (LLM judge bắt được ở `multi_item-18`).
 - Khách báo đồ đã mua bị lỗi chỉ được nhận ra khi có dấu hiệu đã mua ("mới mua", "mua tuần trước"); cách nói khác chỉ chuyển khi model báo chuyển (`announces_handoff`).
 - `parse_budget` hiểu "rẻ hơn 2 triệu" thành ngân sách 2 triệu.
 
