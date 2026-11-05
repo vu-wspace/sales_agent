@@ -1,5 +1,7 @@
 # Phone Sales Agent
 
+![Demo: khách hỏi máy, chatbot tư vấn, thêm vào giỏ và đặt hàng](video/demo.gif)
+
 Trợ lý chat tiếng Việt cho cửa hàng bán lẻ iPhone, Samsung Galaxy và phụ kiện, xây dựng với LangChain/LangGraph. Dự án demo phục vụ học tập.
 
 ## Tính năng
@@ -588,6 +590,7 @@ sales_agent/
 ├── tests/                      # Unit test
 ├── evals/                      # Bộ câu hỏi, script đánh giá, user simulator (simulate.py, simulate_batch.py, personas.jsonl, scenarios.jsonl)
 ├── certs/                      # CA nội bộ cho mạng có SSL inspection (không commit)
+├── video/demo.gif            # Ảnh động demo ở đầu README
 ├── Dockerfile, docker-compose.yml
 ├── langgraph.json
 └── pyproject.toml, uv.lock, requirements.txt
