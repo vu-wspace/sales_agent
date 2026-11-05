@@ -65,7 +65,31 @@ def test_fake_code_in_form_must_be_rejected():
     assert sim.check(rejected, persona, REF)['fake_code_rejected'] is True
 
 
+KINDS_REF = {**REF, 'accessory_kinds': {'Galaxy A57 5G': {'case', 'charger', 'cable'}, 'iPhone 16': {'case', 'charger', 'cable'}}}
+A57 = {'name': 'Galaxy A57 5G', 'category': 'phone', 'charger_in_box': False, 'cable_in_box': True}
+IP16 = {'name': 'iPhone 16', 'category': 'phone', 'charger_in_box': False, 'cable_in_box': True}
+CASE = {'name': 'Ốp lưng', 'category': 'accessory', 'accessory_type': 'case'}
+ADAPTER = {'name': 'Củ sạc 40W', 'category': 'accessory', 'accessory_type': 'charger'}
+
+
+@pytest.mark.parametrize('goal, cart, feasible', [
+    # Máy không có miếng dán: chỉ đòi ốp lưng
+    ('Mua Galaxy A57 5G kèm ốp lưng và miếng dán', [A57, CASE], ['case']),
+    # Hộp đã có cáp: chỉ đòi củ sạc
+    ('Mua iPhone 16 kèm củ sạc và cáp', [IP16, ADAPTER], ['charger']),
+    ('Mua máy kèm vài phụ kiện', [A57, CASE], None),                  # không nêu loại
+])
+def test_accessory_needs_drops_unavailable_and_in_box(goal, cart, feasible):
+    assert sim.accessory_needs(goal, cart, KINDS_REF)['feasible_kinds'] == feasible
+
+
 @pytest.mark.parametrize('rule, facts, ok', [
+    ('order_multi', {'items_match': True, 'order_categories': ['accessory', 'phone'],
+                     'feasible_kinds': ['case'], 'order_kinds': ['case']}, True),     # bán đủ món có hàng
+    ('order_multi', {'items_match': True, 'order_categories': ['phone'],
+                     'feasible_kinds': ['case'], 'order_kinds': []}, False),          # thiếu ốp lưng có hàng
+    ('order_multi', {'items_match': True, 'order_categories': ['accessory'],
+                     'feasible_kinds': [], 'order_kinds': ['power-bank']}, False),    # đơn thiếu máy
     ('handoff', {'handoff': True}, True),
     ('order_multi', {'items_match': True, 'order_categories': ['accessory', 'accessory', 'phone']}, True),
     ('order_multi', {'items_match': True, 'order_categories': ['accessory', 'phone']}, False),

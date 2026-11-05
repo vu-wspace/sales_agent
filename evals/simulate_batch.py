@@ -109,9 +109,10 @@ BRAINSTORM_PROMPT = """Bạn thiết kế kịch bản kiểm thử cho chatbot 
 Nhóm kịch bản: {category}: {description}
 
 Dữ liệu thật của cửa hàng (dùng để kịch bản sát thực tế):
-Điện thoại (giá thấp nhất - cao nhất):
+Điện thoại (giá thấp nhất - cao nhất | loại phụ kiện còn hàng cho máy đó):
 {phones}
-Loại phụ kiện: {accessories}
+Khách mua máy kèm phụ kiện thì chỉ chọn loại phụ kiện có trong danh sách của máy đó (máy không có miếng dán thì
+không đòi miếng dán), trừ khi kịch bản cố ý thử món không có hàng và luật đạt không đòi món đó.
 Khuyến mãi đang có: {promos}
 Chính sách: bảo hành Apple, bảo hành Samsung, đổi trả, giao hàng, trả góp.
 
@@ -125,12 +126,12 @@ def catalog() -> dict:
         phones = conn.execute("""SELECT p.name, min(v.price) AS lo, max(v.price) AS hi FROM products p
                                  JOIN variants v USING (product_id) WHERE p.category = 'phone'
                                  GROUP BY p.name ORDER BY lo""").fetchall()
-        kinds = [r['k'] for r in conn.execute("SELECT DISTINCT attributes->>'accessory_type' AS k FROM products "
-                                              "WHERE category <> 'phone'").fetchall()]
         promos = conn.execute('SELECT code, description FROM promotions WHERE is_active AND (ends_at IS NULL '
                               'OR ends_at > now())').fetchall()
-    return {'phones': '\n'.join(f"- {p['name']}: {p['lo']:,}đ - {p['hi']:,}đ".replace(',', '.') for p in phones),
-            'accessories': ', '.join(k for k in kinds if k),
+    # Loại phụ kiện theo từng máy: danh sách chung làm Gemini ghép "A07s kèm miếng dán" dù máy đó không có
+    kinds = sim.reference_data()['accessory_kinds']
+    return {'phones': '\n'.join(f"- {p['name']}: {p['lo']:,}đ - {p['hi']:,}đ".replace(',', '.')
+                                + f" | {', '.join(sorted(kinds.get(p['name'], []))) or 'không có phụ kiện'}" for p in phones),
             'promos': '; '.join(f"{p['code'] or '(tự động, không cần mã)'}: {p['description']}" for p in promos)}
 
 

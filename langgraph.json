@@ -5,6 +5,5 @@
   "graphs": {
     "agent_main": "./src/phone_sales/agent.py:agent",
     "phone_graph": "./src/phone_sales/graph.py:graph"
-  },
-  "env": ".env"
+  }
 }

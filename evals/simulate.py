@@ -45,6 +45,7 @@ from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from phone_sales import config, llm, orders, pii  # noqa: E402
+from phone_sales import conversation as conv  # noqa: E402
 from phone_sales.fallback import FallbackMiddleware  # noqa: E402
 
 # gemini-3.5-flash-lite bỏ qua temperature và cảnh báo mỗi lần gọi
@@ -139,6 +140,15 @@ def reference_data() -> dict:
     with orders._connect() as conn:
         prices = [r['price'] for r in conn.execute('SELECT DISTINCT price FROM variants WHERE price > 0').fetchall()]
         promos = conn.execute('SELECT code, value, max_discount, min_order FROM promotions').fetchall()
+        # Loại phụ kiện còn hàng cho từng máy: kịch bản đòi loại không có hàng thì bot không thể bán
+        kinds = conn.execute(
+            """SELECT ph.name AS phone, a.attributes->>'accessory_type' AS kind
+               FROM compatibility c JOIN products ph ON ph.product_id = c.phone_id
+               JOIN products a ON a.product_id = c.accessory_id JOIN variants v ON v.product_id = a.product_id
+               WHERE v.stock > 0 GROUP BY 1, 2""").fetchall()
+    accessory_kinds: dict[str, set] = {}
+    for r in kinds:
+        accessory_kinds.setdefault(r['phone'], set()).add(r['kind'])
     allowed = set(prices)
     # Chênh lệch (lên dung lượng, máy rẻ hơn) và tổng 2 món (máy + củ sạc) giữa các giá trong database
     for i, a in enumerate(prices):
@@ -148,7 +158,26 @@ def reference_data() -> dict:
         allowed.update(v for v in (p['value'], p['max_discount'], p['min_order']) if v)
     for f in (config.ROOT / 'data_schema' / 'policies').glob('*.md'):   # phí giao, ví dụ trả góp trong chính sách
         allowed.update(money(f.read_text(encoding='utf-8')))
-    return {'allowed': allowed, 'prices': set(prices), 'codes': {p['code'].upper() for p in promos if p['code']}}
+    return {'allowed': allowed, 'prices': set(prices), 'codes': {p['code'].upper() for p in promos if p['code']},
+            'accessory_kinds': accessory_kinds}
+
+
+# Loại phụ kiện khách muốn mua, đọc từ mục tiêu của kịch bản ("kèm ốp lưng và miếng dán")
+REQUESTED_KINDS = {**conv.WANTED_KINDS, 's-pen': r's[ -]?pen'}
+
+
+def accessory_needs(goal: str, cart: list[dict], ref: dict) -> dict:
+    """Món phụ kiện khách đòi, món bot có thể bán (còn hàng cho máy trong đơn, không có sẵn trong hộp) và món đã có
+    trong đơn. feasible None: mục tiêu không nêu loại cụ thể -> luật order_multi quay về "ít nhất 2 phụ kiện"."""
+    requested = sorted(k for k, pat in REQUESTED_KINDS.items() if conv._has(pat, (goal or '').lower()))
+    phone = next((i for i in cart if i.get('category') == 'phone'), None)
+    ordered = sorted({i.get('accessory_type') for i in cart if i.get('category') == 'accessory'} - {None})
+    if not requested or not phone or 'accessory_kinds' not in ref:
+        return {'requested_kinds': requested, 'feasible_kinds': None, 'order_kinds': ordered}
+    in_box = {k for k, f in (('charger', 'charger_in_box'), ('cable', 'cable_in_box')) if phone.get(f)}
+    sold = ref['accessory_kinds'].get(phone['name'], set())
+    return {'requested_kinds': requested, 'feasible_kinds': sorted(k for k in requested if k in sold and k not in in_box),
+            'order_kinds': ordered}
 
 
 def money(text: str) -> list[int]:
@@ -307,6 +336,7 @@ def check(run: dict, persona: dict, ref: dict) -> dict:
         'order_created': bool(order), 'order_id': order and order['order_id'], 'items_match': items_match,
         'order_items': order_items,
         'order_categories': sorted(c.get('category') or '' for c in order['cart']) if order else [],
+        **accessory_needs(persona.get('goal', ''), order['cart'] if order else [], ref),
         'handoff': any(t.get('handoff') for t in chats),
         'price_mismatches': bad_money, 'fake_codes_mentioned': fake_codes,
         'promo_claims_without_get_promotions': unverified_promo,
@@ -367,9 +397,13 @@ def success(rule: str, f: dict) -> bool:
         return False
     if rule == 'order_created':
         return f['order_created'] and bool(f['items_match'])
-    if rule == 'order_multi':   # 1 máy + ít nhất 2 phụ kiện, đúng giỏ
+    if rule == 'order_multi':   # 1 máy + các phụ kiện khách đòi mà cửa hàng bán được, đúng giỏ
         cats = f['order_categories']
-        return bool(f['items_match']) and cats.count('phone') >= 1 and len(cats) - cats.count('phone') >= 2
+        if not (f['items_match'] and 'phone' in cats):
+            return False
+        if f.get('feasible_kinds') is None:   # mục tiêu không nêu loại: ít nhất 2 phụ kiện
+            return len(cats) - cats.count('phone') >= 2
+        return set(f['feasible_kinds']) <= set(f.get('order_kinds') or [])
     if rule == 'handoff':
         return f['handoff']
     if rule == 'no_fake_discount':

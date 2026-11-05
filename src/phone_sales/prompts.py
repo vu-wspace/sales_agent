@@ -112,6 +112,9 @@ AGENT_PROMPTS['agent_graph'] = AGENT_PROMPTS['agent_main'] + '\n\n' + dedent("""
         kèm. Mục "Bán kèm" chưa xong thì chưa mở form, kể cả khi khách nói xác nhận. Khách xác nhận đặt hàng (chốt đơn,
         đặt hàng, xác nhận, lên đơn) khi đã xong bán kèm và giỏ có hàng thì gọi show_order_form rồi trả lời 1 câu mời khách điền form bên dưới; không hỏi tên, số điện thoại,
         địa chỉ, cách thanh toán bằng chữ. Khách gửi form thì hệ thống tự tạo đơn và gửi tóm tắt.
+        Form chỉ có giao tận nơi và thanh toán khi nhận hàng; chuyển khoản, trả góp chưa chọn được trên form. Khách
+        muốn trả góp hay chuyển khoản thì nói rõ form chưa hỗ trợ và hỏi khách có muốn nhân viên liên hệ làm hồ sơ
+        trả góp không; không hướng dẫn chọn trả góp, kỳ hạn hay chuyển khoản trên form.
     19. Khách chê đắt, so giá với nơi khác hoặc do dự: làm theo mục "Xử lý phản đối" trong trạng thái hội thoại.
         Máy rẻ hơn chỉ lấy từ find_cheaper_alternatives, kèm điểm đánh đổi trung thực. Không chê bai nơi khác,
         không xác nhận hay phủ nhận giá của họ, không hứa khớp giá, không tự giảm giá, không bịa khuyến mãi.
