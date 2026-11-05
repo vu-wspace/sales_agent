@@ -271,20 +271,32 @@ flowchart LR
 
 ### Đặt hàng
 
-1. Khách nêu tên máy mà chưa nói phiên bản ("Tui muốn mua iPhone 17", "cho tui coi Galaxy S26"): agent gọi `get_product_details`, liệt kê mỗi dung lượng 1 dòng (giá, màu, còn hàng) và hỏi khách chọn phiên bản. Khách nói đủ máy, dung lượng, màu thì sang bước 2 luôn.
-2. Lượt khách chọn máy ("chốt S26 256GB đen"): agent `add_to_cart` rồi bán kèm 3 lượt (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)): mời củ sạc (máy không kèm) → mời ốp lưng, cường lực → xác nhận đơn, mỗi lượt 1 loại. `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ và khi bán kèm chưa xong.
-3. Khách xác nhận ("xác nhận đặt hàng", "chốt đơn"): agent gọi `show_order_form`, giao diện hiện form (`index.html`, theo thiết kế `static/order_form.html`) với giỏ hàng và tổng tiền.
-4. Khách gửi form → `POST /order` (`orders.py`), trong 1 transaction:
-   - trừ tồn kho, thiếu hàng thì hủy cả đơn;
-   - khách cũ nhận theo số điện thoại (tra bằng `phone_hash`; cập nhật tên, địa chỉ, email nếu có nhập), khách mới thì tạo `customers` (mã `KH…`);
-   - email luôn lưu vào đơn (`orders.recipient_email`); chỉ lưu vào `customers.email` khi email chưa thuộc khách khác (`uq_customers_email_hash` không cho 2 khách trùng email), để đơn không bị lỗi;
-   - số điện thoại, email lưu dạng mã hóa (xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii));
-   - tính giảm giá (`promotions.quote`, khóa dòng khuyến mãi bằng `FOR UPDATE`): mã khách nhập, hoặc khuyến mãi tự động giảm nhiều nhất; mã không dùng được thì không ghi gì cả;
-   - ghi `orders` (mã `DH…`, `subtotal`, `discount_amount`, `promo_id`, `total` = tạm tính − giảm giá) và `order_items`; có khuyến mãi thì ghi `promotion_usages` và tăng `used_count`.
-5. Câu trả lời = tóm tắt đơn viết bằng template, đọc lại từ database (khách hàng, địa chỉ, sản phẩm, tổng tiền; số điện thoại, email đã che) + 1–2 câu cảm ơn do LLM viết. LLM chỉ nhận tên khách, không viết số liệu; LLM lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`: mã đơn, thông tin nhận hàng, sản phẩm, tổng tiền), lời cảm ơn là bong bóng riêng.
-6. Đơn được ghi vào lịch sử hội thoại, giỏ hàng làm trống; gửi form lần nữa nhận `409`.
-7. Gửi email xác nhận (xem [Email xác nhận đơn hàng](#email-xác-nhận-đơn-hàng)) sau khi đã trả kết quả cho khách.
-8. Khách bấm **Hủy đặt hàng** trên form thay vì gửi → `POST /order/cancel`: bỏ form, hiện câu "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?", giỏ hàng làm trống, không tạo đơn.
+```mermaid
+flowchart TD
+    name["Khách nêu tên máy"] -- "chưa nói phiên bản" --> details["get_product_details<br/>mỗi dung lượng 1 dòng: giá, màu, còn hàng"]
+    details -- "khách chọn" --> add
+    name -- "đủ máy, dung lượng, màu" --> add["add_to_cart"]
+    add --> cross["Bán kèm 3 lượt<br/>củ sạc → ốp lưng, cường lực → xác nhận"]
+    cross -- "khách xác nhận đặt hàng" --> form["show_order_form<br/>form với giỏ hàng, tổng tiền"]
+    form -- "mở form, áp mã: POST /order/quote" --> quote(["tạm tính, giảm giá"])
+    form -- "Hủy: POST /order/cancel" --> cancel(["không tạo đơn, giỏ làm trống"])
+    form -- "Gửi: POST /order" --> tx["orders.create_order<br/>1 transaction"]
+    tx -- "thiếu hàng, mã không dùng được" --> err(["409, không ghi gì"])
+    tx --> reply["Tóm tắt đơn đọc lại từ database<br/>+ 1–2 câu cảm ơn do LLM viết"]
+    reply --> done(["ghi vào lịch sử, giỏ làm trống<br/>gửi form lần nữa: 409"])
+    tx -. "BackgroundTasks, sau khi trả kết quả" .-> mail["Email xác nhận"]
+```
+
+- `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ và khi bán kèm chưa xong (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)).
+- Trong transaction của `POST /order` (`orders.py`):
+  - trừ tồn kho, thiếu hàng thì hủy cả đơn;
+  - khách cũ nhận theo số điện thoại (tra bằng `phone_hash`; cập nhật tên, địa chỉ, email nếu có nhập), khách mới thì tạo `customers` (mã `KH…`);
+  - email luôn lưu vào đơn (`orders.recipient_email`); chỉ lưu vào `customers.email` khi email chưa thuộc khách khác (`uq_customers_email_hash` không cho 2 khách trùng email), để đơn không bị lỗi;
+  - số điện thoại, email lưu dạng mã hóa (xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii));
+  - tính giảm giá (`promotions.quote`, khóa dòng khuyến mãi bằng `FOR UPDATE`): mã khách nhập, hoặc khuyến mãi tự động giảm nhiều nhất; mã không dùng được thì không ghi gì cả;
+  - ghi `orders` (mã `DH…`, `subtotal`, `discount_amount`, `promo_id`, `total` = tạm tính − giảm giá) và `order_items`; có khuyến mãi thì ghi `promotion_usages` và tăng `used_count`.
+- Tóm tắt đơn viết bằng template (số điện thoại, email đã che); LLM chỉ nhận tên khách, không viết số liệu, lỗi thì dùng câu cảm ơn cố định. Trang chat hiện tóm tắt thành thẻ xác nhận (`.receipt`), lời cảm ơn là bong bóng riêng.
+- Hủy đặt hàng trả câu cố định "Thật tiếc, em đã hủy yêu cầu đặt hàng… Anh/chị có cần em hỗ trợ hay tư vấn gì thêm nữa không?". Email xác nhận: xem [Email xác nhận đơn hàng](#email-xác-nhận-đơn-hàng).
 
 Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng là áp dụng, không gửi cả form). Mở form là hỏi giá ngay (`POST /order/quote`) để hiện khuyến mãi tự động (nếu có). Thẻ xác nhận đơn có thêm dòng tạm tính và giảm giá.
 
@@ -703,17 +715,14 @@ Dùng chung khách giả lập, kiểm tra và judge với tầng 3, ở quy mô
 
 Mỗi hội thoại được chấm 2 lớp:
 
-```
-Hội thoại + response API + database
-        │
-        ▼
-Lớp 1: kiểm tra xác định (code, không dùng LLM)  →  cờ lỗi, đạt/trượt, nguyên nhân trượt
-        │  kết quả lớp 1 đưa cho judge
-        ▼
-Lớp 2: LLM judge (Gemini, rubric v3)             →  điểm 1–5 cho 5 tiêu chí, kèm lý do
-        │
-        ▼
-calibrate: so điểm judge với mức trần suy từ lớp 1
+```mermaid
+flowchart TD
+    conv["Hội thoại + response API + database"] --> l1["Lớp 1: kiểm tra xác định<br/>code, không dùng LLM"]
+    l1 --> f1(["cờ lỗi, đạt/trượt, nguyên nhân trượt"])
+    l1 -- "kết quả lớp 1 đưa cho judge" --> l2["Lớp 2: LLM judge<br/>Gemini, rubric v3"]
+    l2 --> f2(["điểm 1–5 cho 5 tiêu chí, kèm lý do"])
+    l2 --> cal["calibrate: so điểm judge<br/>với mức trần suy từ lớp 1"]
+    f1 -. "mức trần" .-> cal
 ```
 
 Lớp 1 quyết định đạt hay trượt; lớp 2 chấm phần luật không đo được.
