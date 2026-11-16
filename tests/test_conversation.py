@@ -331,6 +331,12 @@ def test_show_order_form_not_in_same_turn_as_add_to_cart():
     cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
                                         'args': {'state': {'cart': [PHONE_IN_CART], 'messages': turn}}})
     assert 'order_form' not in cmd.update and 'Chưa mở form' in cmd.update['messages'][0].content
+    # Đang bán kèm, "lấy củ sạc rồi chốt đơn luôn": thêm món và mở form trong cùng lượt
+    accessory = [HumanMessage('lấy củ sạc rẻ nhất rồi chốt đơn luôn'), *turn[1:]]
+    cmd = tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
+                                        'args': {'state': {'cart': [PHONE_IN_CART, CHARGER], 'messages': accessory,
+                                                           'cross_sell': ['charger']}}})
+    assert cmd.update['order_form'] is True
     # Lượt sau khách xác nhận: mở form
     later = turn + [AIMessage('Anh/chị xác nhận đặt hàng không?'), HumanMessage('xác nhận'),
                     AIMessage('', tool_calls=[{'name': 'show_order_form', 'args': {}, 'id': 'c2'}])]
@@ -340,14 +346,18 @@ def test_show_order_form_not_in_same_turn_as_add_to_cart():
     assert cmd.update['order_form'] is True
 
 
-def test_show_order_form_waits_for_cross_sell():
-    # "Không cần sạc, xác nhận đặt hàng giúp mình" ở bước 1, 2: chưa mở form, mời ốp lưng, cường lực trước
-    def form(state):
+def test_show_order_form_waits_for_cross_sell_unless_customer_orders_now():
+    def form(state, text='không cần sạc đâu'):
+        state = {'stage': 'closing', 'messages': [HumanMessage(text)], **state}
         return tools.show_order_form.invoke({'type': 'tool_call', 'name': 'show_order_form', 'id': 'c1',
-                                             'args': {'state': {'stage': 'closing', **state}}}).update
+                                             'args': {'state': state}}).update
     for done in ([], ['charger']):
+        # Khách chỉ từ chối lời mời: chưa mở form, mời ốp lưng, cường lực trước
         upd = form({'cart': [PHONE_IN_CART], 'cross_sell': done})
-        assert 'order_form' not in upd and 'Chưa mở form: chưa xong bước bán kèm' in upd['messages'][0].content
+        assert 'order_form' not in upd and 'Chưa mở form: khách chưa nói đặt hàng' in upd['messages'][0].content
+        # Khách đòi đặt hàng luôn: mở form, bỏ qua phần bán kèm còn lại
+        assert form({'cart': [PHONE_IN_CART], 'cross_sell': done}, 'không cần, chốt đơn luôn')['order_form'] is True
+        assert 'order_form' not in form({'cart': [PHONE_IN_CART], 'cross_sell': done}, 'chưa chốt đâu')
     assert form({'cart': [PHONE_IN_CART], 'cross_sell': ['charger', 'accessories']})['order_form'] is True  # bước 3
     assert form({'cart': [PHONE_IN_CART, CASE], 'cross_sell': ['charger']})['order_form'] is True   # đã lấy ốp
     acc_only = {**CASE, 'name': 'Cáp', 'accessory_type': 'cable'}

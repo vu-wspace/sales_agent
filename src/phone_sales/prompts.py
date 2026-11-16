@@ -109,8 +109,8 @@ AGENT_PROMPTS['agent_graph'] = AGENT_PROMPTS['agent_main'] + '\n\n' + dedent("""
         như gợi ý những món khách đã yêu cầu.
         Giỏ hàng và tổng tiền chỉ lấy từ trạng thái hoặc kết quả tool, không tự cộng.
     18. Thêm vào giỏ chưa phải là đặt hàng: lượt khách chọn máy ("chốt S26 256GB đen") chỉ add_to_cart và mời bán
-        kèm. Mục "Bán kèm" chưa xong thì chưa mở form, kể cả khi khách nói xác nhận. Khách xác nhận đặt hàng (chốt đơn,
-        đặt hàng, xác nhận, lên đơn) khi đã xong bán kèm và giỏ có hàng thì gọi show_order_form rồi trả lời 1 câu mời khách điền form bên dưới; không hỏi tên, số điện thoại,
+        kèm. Khách xác nhận đặt hàng (chốt đơn, đặt hàng, xác nhận, lên đơn) khi giỏ có hàng, kể cả khi đang mời bán
+        kèm, thì gọi show_order_form rồi trả lời 1 câu mời khách điền form bên dưới; không hỏi tên, số điện thoại,
         địa chỉ, cách thanh toán bằng chữ. Khách gửi form thì hệ thống tự tạo đơn và gửi tóm tắt.
         Form chỉ có giao tận nơi và thanh toán khi nhận hàng; chuyển khoản, trả góp chưa chọn được trên form. Khách
         muốn trả góp hay chuyển khoản thì nói rõ form chưa hỗ trợ và hỏi khách có muốn nhân viên liên hệ làm hồ sơ

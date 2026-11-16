@@ -49,6 +49,32 @@ TOOL_STATUS = {
     'get_promotions': 'Đang xem khuyến mãi…',
 }
 THINKING_STATUS = 'Em đang cân nhắc…'
+# Khách không nhắn 15 phút: xóa cuộc trò chuyện khỏi RAM (giao diện cũng tự mở phiên mới sau 15 phút, index.html)
+SESSION_TTL_S = 15 * 60
+_last_seen: dict[str, float] = {}  # thread_id -> lúc khách tương tác gần nhất (time.monotonic)
+
+def _touch(thread_id: str) -> None:
+    _last_seen[thread_id] = time.monotonic()
+
+def expire_threads(agent, now: float | None = None) -> list[str]:
+    """Xóa các cuộc trò chuyện quá SESSION_TTL_S không có tương tác (InMemorySaver không tự xóa)."""
+    cutoff = (time.monotonic() if now is None else now) - SESSION_TTL_S
+    expired = [t for t, seen in list(_last_seen.items()) if seen < cutoff]
+    checkpointer = getattr(agent, 'checkpointer', None)
+    for thread_id in expired:
+        _last_seen.pop(thread_id, None)
+        if checkpointer is not None:
+            checkpointer.delete_thread(thread_id)
+    return expired
+
+async def _expire_loop(app: FastAPI):
+    while True:
+        await asyncio.sleep(60)
+        try:
+            if n := len(expire_threads(app.state.agent)):
+                log.info('Đã xóa %d cuộc trò chuyện quá %d phút không hoạt động', n, SESSION_TTL_S // 60)
+        except Exception as e:
+            log.error('Lỗi khi xóa cuộc trò chuyện quá hạn', exc_info=e)
 # Ghi lịch sử như lượt trả lời của agent; agent.py (create_agent) không có node track_reply
 AS_NODE = 'track_reply' if AGENT_IMPL == 'graph' else None
 
@@ -193,7 +219,9 @@ async def lifespan(app: FastAPI):
     build = build_graph if AGENT_IMPL == 'graph' else build_agent
     app.state.agent = build(checkpointer=InMemorySaver())
     log.info('Dùng agent: %s', AGENT_IMPL)
+    expiring = asyncio.create_task(_expire_loop(app))
     yield
+    expiring.cancel()
 
 app = FastAPI(title='Phone Sales Agent', version='0.1.0', lifespan=lifespan)
 
@@ -220,6 +248,7 @@ def _llm_failure(e: Exception) -> tuple[int, str]:
 def _start_turn(req: ChatRequest, request: Request):
     agent = request.app.state.agent
     thread_id = req.thread_id or str(uuid.uuid4())
+    _touch(thread_id)
     config = {'configurable': {'thread_id': thread_id}}
     # Agent trả về cả lịch sử của thread -> nhớ số message trước lượt này để chỉ lấy message mới
     n_before = len(agent.get_state(config).values.get('messages', []))
@@ -300,6 +329,7 @@ def order(req: OrderRequest, request: Request, background: BackgroundTasks):
     trả tóm tắt đơn lấy từ database + 1-2 câu cảm ơn do LLM viết, và ghi vào lịch sử hội thoại.
     Email xác nhận gửi sau khi đã trả kết quả (BackgroundTasks, mailer.send_order_email) nên khách không phải chờ."""
     agent = request.app.state.agent
+    _touch(req.thread_id)
     config = {'configurable': {'thread_id': req.thread_id}}
     cart = agent.get_state(config).values.get('cart') or []
     try:
@@ -330,7 +360,8 @@ def order(req: OrderRequest, request: Request, background: BackgroundTasks):
 def order_quote(req: QuoteRequest, request: Request):
     """Form đặt hàng hỏi giá trước khi gửi: tạm tính, giảm giá (mã khách nhập hoặc khuyến mãi tự động), tổng tiền.
     Tính từ giỏ hàng của thread trên server. Mã không dùng được thì 409 kèm lý do."""
-    cart = request.app.state.agent.get_state({'configurable': {'thread_id': req.thread_id}}).values.get('cart') or []
+    _touch(req.thread_id)
+    cart =request.app.state.agent.get_state({'configurable': {'thread_id': req.thread_id}}).values.get('cart') or []
     try:
         price = orders.quote(cart, req.promo_code)
     except (orders.OrderError, promotions.PromoError) as e:
@@ -349,10 +380,12 @@ def new_session(req: SessionRequest, request: Request):
     không thì chào như khách mới. Lời chào là template, không gọi LLM."""
     agent = request.app.state.agent
     if req.end_thread_id:
+        _last_seen.pop(req.end_thread_id, None)
         checkpointer = getattr(agent, 'checkpointer', None)
         if checkpointer is not None:
             checkpointer.delete_thread(req.end_thread_id)
     thread_id = str(uuid.uuid4())
+    _touch(thread_id)
     customer_id = pii.verify_customer_token(req.customer_token)
     profile = None
     if customer_id:
@@ -378,6 +411,7 @@ def cancel_order(req: CancelRequest, request: Request):
     """Khách bấm "Hủy đặt hàng" trên form: không tạo đơn, ghi vào lịch sử hội thoại câu trả lời cố định
     (không gọi LLM) và làm trống giỏ hàng để agent không mời chốt đơn / bán kèm tiếp cho giỏ đã hủy."""
     agent = request.app.state.agent
+    _touch(req.thread_id)
     config = {'configurable': {'thread_id': req.thread_id}}
     agent.update_state(config, {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(orders.CANCEL_MESSAGE)],
                                 'cart': [], 'order_form': False, 'cross_sell': None, 'wanted': None},

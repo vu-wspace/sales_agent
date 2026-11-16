@@ -436,13 +436,14 @@
       if (data.customer_token) saveToken(data.customer_token);
       add('Đã gửi thông tin đặt hàng', 'me');
       try {
-        addReceipt(data.order);
+        keepCard = addReceipt(data.order);
         add(data.thanks);
       } catch (ex) {
         console.error('Không dựng được thẻ xác nhận đơn', ex);
         log.querySelector('.receipt:last-child')?.remove();
         add(data.answer || 'Đơn hàng đã được tạo.');
       }
+      armReset(AFTER_ORDER_MS);  // 30 giây sau mở phiên mới, giữ lại thẻ xác nhận
     });
 
     // Hủy: không tạo đơn, máy chủ ghi vào lịch sử hội thoại câu xác nhận cố định và làm trống giỏ hàng
@@ -528,6 +529,7 @@
     card.append(head, info, items, ...subs, total, el('div', 'note', o.note));
     log.appendChild(card);
     log.scrollTop = log.scrollHeight;
+    return card;
   }
 
   // Mã khách quen (đã ký trên server) giữ trong trình duyệt: phiên chat sau chào lại theo tên.
@@ -541,10 +543,30 @@
 
   // Kết thúc cuộc trò chuyện cũ (server xóa lịch sử, giỏ hàng) và mở cuộc mới. Khách đã đặt hàng thì được chào lại
   // theo tên; máy chủ lỗi thì vẫn chào như khách mới, thread tạo ở lượt chat đầu tiên.
+  // Tự mở phiên mới: đặt hàng xong 30 giây (giữ thẻ xác nhận), hoặc khách không tương tác 15 phút.
+  // Server cũng xóa cuộc trò chuyện quá 15 phút (api.py SESSION_TTL_S) nên phải mở phiên mới trước khi nhắn tiếp
+  const IDLE_MS = 15 * 60 * 1000, AFTER_ORDER_MS = 30 * 1000;
+  let resetTimer = null, resetAt = Infinity, keepCard = null;
+  function armReset(ms) {
+    clearTimeout(resetTimer);
+    resetAt = Date.now() + ms;
+    // Đang chờ trả lời hoặc đang mở phiên: để lượt đó xong rồi tính lại
+    resetTimer = setTimeout(() => send.disabled ? armReset(ms) : greet(keepCard), ms);
+  }
+  // Khách gõ, bấm (cả khi đang điền form) là còn tương tác; đã quá hạn thì không gia hạn (lúc gửi sẽ mở phiên mới)
+  for (const type of ['input', 'click']) {
+    document.addEventListener(type, () => {
+      if (!send.disabled && Date.now() < resetAt) armReset(keepCard ? AFTER_ORDER_MS : IDLE_MS);
+    });
+  }
+
   let starting = null;
-  async function greet() {
+  async function greet(keep = null) {
     const ended = threadId;
-    log.replaceChildren();
+    log.replaceChildren(...(keep ? [keep] : []));
+    keepCard = null;
+    clearTimeout(resetTimer);
+    resetAt = Infinity;
     threadId = null;
     send.disabled = true;
     const pending = addPending();
@@ -565,6 +587,7 @@
       } finally {
         send.disabled = false;
         starting = null;
+        armReset(IDLE_MS);
       }
     })();
     await starting;
@@ -575,6 +598,9 @@
     const message = input.value.trim();
     if (!message) return;
     if (starting) await starting;  // chờ phiên mới có thread_id
+    // Tab chạy nền thì hẹn giờ có thể trễ: đã quá hạn thì mở phiên mới trước, không nhắn vào phiên server đã xóa
+    if (Date.now() >= resetAt) await greet(keepCard);
+    keepCard = null;  // khách nhắn tiếp sau khi đặt hàng: tính như hội thoại bình thường (15 phút)
     add(message, 'me');
     input.value = '';
     send.disabled = true;
@@ -612,13 +638,14 @@
     } finally {
       send.disabled = false;
       input.focus();
+      armReset(IDLE_MS);
     }
   });
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
   });
-  document.getElementById('reset').addEventListener('click', greet);
+  document.getElementById('reset').addEventListener('click', () => greet());
   greet();
 </script>
 </body>

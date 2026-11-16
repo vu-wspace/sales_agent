@@ -133,6 +133,8 @@ HANDOFF = (r'gặp nhân viên|người thật|nói chuyện với người|tư 
            r'(?=.{0,120}?(?<!\w)(?:bị lỗi|hỏng|không lên nguồn|không vào điện|sạc không vào|không sạc được|bị đơ|treo máy)(?!\w))')
 COMPARE = r'so sánh|khác gì|khác nhau|nên chọn|nên lấy cái nào|hơn không|với .+ thì sao'
 CLOSING = r'chốt|lấy máy|lấy cái|mua luôn|đặt hàng|đặt mua|thanh toán|giao cho|ship cho|lên đơn'
+# Khách muốn đặt hàng ngay (mở form, bỏ qua phần bán kèm còn lại). Hẹp hơn CLOSING: "lấy cái ốp" là chọn thêm món
+ORDER_NOW = r'chốt|đặt hàng|đặt luôn|lên đơn|xác nhận|thanh toán|mở form'
 # Phản đối cần xử lý theo chiến lược (OBJECTION_GUIDE). Khác OBJECTIONS ở trên (lo ngại cụ thể để trả lời thẳng).
 # So với nơi khác: không khớp "bên em" (chính cửa hàng)
 COMPETITOR = (r'bên (?:kia|khác|đó|ngoài)|chỗ khác|shop khác|cửa hàng khác|tiệm khác|nơi khác|ngoài tiệm|'
@@ -268,6 +270,11 @@ def added_to_cart_this_turn(messages: list[AnyMessage]) -> bool:
     # Cả khi add_to_cart nằm cùng 1 message với tool đang chạy (model gọi song song)
     return any(tc['name'] == 'add_to_cart' for m in _current_turn(messages) if isinstance(m, AIMessage)
                for tc in (m.tool_calls or []))
+
+def wants_order_now(messages: list[AnyMessage]) -> bool:
+    """Tin nhắn mới nhất của khách đòi đặt hàng ("chốt luôn", "đặt hàng luôn"), không phải "chưa chốt"."""
+    text = next((m.text for m in reversed(messages) if isinstance(m, HumanMessage)), '').lower()
+    return re.search(rf'(?<!không )(?<!chưa )(?<!\w)(?:{ORDER_NOW})(?!\w)', text) is not None
 
 def track_tool_results(messages: list[AnyMessage]) -> dict:
     """Nhu cầu suy ra từ tham số tool model đã gọi trong lượt hiện tại (ngân sách, hãng, dung lượng, màu)."""
@@ -581,23 +588,26 @@ def cross_sell_hint(state: dict) -> str | None:
                 f"genuine_only=True). {pick} {LIGHT_OFFER} Chỉ gợi ý củ sạc trong lượt này, chưa gợi ý ốp lưng, "
                 "cường lực; chưa gọi show_order_form. Trả lời theo mẫu:\n"
                 f"{added}\n\n{box} Nếu anh/chị cần thì bên em có {group}:\n{item}\n\n"
-                "Anh/chị không cần thì cũng không sao, cứ nói em một tiếng nha.")
+                "Anh/chị không cần thì cũng không sao, muốn đặt hàng luôn thì cứ nói em một tiếng nha.")
     if step == 'accessories':
         done = set(state.get('cross_sell') or [])
         first = 'charger' not in done  # máy đã kèm củ sạc: lượt chọn máy mời luôn ốp lưng, cường lực
         opening = (f"{added}\n\n" if first else
                    "[1 câu: đã thêm món khách chọn và tổng giỏ; khách không lấy gì thì bỏ câu này]\n\n")
         return (f"Bán kèm (bước {'1/2' if first else '2/3'}, ốp lưng, cường lực): "
-                + ('' if first else "khách chọn củ sạc trong tin nhắn thì add_to_cart món đó. ")
+                + ('' if first else "khách chọn củ sạc trong tin nhắn thì add_to_cart món đó. Tin nhắn này khách "
+                   "nói đặt hàng/chốt đơn luôn thì bỏ qua mục này: gọi show_order_form (sau add_to_cart nếu khách "
+                   "chọn món) và trả lời 1 câu mời khách điền form bên dưới, không mời ốp lưng, cường lực. ")
                 + f"Gọi find_accessories(phone='{name}', accessory_type='ốp lưng, cường lực', genuine_only=True), "
                 f"gợi ý 2-3 món. {LIGHT_OFFER} Món không ghi 'chính hãng' (vd miếng dán Belkin cho iPhone) thì ghi "
                 "đúng tên hãng trong ngoặc, không gọi là chính hãng; không nhắc lại củ sạc. Tool không có món nào thì "
-                "nói ngắn chưa có ốp lưng, cường lực cho máy này rồi hỏi khách xác nhận đặt hàng. Chưa gọi "
-                "show_order_form, kể cả khi khách nói xác nhận. Trả lời theo mẫu:\n" + opening
+                "nói ngắn chưa có ốp lưng, cường lực cho máy này rồi hỏi khách xác nhận đặt hàng. Trả lời theo "
+                "mẫu:\n" + opening
                 + f"Anh/chị muốn giữ {name} kỹ hơn thì có thể tham khảo thêm ốp lưng, cường lực bên em:\n{item}\n\n"
                 "Không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha.")
     return ("Bán kèm đã xong, không mời thêm phụ kiện. Khách chọn món nào trong tin nhắn thì add_to_cart món "
-            "đó. Khách đã nói xác nhận/chốt đơn trong tin nhắn này mà không thêm món mới thì gọi show_order_form. "
+            "đó. Khách đã nói xác nhận/chốt đơn trong tin nhắn này thì gọi show_order_form (sau add_to_cart nếu "
+            "khách chọn thêm món) và trả lời 1 câu mời khách điền form bên dưới. Không thì tóm tắt đơn. "
             "Giỏ hàng, tổng tiền lấy từ trạng thái hoặc kết quả tool. Trả lời theo mẫu:\n"
             "Đơn hàng của anh/chị:\n"
             "- [số lượng] x **[tên, dung lượng, màu]**: [giá]\n\n"

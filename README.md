@@ -147,6 +147,10 @@ Trong Docker, compose tự đặt `DATABASE_URL`, `QDRANT_URL`, `SMTP_HOST=mailp
 ```
 
 - Trang chat gọi khi mở trang và khi bấm "Cuộc trò chuyện mới". Lời chào là template, không gọi LLM.
+- Phiên tự kết thúc (trang chat gọi `/session` với `end_thread_id` của cuộc cũ):
+  - đặt hàng xong 30 giây: mở phiên mới, giữ thẻ xác nhận đơn trên màn hình; khách nhắn tiếp trong 30 giây thì tính như hội thoại bình thường;
+  - khách không gõ, bấm, gửi tin 15 phút (kể cả khi đang điền form thì gõ cũng tính là còn tương tác). Tab chạy nền làm hẹn giờ trễ thì lúc khách gửi tin, trang chat thấy đã quá hạn và mở phiên mới trước.
+- Server cũng tự dọn: mỗi phút xóa khỏi RAM các cuộc trò chuyện quá 15 phút không có request nào (`SESSION_TTL_S`, `expire_threads` trong `api.py`), kể cả khi khách đóng tab. Gọi API trực tiếp với `thread_id` đã bị xóa thì bắt đầu cuộc mới, lịch sử và giỏ hàng cũ không còn.
 - `customer_token` = mã khách + chữ ký HMAC (khóa sinh từ `PII_KEY`), trình duyệt giữ trong `localStorage`. Có chữ ký nên không đổi được sang mã khách khác để xem tên, đơn của người khác. Mã sai hoặc khách không còn đơn thì trả `null`, trang chat xóa mã đã lưu. Database lỗi thì vẫn mở phiên, chào như khách mới, giữ mã.
 - Khách quen: lời chào và hồ sơ (`orders.customer_profile`: tên, số đơn, đơn gần nhất gồm mã, ngày, tên món) được ghi vào thread mới (`customer` trong trạng thái hội thoại). Không có số điện thoại, email, địa chỉ trong hồ sơ vì hồ sơ được gửi cho LLM.
 - `thread_id` của `/chat` vẫn có thể bỏ trống như trước (gọi API trực tiếp không cần `/session`).
@@ -277,17 +281,17 @@ flowchart TD
     details -- "khách chọn" --> add
     name -- "đủ máy, dung lượng, màu" --> add["add_to_cart"]
     add --> cross["Bán kèm 3 lượt<br/>củ sạc → ốp lưng, cường lực → xác nhận"]
-    cross -- "khách xác nhận đặt hàng" --> form["show_order_form<br/>form với giỏ hàng, tổng tiền"]
+    cross -- "khách xác nhận đặt hàng<br/>(nói chốt luôn ở bước nào cũng mở form ngay)" --> form["show_order_form<br/>form với giỏ hàng, tổng tiền"]
     form -- "mở form, áp mã: POST /order/quote" --> quote(["tạm tính, giảm giá"])
     form -- "Hủy: POST /order/cancel" --> cancel(["không tạo đơn, giỏ làm trống"])
     form -- "Gửi: POST /order" --> tx["orders.create_order<br/>1 transaction"]
     tx -- "thiếu hàng, mã không dùng được" --> err(["409, không ghi gì"])
     tx --> reply["Tóm tắt đơn đọc lại từ database<br/>+ 1–2 câu cảm ơn do LLM viết"]
-    reply --> done(["ghi vào lịch sử, giỏ làm trống<br/>gửi form lần nữa: 409"])
+    reply --> done(["ghi vào lịch sử, giỏ làm trống<br/>gửi form lần nữa: 409<br/>30 giây sau trang chat mở phiên mới"])
     tx -. "BackgroundTasks, sau khi trả kết quả" .-> mail["Email xác nhận"]
 ```
 
-- `show_order_form` từ chối mở form trong lượt vừa thêm hàng vào giỏ và khi bán kèm chưa xong (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)).
+- `show_order_form` từ chối mở form ở lượt khách chọn máy, và khi bán kèm chưa xong mà khách chưa nói đặt hàng (xem [Bán thêm](#bán-thêm-up-sell-cross-sell)).
 - Trong transaction của `POST /order` (`orders.py`):
   - trừ tồn kho, thiếu hàng thì hủy cả đơn;
   - khách cũ nhận theo số điện thoại (tra bằng `phone_hash`; cập nhật tên, địa chỉ, email nếu có nhập), khách mới thì tạo `customers` (mã `KH…`);
@@ -400,7 +404,7 @@ Mỗi câu trả lời tối đa 1 gợi ý bán thêm.
 | 2. `accessories` | Khách lấy củ sạc hoặc không (máy đã kèm củ sạc thì đây là bước đầu, ngay lượt chọn máy) | Thêm củ sạc nếu khách chọn, mời 2–3 món ốp lưng, cường lực chính hãng (không nhắc lại củ sạc). Khách đã tự lấy ốp/cường lực thì bỏ qua bước này |
 | 3. `confirm` | Khách lấy phụ kiện hoặc không | Thêm món khách chọn, không mời thêm; xác nhận đơn: liệt kê giỏ hàng, tổng tiền, hỏi khách xác nhận đặt hàng. Khách đã nói xác nhận trong tin này thì mở form luôn |
 
-`show_order_form` không mở form khi đang ở bước 1 hoặc 2, kể cả khi khách nói "không cần, xác nhận đặt hàng" (model hay mở form luôn, bỏ qua bước mời ốp lưng, cường lực). Đặt hàng (`POST /order`) hoặc hủy (`POST /order/cancel`) thì `cross_sell` về rỗng, lần mua sau bán kèm lại từ bước 1.
+Mỗi lời mời đều cho khách đặt hàng luôn (bước 1: "muốn đặt hàng luôn thì cứ nói em một tiếng nha"; bước 2: "không cần thì anh/chị xác nhận đặt hàng giúp em luôn nha"). Khách nói "chốt", "đặt hàng", "xác nhận", "lên đơn" (`ORDER_NOW`, `wants_order_now` trong `conversation.py`; "chưa chốt", "không chốt" không tính) thì mở form ngay, bỏ qua phần bán kèm còn lại; "lấy củ sạc rẻ nhất rồi chốt đơn luôn" thì thêm củ sạc và mở form trong cùng lượt. Khách chỉ trả lời lời mời ("không cần sạc") thì `show_order_form` không mở form ở bước 1, 2, và bước 3 vẫn tóm tắt đơn rồi hỏi xác nhận. Lượt khách chọn máy ("chốt S26 256GB đen") là chọn hàng, chưa mời bán kèm lần nào, nên chưa mở form dù có chữ "chốt". Đặt hàng (`POST /order`) hoặc hủy (`POST /order/cancel`) thì `cross_sell` về rỗng, lần mua sau bán kèm lại từ bước 1.
 
 - **Hộp máy có gì:** iPhone đọc từ mục "Trong Hộp Sản Phẩm" (cáp USB-C, không có củ sạc). Web Samsung không có mục này, nên `IN_BOX_BY_BRAND` trong `tools.py` **giả định** Galaxy chỉ kèm cáp, không kèm củ sạc; cần kiểm tra lại với từng model. Máy không rõ thông tin thì bỏ qua bước 1.
 - **Chính hãng:** phụ kiện cùng hãng với máy; hàng Beats, mophie, Belkin, Anker do cửa hàng Apple bán không tính là chính hãng. `find_accessories` xếp còn hàng trước, chính hãng trước, củ sạc cắm tường trước sạc không dây hoặc sạc ô tô, rồi rẻ trước, và nhận nhiều loại một lúc (`'sạc, cáp'`: mỗi loại 2 món). `'củ sạc'` chỉ trả củ sạc cắm tường, bỏ sạc không dây, MagSafe, sạc ô tô; nếu hộp máy đã có cáp thì bỏ cả bộ củ sạc kèm cáp (khách không mua thêm cáp lần hai). Bước 1 dùng loại này khi hộp đã có cáp, nên Galaxy hiện chỉ có 1 củ sạc chính hãng để mời (60W). Danh sách 1 loại tách riêng mục "Hãng khác" sau hàng chính hãng. Bước bán kèm gọi `find_accessories(..., genuine_only=True)`: loại nào có hàng chính hãng thì tool bỏ hàng hãng khác của loại đó (chỉ dặn trong prompt thì model vẫn lấy củ sạc Apple, Belkin cho Galaxy cho đủ số món); loại không có hàng chính hãng thì giữ hàng hãng khác, vì Apple không bán miếng dán màn hình, cường lực cho iPhone chỉ có Belkin. Model nói đúng tên hãng, không gọi hàng Belkin là chính hãng.
@@ -657,7 +661,7 @@ Không gọi LLM, mạng, database hay máy chủ email thật (dùng model, d�
 - Tool (`test_tools.py`): khớp tên máy, lọc dung lượng và RAM, phụ kiện tương thích, củ sạc đủ công suất, máy rẻ hơn, giỏ hàng, mở form.
 - Trạng thái hội thoại (`test_conversation.py`, `test_objection.py`): nhu cầu, cảm xúc, chuyển nhân viên (có dấu, không dấu, câu mời không tính là đã chuyển), bán kèm, xử lý phản đối; graph chạy nhiều lượt với model giả.
 - Chống bịa số liệu, chuẩn hóa tin nhắn, dọn câu trả lời (`test_grounding.py`).
-- API (`test_api.py`): chat, stream, lỗi quota trả 429/502, đặt hàng từ giỏ trên server, hủy đơn, phiên khách quen, mã khách bị sửa thì từ chối, tin nhắn quá dài trả 422.
+- API (`test_api.py`): chat, stream, lỗi quota trả 429/502, đặt hàng từ giỏ trên server, hủy đơn, phiên khách quen, mã khách bị sửa thì từ chối, xóa cuộc trò chuyện quá 15 phút, tin nhắn quá dài trả 422.
 - Đơn hàng, khuyến mãi, email, PII (`test_orders.py`, `test_promotions.py`, `test_mailer.py`, `test_pii.py`): giới hạn lượt dùng mã, hạn khuyến mãi theo giờ Việt Nam, email escape dữ liệu khách, che số điện thoại và email trong log.
 - Chuỗi LLM dự phòng, cắt lịch sử, bộ câu hỏi eval, lớp kiểm tra của simulator (`test_llm.py`, `test_agent.py`, `test_history.py`, `test_eval_dataset.py`, `test_simulate.py`).
 - `requirements.txt` khớp `pyproject.toml` (`test_requirements.py`): thêm thư viện bằng `uv add` thì cập nhật file này.
@@ -894,7 +898,7 @@ Chỉ số là tỷ lệ đòn thành công theo nhóm, xếp theo mức nghiêm
 
 **Kiến trúc và vận hành**
 
-- Lịch sử hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker.
+- Lịch sử hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker. Cuộc trò chuyện quá 15 phút không hoạt động bị xóa, nên khách quay lại sau đó phải chat lại từ đầu (giỏ hàng chưa đặt cũng mất).
 - API chưa có xác thực và giới hạn request.
 - Hai request `/order` của cùng một cuộc chat gửi gần như cùng lúc (bấm gửi 2 lần) có thể tạo 2 đơn, vì cả hai đọc giỏ hàng trước khi giỏ được làm trống.
 - Email xác nhận gửi bằng `BackgroundTasks` trong tiến trình API: server khởi động lại đúng lúc đang gửi thì mất email, đơn kẹt ở `email_status = 'pending'`, không tự gửi lại. Làm thật nên dùng outbox (ghi yêu cầu gửi trong cùng transaction tạo đơn, worker riêng gửi và thử lại) hoặc hàng đợi (Celery, ARQ).
@@ -904,8 +908,7 @@ Chỉ số là tỷ lệ đòn thành công theo nhóm, xếp theo mức nghiêm
 
 - Form đặt hàng chỉ hỗ trợ giao tận nơi và thanh toán khi nhận hàng (chưa có trả góp, chuyển khoản, nhận tại cửa hàng).
 - Chưa có trang quản lý đơn, đơn chỉ nằm trong database; chatbot không có công cụ tra trạng thái giao hàng, khách hỏi đơn tới đâu thì chỉ chuyển được nhân viên.
-- Khách quen nhận ra theo trình duyệt (`localStorage`), không có đăng nhập: máy dùng chung thì người sau thấy tên và món đơn gần nhất của người trước; xóa dữ liệu trang hoặc đổi trình duyệt thì thành khách mới. Đóng tab không gọi `/session` nên lịch sử cuộc cũ vẫn nằm trong RAM tới khi restart.
-- Shop không có dữ liệu hotline, địa chỉ chi nhánh: chống bịa chỉ bằng prompt, model vẫn có thể bịa hoặc khuyên khách "gọi hotline".
+- Khách quen nhận ra theo trình duyệt (`localStorage`), không có đăng nhập: máy dùng chung thì người sau thấy tên và món đơn gần nhất của người trước; xóa dữ liệu trang hoặc đổi trình duyệt thì thành khách mới.- Shop không có dữ liệu hotline, địa chỉ chi nhánh: chống bịa chỉ bằng prompt, model vẫn có thể bịa hoặc khuyên khách "gọi hotline".
 
 **Dữ liệu**
 

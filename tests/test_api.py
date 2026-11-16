@@ -433,6 +433,19 @@ def session_agent(monkeypatch):
     return agent
 
 
+def test_idle_threads_expire_after_ttl(session_agent, monkeypatch):
+    monkeypatch.setattr(api, '_last_seen', {})
+    client = TestClient(api.app)
+    client.post('/chat', json={'message': 'chào em', 'thread_id': 'idle'})
+    client.post('/chat', json={'message': 'chào em', 'thread_id': 'active'})
+    api._last_seen['idle'] -= api.SESSION_TTL_S + 1
+    assert api.expire_threads(session_agent) == ['idle']
+    assert session_agent.checkpointer.deleted == ['idle'] and list(api._last_seen) == ['active']
+    # Khách tự mở phiên mới: thread cũ thôi theo dõi, thread mới bắt đầu tính giờ
+    new = client.post('/session', json={'end_thread_id': 'active'}).json()['thread_id']
+    assert list(api._last_seen) == [new]
+
+
 def test_new_session_for_new_customer_greets_normally_and_ends_old_thread(session_agent):
     data = TestClient(api.app).post('/session', json={'end_thread_id': 'old'}).json()
     assert data['greeting'] == api.GREETING and data['returning'] is False and data['customer_token'] is None

@@ -8,7 +8,8 @@ from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
 from phone_sales import promotions
-from phone_sales.conversation import _current_turn, added_to_cart_this_turn, cart_update, cross_sell_step
+from phone_sales.conversation import (_current_turn, added_to_cart_this_turn, cart_update, cross_sell_step,
+                                    wants_order_now)
 from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
 from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_sales.textnorm import strip_accents
@@ -627,14 +628,17 @@ def show_order_form(state: Annotated[dict, InjectedState],
     cart = state.get('cart') or []
     if not cart:
         return _cart_reply(tool_call_id, 'Giỏ hàng đang trống, chưa mở form đặt hàng. Hỏi khách muốn mua sản phẩm nào.')
-    if added_to_cart_this_turn(state.get('messages') or []):
-        # "Chốt S26 256GB đen" là chọn máy, chưa phải xác nhận đơn: bán kèm, hỏi chốt đơn trước, form để lượt sau
+    messages = state.get('messages') or []
+    order_now = wants_order_now(messages)
+    # "Chốt S26 256GB đen" là chọn máy (chưa mời bán kèm lần nào), chưa phải xác nhận đơn: form để lượt sau.
+    # Đang bán kèm mà khách "lấy củ sạc rồi chốt đơn luôn": thêm món rồi mở form luôn
+    if added_to_cart_this_turn(messages) and not (order_now and state.get('cross_sell')):
         return _cart_reply(tool_call_id, 'Chưa mở form: khách vừa thêm hàng vào giỏ ở lượt này. Làm theo mục "Bán kèm" '
                            'trong trạng thái (nếu có) rồi hỏi khách có xác nhận đặt hàng không; khách xác nhận ở '
                            'lượt sau thì mới gọi show_order_form.')
-    if cross_sell_step(state) in ('charger', 'accessories'):
-        # "Không cần sạc, xác nhận đặt hàng" cùng 1 tin: model hay mở form luôn, bỏ qua bước mời ốp lưng, cường lực
-        return _cart_reply(tool_call_id, 'Chưa mở form: chưa xong bước bán kèm. Làm theo mục "Bán kèm" trong trạng '
+    if cross_sell_step(state) in ('charger', 'accessories') and not order_now:
+        # Khách chỉ trả lời lời mời ("không cần sạc"), chưa đòi đặt hàng: mời tiếp ốp lưng, cường lực
+        return _cart_reply(tool_call_id, 'Chưa mở form: khách chưa nói đặt hàng. Làm theo mục "Bán kèm" trong trạng '
                            'thái hội thoại (mời ốp lưng, cường lực), rồi hỏi khách lấy thêm hay xác nhận đặt hàng.')
     total = sum(i['price'] * i['quantity'] for i in cart)
     # Giao diện đọc order_form trong state để hiện form; khách gửi form thì api.py (POST /order) tạo đơn
