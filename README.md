@@ -79,6 +79,7 @@ docker compose logs -f api                                # xem log
 docker compose up -d --build api                          # build lại sau khi sửa code hoặc chính sách
 docker compose run --rm db-seed                           # nạp lại dữ liệu sản phẩm (giữ đơn hàng, không mất volume)
 docker compose exec api python -m phone_sales.vector_db   # nạp lại chính sách
+docker exec -it phone_db psql -U postgres -d phone        # mở psql vào database phone (thoát: \q)
 docker compose down                                       # dừng, giữ dữ liệu
 docker compose down -v                                    # dừng và xóa dữ liệu
 docker builder prune                                      # xóa build cache cũ (mỗi lần build lại tích thêm vài GB)
@@ -99,7 +100,7 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 |---|---|---|
 | `ROUTER9_BASE_URL` | `http://localhost:20128/v1` | 9Router, LLM chính (API kiểu OpenAI, chạy trên máy) |
 | `ROUTER9_API_KEY` | (bắt buộc) | Key tạo trong 9Router |
-| `ROUTER9_MODEL` | `super_duper_free_combo` | Tên model hoặc combo trên 9Router |
+| `ROUTER9_MODEL` | `agy/gemini-3.8-flash-medium` | Tên model hoặc combo trên 9Router |
 | `OPENROUTER_API_KEY` | (bắt buộc) | LLM dự phòng ([openrouter.ai](https://openrouter.ai/keys)) |
 | `NVIDIA_API_KEY` | (bắt buộc) | LLM dự phòng ([build.nvidia.com](https://build.nvidia.com)) |
 | `GOOGLE_API_KEY` | (bắt buộc) | Gemini: LLM dự phòng và judge của eval ([AI Studio](https://aistudio.google.com/apikey)) |
@@ -518,7 +519,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 | Thứ tự | Model |
 |---|---|
-| Chính | 9Router (`ROUTER9_MODEL`, mặc định combo `super_duper_free_combo`) |
+| Chính | 9Router (`ROUTER9_MODEL`, mặc định `agy/gemini-3.8-flash-medium`) |
 | Dự phòng 1 | OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free` |
 | Dự phòng 2 | NVIDIA `nvidia/nemotron-3.5-super-vl-120b-a12b` (bật thinking) |
 | Dự phòng 3 | `gemini-3.1-flash-lite` |
