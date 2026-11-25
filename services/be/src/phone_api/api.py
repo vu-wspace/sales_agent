@@ -141,8 +141,31 @@ class PolicyOut(BaseModel):
     slug: str
     content_md: str
     prompt: str | None = None
+    version: int | None = None
     updated_at: datetime | None = None
-    synced: bool | None = None   # PUT/DELETE: đã cập nhật sang agent chưa (False: agent tắt, sync sau sẽ đẩy bù)
+    synced: bool | None = None   # xuất bản/xóa: đã cập nhật sang agent chưa (False: agent tắt, sync sau sẽ đẩy bù)
+
+
+class DraftOut(BaseModel):
+    slug: str
+    content_md: str
+    prompt: str | None = None
+    updated_at: datetime | None = None
+    check_result: dict | None = None  # kết quả kiểm tra gần nhất (None: chưa kiểm hoặc đã sửa sau khi kiểm)
+
+
+class CheckIn(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    must_contain: list[list[str]] = []   # mỗi nhóm: chỉ cần 1 cách viết xuất hiện, vd [["30 ngày"], ["7", "bảy"]]
+
+
+class PublishIn(BaseModel):
+    by: str | None = Field(default=None, max_length=100)     # người xuất bản (ghi vào lịch sử)
+    note: str | None = Field(default=None, max_length=500)   # lý do sửa
+
+
+class RollbackIn(PublishIn):
+    version: int = Field(ge=1)
 
 
 async def _policy_sync_loop(app: FastAPI):
@@ -347,6 +370,8 @@ def cancel_order(req: CancelRequest, request: Request):
 
 
 # ---------------------------------------------------------------- quản trị chính sách
+# Sửa nháp -> kiểm tra (câu hỏi mẫu) -> xuất bản (thêm version vào lịch sử) -> đẩy sang agent. Khách chỉ thấy bản đã
+# xuất bản. Quay lại bản cũ: rollback (thành version mới, không kiểm tra lại).
 
 def require_admin(request: Request) -> None:
     if not ADMIN_API_KEY:
@@ -358,57 +383,114 @@ def require_admin(request: Request) -> None:
 
 admin = [Depends(require_admin)]
 DB_DOWN = 'Chưa đọc/ghi được database chính sách, thử lại sau.'
+SlugPath = Path(pattern=SLUG)
 
 
-@app.get('/admin/policies', response_model=list[PolicyOut], dependencies=admin)
-def admin_list_policies():
+def _db(fn, *args):
+    """Gọi phone_api.policies: lỗi database -> 503, PolicyError (sai trạng thái) -> 409."""
     try:
-        return policies.list_all()
+        return fn(*args)
+    except policies.PolicyError as e:
+        raise HTTPException(409, str(e))
     except psycopg.Error as e:
-        log.error('Lỗi đọc bảng policies', exc_info=e)
+        log.error('Lỗi database chính sách', exc_info=e)
         raise HTTPException(503, DB_DOWN)
 
 
-@app.get('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
-def admin_get_policy(slug: str = Path(pattern=SLUG)):
-    try:
-        doc = policies.get(slug)
-    except psycopg.Error as e:
-        log.error('Lỗi đọc bảng policies', exc_info=e)
-        raise HTTPException(503, DB_DOWN)
+def _found(doc, what: str):
     if not doc:
-        raise HTTPException(404, f'Không có chính sách {slug}')
+        raise HTTPException(404, f'Không có {what}')
     return doc
 
 
-@app.put('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
-def admin_put_policy(req: PolicyIn, request: Request, slug: str = Path(pattern=SLUG)):
-    """Thêm/sửa 1 tài liệu chính sách (slug dạng 'ten-tai-lieu.md'): lưu database rồi đẩy sang agent để embed lại.
-    Agent tắt hoặc lỗi thì vẫn lưu, synced=false; vòng đồng bộ của be sẽ đẩy bù."""
-    try:
-        doc = policies.save(slug, req.content_md, req.prompt)
-    except psycopg.Error as e:
-        log.error('Lỗi ghi bảng policies', exc_info=e)
-        raise HTTPException(503, DB_DOWN)
+def _push(request: Request, doc: dict) -> dict:
     try:
         policies.push(request.app.state.agent_http, doc)
-        synced = True
+        return {**doc, 'synced': True}
     except httpx.HTTPError as e:
-        log.warning('Đã lưu chính sách %s nhưng chưa đẩy được sang agent (%s)', slug, type(e).__name__)
-        synced = False
-    return {**doc, 'synced': synced}
+        log.warning('Đã xuất bản %s nhưng chưa đẩy được sang agent (%s), sync sau sẽ đẩy bù', doc['slug'], type(e).__name__)
+        return {**doc, 'synced': False}
+
+
+@app.get('/admin/policies', dependencies=admin)
+def admin_list_policies():
+    """Mọi tài liệu: version đang dùng, có nháp không, nháp đã đạt kiểm tra chưa."""
+    return _db(policies.overview)
+
+
+@app.get('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
+def admin_get_policy(slug: str = SlugPath):
+    return _found(_db(policies.get, slug), f'chính sách {slug}')
+
+
+@app.get('/admin/policies/{slug}/draft', response_model=DraftOut, dependencies=admin)
+def admin_get_draft(slug: str = SlugPath):
+    return _found(_db(policies.get_draft, slug), f'bản nháp {slug}')
+
+
+@app.put('/admin/policies/{slug}/draft', response_model=DraftOut, dependencies=admin)
+def admin_save_draft(req: PolicyIn, slug: str = SlugPath):
+    """Lưu bản nháp (thêm tài liệu mới cũng bắt đầu từ đây). Chưa đổi gì với khách; sửa nháp thì phải kiểm lại."""
+    return _db(policies.save_draft, slug, req.content_md, req.prompt)
+
+
+@app.delete('/admin/policies/{slug}/draft', status_code=204, dependencies=admin)
+def admin_delete_draft(slug: str = SlugPath):
+    _found(_db(policies.delete_draft, slug), f'bản nháp {slug}')
+
+
+@app.get('/admin/policies/{slug}/checks', response_model=list[CheckIn], dependencies=admin)
+def admin_get_checks(slug: str = SlugPath):
+    return _db(policies.get_checks, slug)
+
+
+@app.put('/admin/policies/{slug}/checks', response_model=list[CheckIn], dependencies=admin)
+def admin_set_checks(checks: list[CheckIn], slug: str = SlugPath):
+    """Thay bộ câu hỏi kiểm tra. Đổi nội dung chính sách (vd 30 ngày -> 15 ngày) thì sửa must_contain ở đây trước."""
+    if len(checks) > 100:
+        raise HTTPException(422, 'Tối đa 100 câu hỏi kiểm tra mỗi tài liệu')
+    return _db(policies.set_checks, slug, [c.model_dump() for c in checks])
+
+
+@app.post('/admin/policies/{slug}/draft/check', dependencies=admin)
+def admin_check_draft(request: Request, slug: str = SlugPath):
+    """Agent thử bản nháp với câu hỏi mẫu (không ghi vào Qdrant, không gọi LLM): mỗi câu, search_policy có lấy ra
+    tài liệu này không và đoạn lấy ra có đủ must_contain không. {passed, results: [{question, retrieved, missing, passed}]}"""
+    try:
+        return _db(policies.check_draft, request.app.state.agent_http, slug)
+    except httpx.HTTPError as e:
+        raise HTTPException(503, f'Agent chưa kiểm tra được bản nháp ({type(e).__name__})')
+
+
+@app.post('/admin/policies/{slug}/publish', response_model=PolicyOut, dependencies=admin)
+def admin_publish(request: Request, req: PublishIn | None = None, slug: str = SlugPath):
+    """Xuất bản bản nháp đã đạt kiểm tra: thành version mới, ghi lịch sử, đẩy sang agent."""
+    req = req or PublishIn()
+    return _push(request, _db(policies.publish, slug, req.by, req.note))
+
+
+@app.get('/admin/policies/{slug}/versions', dependencies=admin)
+def admin_versions(slug: str = SlugPath):
+    """Lịch sử xuất bản (mới nhất trước): version, người, lý do, lúc xuất bản."""
+    return _db(policies.versions, slug)
+
+
+@app.get('/admin/policies/{slug}/versions/{version}', dependencies=admin)
+def admin_get_version(version: int, slug: str = SlugPath):
+    return _found(_db(policies.get_version, slug, version), f'{slug} version {version}')
+
+
+@app.post('/admin/policies/{slug}/rollback', response_model=PolicyOut, dependencies=admin)
+def admin_rollback(req: RollbackIn, request: Request, slug: str = SlugPath):
+    """Quay lại 1 version cũ ngay (thành version mới, không kiểm tra lại): dùng khi bản vừa xuất bản bị lỗi."""
+    return _push(request, _db(policies.rollback, slug, req.version, req.by, req.note))
 
 
 @app.delete('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
-def admin_delete_policy(request: Request, slug: str = Path(pattern=SLUG)):
-    try:
-        doc = policies.get(slug)
-        if not doc:
-            raise HTTPException(404, f'Không có chính sách {slug}')
-        policies.delete(slug)
-    except psycopg.Error as e:
-        log.error('Lỗi ghi bảng policies', exc_info=e)
-        raise HTTPException(503, DB_DOWN)
+def admin_delete_policy(request: Request, slug: str = SlugPath):
+    """Gỡ tài liệu khỏi agent (khách không còn thấy). Lịch sử và câu hỏi kiểm tra giữ lại."""
+    doc = _found(_db(policies.get, slug), f'chính sách {slug}')
+    _db(policies.delete, slug)
     try:
         request.app.state.agent_http.delete(f'/policies/{slug}').raise_for_status()
         synced = True
@@ -422,9 +504,6 @@ def admin_delete_policy(request: Request, slug: str = Path(pattern=SLUG)):
 def admin_sync_policies(request: Request):
     """Đồng bộ ngay (không chờ vòng POLICY_SYNC_S): {pushed: [slug], removed: [slug]}."""
     try:
-        return policies.sync(request.app.state.agent_http)
+        return _db(policies.sync, request.app.state.agent_http)
     except httpx.HTTPError as e:
         raise HTTPException(503, f'Chưa đồng bộ được sang agent ({type(e).__name__})')
-    except psycopg.Error as e:
-        log.error('Lỗi đọc bảng policies', exc_info=e)
-        raise HTTPException(503, DB_DOWN)

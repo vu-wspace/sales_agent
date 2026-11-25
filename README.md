@@ -174,6 +174,7 @@ Cổng 8001. be là một client của API này; hệ thống khác tích hợp 
 | `GET` | `/policies` | `{slug: hash}` các tài liệu chính sách đang có |
 | `PUT` | `/policies/{slug}` | `{content_md, prompt}`: chunk + embed 1 tài liệu, thay chunk cũ của nó |
 | `DELETE` | `/policies/{slug}` | Xóa chunk của 1 tài liệu |
+| `POST` | `/policies/{slug}/check` | `{content_md, questions}`: thử bản nháp với câu hỏi mẫu, không ghi Qdrant |
 | `GET` | `/health` | Trạng thái Qdrant và số đoạn chính sách (không cần key) |
 
 Không có endpoint ghi state tùy ý: giá trong giỏ được dùng để tạo đơn, nên giỏ chỉ đổi qua tool của agent (`add_to_cart`, `remove_from_cart`) và các sự kiện cố định ở trên.
@@ -565,32 +566,60 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 ```mermaid
 flowchart LR
-    admin(["Quản trị"]) -- "PUT /admin/policies/{slug}" --> be["be"] -- "lưu" --> pg[("Postgres<br/>bảng policies")]
-    be -- "PUT /policies/{slug}" --> agent["agent"] -- "chunk + embed,<br/>thay chunk cũ của slug" --> qdrant[("Qdrant")]
+    admin(["Quản trị"]) -- "1. PUT .../draft" --> draft[("policy_drafts")]
+    admin -- "2. POST .../draft/check" --> be["be"] -- "thử bản nháp<br/>(không ghi Qdrant)" --> agent["agent"]
+    admin -- "3. POST .../publish<br/>(chỉ khi đạt)" --> be -- "version mới" --> pg[("policies +<br/>policy_versions")]
+    be -- "PUT /policies/{slug}" --> agent -- "chunk + embed,<br/>thay chunk cũ của slug" --> qdrant[("Qdrant")]
     be -. "mỗi 5 phút: GET /policies (hash),<br/>đẩy bù / xóa phần lệch" .-> agent
 ```
 
-- Lần đầu be chạy, bảng `policies` rỗng thì nạp 5 tài liệu mẫu từ `data_schema/policies/*.md` và prompt trong `data_schema/policies/prompts.json`. Sau đó sửa qua API, không sửa file (file chỉ còn là dữ liệu mẫu cho lần đầu và cho eval).
-- Endpoint của be, cần `ADMIN_API_KEY` (để trống thì các endpoint này trả `503`):
+Bản gốc nằm ở be (Postgres, `data_schema/policies.sql`); khách chỉ thấy bản đã xuất bản:
+
+| Bảng | Nội dung |
+|---|---|
+| `policies` | Bản đang dùng: `slug`, `content_md`, `prompt`, `version` |
+| `policy_drafts` | Bản nháp (tối đa 1 mỗi tài liệu) + kết quả kiểm tra gần nhất và hash bản nháp lúc kiểm tra |
+| `policy_versions` | Lịch sử: mỗi lần xuất bản hoặc quay lại thêm 1 dòng (nội dung, prompt, người, lý do, thời điểm), không sửa/xóa |
+| `policy_checks` | Câu hỏi kiểm tra của từng tài liệu: `question`, `must_contain` |
+
+Lần đầu be chạy, bảng rỗng thì nạp 5 tài liệu mẫu (`data_schema/policies/*.md`), prompt (`prompts.json`) và 19 câu hỏi kiểm tra (`checks.json`, lấy từ các câu policy của `evals/dataset.jsonl`) thành version 1. Sau đó sửa qua API, không sửa file.
+
+**Kiểm tra bản nháp** (agent, `vector_db.check_policy`): embed bản nháp trong bộ nhớ, trộn với các tài liệu khác đang có trong Qdrant, rồi với mỗi câu hỏi chạy đúng bộ lọc của `search_policy` (top 3, ngưỡng 0,25, margin 0,08). Một câu đạt khi kết quả có đoạn của tài liệu này và các đoạn đó chứa đủ `must_contain` (mỗi nhóm cần 1 cách viết). Không gọi LLM, không ghi Qdrant, vài giây mỗi tài liệu.
+
+- Chỉ tính **đoạn chính sách**, không tính prompt riêng: sửa nội dung 30 → 15 ngày mà prompt còn ghi "30 ngày" thì vẫn báo thiếu, phải sửa cả câu hỏi kiểm tra (và prompt) cho khớp chính sách mới.
+- Xuất bản chỉ được khi lần kiểm tra gần nhất **đạt** và chạy trên **đúng nội dung nháp hiện tại** (so hash): sửa nháp hay sửa câu hỏi kiểm tra sau khi kiểm thì phải kiểm lại.
+- Tài liệu mới phải có ít nhất 1 câu hỏi kiểm tra mới kiểm được.
+- **Quay lại bản cũ** (`rollback`) xuất bản lại nội dung của version đó thành version mới, không kiểm tra lại (bản cũ đã từng được xuất bản): dùng khi bản vừa xuất bản bị lỗi, cần gỡ ngay.
+
+Endpoint của be, cần `ADMIN_API_KEY` (để trống thì các endpoint này trả `503`):
 
 | Method | Đường dẫn | Mô tả |
 |---|---|---|
-| `GET` | `/admin/policies` | Danh sách tài liệu (nội dung, prompt, lần sửa) |
-| `GET` | `/admin/policies/{slug}` | 1 tài liệu |
-| `PUT` | `/admin/policies/{slug}` | Thêm/sửa `{content_md, prompt}`: lưu database rồi đẩy sang agent. `synced: false` là agent đang tắt, vòng đồng bộ sẽ đẩy bù |
-| `DELETE` | `/admin/policies/{slug}` | Xóa ở database và agent |
+| `GET` | `/admin/policies` | Mọi tài liệu: version đang dùng, có nháp không, nháp đã đạt kiểm tra chưa |
+| `GET` | `/admin/policies/{slug}` | Bản đang dùng |
+| `GET`, `PUT`, `DELETE` | `/admin/policies/{slug}/draft` | Bản nháp `{content_md, prompt}`; thêm tài liệu mới cũng bắt đầu từ đây |
+| `GET`, `PUT` | `/admin/policies/{slug}/checks` | Câu hỏi kiểm tra `[{question, must_contain}]` (thay cả bộ) |
+| `POST` | `/admin/policies/{slug}/draft/check` | Kiểm tra bản nháp: `{passed, results: [{question, retrieved, missing, passed}]}` |
+| `POST` | `/admin/policies/{slug}/publish` | `{by, note}` (không bắt buộc): xuất bản nháp đã đạt thành version mới, đẩy sang agent. `synced: false` là agent đang tắt, vòng đồng bộ sẽ đẩy bù |
+| `GET` | `/admin/policies/{slug}/versions` | Lịch sử: version, người, lý do, thời điểm (mới nhất trước) |
+| `GET` | `/admin/policies/{slug}/versions/{version}` | Nội dung 1 version cũ |
+| `POST` | `/admin/policies/{slug}/rollback` | `{version, by, note}`: quay lại version cũ ngay |
+| `DELETE` | `/admin/policies/{slug}` | Gỡ khỏi agent (khách không còn thấy); lịch sử, câu hỏi kiểm tra giữ lại |
 | `POST` | `/admin/policies/sync` | Đồng bộ ngay: `{pushed: [...], removed: [...]}` |
 
 ```bash
-# Sửa prompt của chính sách giao hàng (slug = tên tài liệu dạng chu-thuong-gach-ngang.md)
-curl -X PUT localhost:8002/admin/policies/giao-hang.md -H "Authorization: Bearer $ADMIN_API_KEY" \
-     -H 'Content-Type: application/json' -d @giao-hang.json      # {"content_md": "# Giao hàng\n...", "prompt": "..."}
+A="Authorization: Bearer $ADMIN_API_KEY"; J='Content-Type: application/json'
+curl -X PUT  localhost:8002/admin/policies/doi-tra.md/draft -H "$A" -H "$J" -d @doi-tra.json   # {"content_md": "...", "prompt": "..."}
+curl -X POST localhost:8002/admin/policies/doi-tra.md/draft/check -H "$A"                      # xem câu nào không đạt, thiếu gì
+curl -X POST localhost:8002/admin/policies/doi-tra.md/publish -H "$A" -H "$J" -d '{"by": "Lan", "note": "đổi 30 -> 15 ngày"}'
+curl -X POST localhost:8002/admin/policies/doi-tra.md/rollback -H "$A" -H "$J" -d '{"version": 1, "by": "Lan"}'
 ```
 
 - `content_md` là markdown: `#` tiêu đề, `##`/`###` mục (tách chunk theo heading), tối đa 100.000 ký tự; `prompt` tối đa 4.000 ký tự, nói phạm vi, ý bắt buộc, điều không được nói, khi nào chuyển nhân viên.
-- Đồng bộ dựa trên hash (nội dung + prompt) mà agent lưu cùng chunk: be chỉ đẩy tài liệu lệch hash, nên agent khởi động lại hay volume Qdrant bị xóa thì tự được lấp lại, tài liệu không đổi thì không embed lại.
-- Agent embed trước rồi mới xóa chunk cũ của tài liệu đó: embed lỗi thì bản cũ vẫn còn, các tài liệu khác không bị đụng tới.
-- Agent dùng cho hệ thống khác cũng nhận chính sách qua `PUT /policies/{slug}`, `DELETE /policies/{slug}`, `GET /policies` ([API của agent](#api-của-agent)).
+- Đồng bộ sang agent dựa trên hash (nội dung + prompt) agent lưu cùng chunk: be chỉ đẩy tài liệu lệch hash, nên agent khởi động lại hay volume Qdrant bị xóa thì tự được lấp lại; tài liệu không đổi thì không embed lại. Agent embed trước rồi mới xóa chunk cũ của tài liệu đó: embed lỗi thì bản cũ vẫn còn.
+- Dữ liệu mẫu hiện có 2 câu kiểm tra **không đạt** ngay với nội dung đang dùng, vì đoạn `search_policy` lấy ra không chứa ý cần có (bot đang trả lời đúng nhờ prompt nhắc): "root máy còn bảo hành không" (`bao-hanh-samsung.md`, thiếu "Knox") và "đặt online có tốn tiền ship không" (`giao-hang.md`, thiếu "miễn phí"). Muốn xuất bản 2 tài liệu này thì thêm mục hỏi/đáp trả lời thẳng 2 câu đó vào nội dung (khuyến nghị), hoặc sửa `must_contain` của 2 câu.
+- Chưa có tài khoản quản trị riêng: 1 `ADMIN_API_KEY` chung, người sửa tự ghi `by`. Chưa có giao diện quản trị, mới có API.
+- Agent dùng cho hệ thống khác cũng nhận chính sách qua `PUT /policies/{slug}`, `DELETE /policies/{slug}`, `GET /policies`, `POST /policies/{slug}/check` ([API của agent](#api-của-agent)).
 
 ### Chuỗi LLM dự phòng
 
@@ -651,7 +680,7 @@ Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_sche
 |---|---|
 | Sản phẩm | `cd data_schema && python scrape_phone.py --refresh`, rồi `docker compose run --rm db-seed` |
 | Phân loại phụ kiện (sau khi sửa `accessory_type`) | `cd data_schema && python scrape_phone.py --from-json` (không tải lại trang, giữ nguyên giá), rồi `docker compose run --rm db-seed` |
-| Chính sách | `PUT /admin/policies/{slug}` ở be ([Quản lý chính sách](#quản-lý-chính-sách)); agent embed lại ngay, không cần build lại |
+| Chính sách | Sửa nháp, kiểm tra, xuất bản qua `/admin/policies` ở be ([Quản lý chính sách](#quản-lý-chính-sách)); agent embed lại ngay, không cần build lại |
 
 ## Cấu trúc thư mục
 
@@ -660,8 +689,8 @@ sales_agent/
 ├── data_schema/
 │   ├── phone.sql, orders.sql, promotions_sample.sql, scrape_phone.py
 │   ├── output/                 # Dữ liệu đã cào và file seed
-│   ├── policies.sql            # Bảng policies (bản gốc chính sách, be quản lý)
-│   └── policies/               # Dữ liệu mẫu: chính sách (.md) + prompt riêng (prompts.json), be nạp khi bảng rỗng
+│   ├── policies.sql            # Bảng chính sách: bản đang dùng, nháp, lịch sử, câu hỏi kiểm tra (be quản lý)
+│   └── policies/               # Dữ liệu mẫu: chính sách (.md), prompt (prompts.json), câu hỏi kiểm tra (checks.json)
 ├── packages/common/src/phone_common/   # Dùng chung cho agent và be
 │   ├── __init__.py             # Nạp .env, kho chứng chỉ hệ điều hành, sửa lỗi DLL torch trên Windows
 │   ├── config.py               # Cấu hình, ngưỡng RAG
@@ -688,7 +717,7 @@ sales_agent/
 │   │       ├── api.py          # FastAPI: phiên, chat (chuyển sang agent), đặt hàng
 │   │       ├── orders.py       # Lưu đơn đặt hàng, tóm tắt đơn
 │   │       ├── mailer.py       # Email xác nhận đơn hàng
-│   │       ├── policies.py     # Bảng policies, đẩy/đồng bộ chính sách sang agent
+│   │       ├── policies.py     # Nháp, kiểm tra, xuất bản, lịch sử; đẩy/đồng bộ sang agent
 │   │       └── templates/      # Template email (order_confirmation.html)
 │   └── fe/                     # nginx (cổng 8000): static/index.html, order_form.html, nginx.conf.template
 ├── tests/                      # Unit test

@@ -7,7 +7,8 @@ from pyvi import ViTokenizer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, FieldCondition, Filter, FilterSelector, MatchValue, PointStruct, VectorParams
 from sentence_transformers import SentenceTransformer
-from phone_common.config import COLLECTION, EMBEDDING_MODEL, QDRANT_URL, VECTOR_SIZE
+from phone_common.config import (COLLECTION, EMBEDDING_MODEL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K,
+                                 QDRANT_URL, VECTOR_SIZE)
 from phone_agent.data_prep import split_markdown
 from phone_common.policies import load_seed, policy_hash
 
@@ -88,6 +89,47 @@ def policy_hashes() -> dict[str, str]:
             hashes[m.get('source')] = m.get('doc_hash')
         if offset is None:
             return hashes
+
+def relevant_hits(scored: list[tuple]) -> list[tuple]:
+    """scored: [(đoạn, điểm cosine)] giảm dần. Bỏ đoạn dưới ngưỡng, và đoạn kém đoạn tốt nhất quá MARGIN.
+    Dùng chung cho search_policy và check_policy để bản nháp được kiểm tra đúng như lúc khách hỏi."""
+    if not scored or scored[0][1] < POLICY_MIN_SCORE:
+        return []
+    best = scored[0][1]
+    return [(d, s) for d, s in scored if s >= POLICY_MIN_SCORE and best - s <= POLICY_SCORE_MARGIN]
+
+def _norm(text: str) -> str:
+    # Như evals/run_eval.py: không phân biệt hoa thường, "7,4" và "7.4"
+    return text.lower().replace(',', '.')
+
+def check_policy(slug: str, content_md: str, questions: list[dict]) -> dict:
+    """Thử bản nháp trước khi xuất bản, không ghi gì vào Qdrant, không gọi LLM: embed bản nháp trong bộ nhớ, trộn với
+    các tài liệu khác đang có, rồi với mỗi câu hỏi xem search_policy có lấy ra tài liệu này không (passed: có đoạn của
+    nó sau bộ lọc điểm) và các đoạn đó có đủ ý bắt buộc không (must_contain: [[cách viết 1, cách viết 2], ...]).
+    Không tính prompt riêng: sửa nội dung (30 -> 15 ngày) mà prompt còn ghi "30 ngày" thì vẫn phải báo thiếu.
+    questions: [{question, must_contain}]."""
+    chunks = split_markdown(content_md, slug)
+    if not chunks:
+        raise ValueError(f'Tài liệu {slug} không có nội dung')
+    emb = get_embeddings()
+    draft = list(zip(emb.embed_documents([c.page_content for c in chunks]), (c.page_content for c in chunks)))
+    get_vector_store()  # tạo collection nếu chưa có
+    others = Filter(must_not=[FieldCondition(key='metadata.source', match=MatchValue(value=slug))])
+    results = []
+    for q in questions:
+        qv = emb.embed_query(q['question'])
+        # Vector đã chuẩn hóa (normalize_embeddings=True): tích vô hướng = cosine, cùng thang điểm với Qdrant
+        scored = [((slug, text), sum(a * b for a, b in zip(qv, v))) for v, text in draft]
+        for p in get_client().query_points(COLLECTION, query=qv, limit=POLICY_TOP_K, query_filter=others,
+                                           with_payload=True).points:
+            scored.append((((p.payload or {}).get('metadata', {}).get('source'), ''), p.score))
+        hits = relevant_hits(sorted(scored, key=lambda x: x[1], reverse=True)[:POLICY_TOP_K])
+        found = '\n'.join(t for (source, t), _ in hits if source == slug)
+        seen = _norm(found)
+        missing = [g for g in q.get('must_contain') or [] if not any(_norm(kw) in seen for kw in g)]
+        results.append({'question': q['question'], 'retrieved': [source for (source, _), _ in hits],
+                        'missing': missing, 'passed': bool(found) and not missing})
+    return {'passed': all(r['passed'] for r in results), 'results': results}
 
 def ingest_seed() -> int:
     """Nạp dữ liệu mẫu (data_schema/policies) thẳng vào Qdrant, khi chạy agent không có be. Có be thì be đẩy sang."""

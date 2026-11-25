@@ -21,8 +21,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from phone_agent.agent import build_agent
 from phone_agent.graph import build_graph
-from phone_agent.vector_db import (count_documents, delete_policy, get_vector_store, ingest_seed, policy_hashes,
-                                   upsert_policy)
+from phone_agent.vector_db import (check_policy, count_documents, delete_policy, get_vector_store, ingest_seed,
+                                   policy_hashes, upsert_policy)
 from phone_common import pii
 from phone_common.config import AGENT_API_KEY, AGENT_IMPL, AUTO_INGEST
 from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
@@ -180,6 +180,16 @@ class NewThread(BaseModel):
 class PolicyIn(BaseModel):
     content_md: str = Field(min_length=1, max_length=MAX_CONTENT)  # markdown: # tiêu đề, ## mục, ### mục con
     prompt: str | None = Field(default=None, max_length=MAX_PROMPT)  # hướng dẫn trả lời riêng, kèm kết quả search_policy
+
+
+class CheckQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    must_contain: list[list[str]] = []   # mỗi nhóm: chỉ cần 1 cách viết xuất hiện, vd [["30 ngày"], ["7", "bảy"]]
+
+
+class PolicyCheck(BaseModel):
+    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)
+    questions: list[CheckQuestion] = Field(max_length=100)
 
 
 class OrderPlaced(BaseModel):
@@ -364,6 +374,15 @@ def put_policy(req: PolicyIn, slug: str = Path(pattern=SLUG)):
         raise HTTPException(422, str(e))
     log.info('Đã cập nhật chính sách %s: %d đoạn', slug, n)
     return {'slug': slug, 'chunks': n}
+
+
+@app.post('/policies/{slug}/check')
+def check_policy_draft(req: PolicyCheck, slug: str = Path(pattern=SLUG)):
+    """Thử bản nháp với các câu hỏi mẫu, không ghi vào Qdrant: {passed, results: [{question, retrieved, missing, passed}]}."""
+    try:
+        return check_policy(slug, req.content_md, [q.model_dump() for q in req.questions])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @app.delete('/policies/{slug}', status_code=204)

@@ -18,12 +18,15 @@ def policy_hash(content_md: str, prompt: str | None) -> str:
 
 
 def load_seed(policy_dir=POLICY_DIR) -> list[dict]:
-    """Dữ liệu mẫu: data_schema/policies/*.md + prompt riêng trong prompts.json. be nạp vào bảng policies khi bảng
-    rỗng; agent nạp thẳng vào Qdrant khi chạy không có be (AUTO_INGEST, python -m phone_agent.vector_db, eval)."""
+    """Dữ liệu mẫu: data_schema/policies/*.md + prompt riêng (prompts.json) + câu hỏi kiểm tra (checks.json, lấy từ
+    các câu policy của evals/dataset.jsonl). be nạp vào database khi bảng rỗng; agent nạp thẳng vào Qdrant khi chạy
+    không có be (AUTO_INGEST, python -m phone_agent.vector_db, eval)."""
     prompts = json.loads((policy_dir / 'prompts.json').read_text(encoding='utf-8'))
+    checks = json.loads((policy_dir / 'checks.json').read_text(encoding='utf-8'))
     files = sorted(policy_dir.glob('*.md'))
     if not files:
         raise FileNotFoundError(f'Không có file chính sách .md trong {policy_dir}')
-    docs = [{'slug': f.name, 'content_md': f.read_text(encoding='utf-8'), 'prompt': prompts.get(f.name)} for f in files]
+    docs = [{'slug': f.name, 'content_md': f.read_text(encoding='utf-8'), 'prompt': prompts.get(f.name),
+             'checks': checks.get(f.name, [])} for f in files]
     assert all(re.fullmatch(SLUG, d['slug']) for d in docs), 'Tên file chính sách phải dạng chữ-thường-gạch-ngang.md'
     return docs
