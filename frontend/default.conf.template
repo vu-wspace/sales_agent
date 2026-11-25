@@ -1,0 +1,21 @@
+# Service fe: phục vụ giao diện chat, mọi request khác (API, /docs) chuyển sang service be.
+# Image nginx thay ${BE_URL} khi khởi động (docker-compose.yml: http://be:8000).
+server {
+    listen 80;
+
+    # no-cache: trình duyệt luôn hỏi lại server, sửa giao diện xong không bị dùng bản cũ trong cache
+    location = / {
+        root /usr/share/nginx/html;
+        try_files /index.html =404;
+        add_header Cache-Control no-cache;
+    }
+
+    location / {
+        proxy_pass ${BE_URL};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Lượt chat có thể chạy vài phút; /chat/stream tự tắt buffer bằng header X-Accel-Buffering
+        proxy_read_timeout 600s;
+        proxy_http_version 1.1;
+    }
+}

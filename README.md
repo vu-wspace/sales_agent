@@ -35,7 +35,7 @@ Yêu cầu: Docker, các API key trong [Cấu hình](#cấu-hình) và 9Router c
 
 ```bash
 cp .env.example .env            # điền API key
-docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + Mailpit + web app (tự nạp chính sách)
+docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + Mailpit + 3 service fe, be, agent (agent tự nạp chính sách)
 ```
 
 | Địa chỉ | Nội dung |
@@ -49,15 +49,18 @@ Lần build đầu mất khoảng 8 phút, chủ yếu để tải model embeddi
 
 ### Chạy trên máy
 
-Postgres, Qdrant, Mailpit chạy bằng Docker, code chạy trên máy:
+Postgres, Qdrant, Mailpit và nginx (fe) chạy bằng Docker, agent và be chạy trên máy (mỗi lệnh `uvicorn` một terminal):
 
 ```bash
 uv sync
 docker compose up -d postgres qdrant mailpit
-uv run python -m phone_sales.vector_db           # nạp chính sách vào Qdrant
-uv run uvicorn phone_sales.api:app --port 8001   # web app (8000 đã dùng cho container api)
-uv run langgraph dev                             # LangGraph Studio: agent_main, phone_graph
+uv run uvicorn phone_sales.agent_api:app --port 8001   # service agent (tự nạp chính sách khi khởi động)
+uv run uvicorn phone_sales.api:app --port 8002         # service be, gọi agent ở AGENT_URL (mặc định localhost:8001)
+BE_URL=http://host.docker.internal:8002 docker compose up -d --no-deps fe   # trang chat ở http://localhost:8000
+uv run langgraph dev                                   # LangGraph Studio: agent_main, phone_graph
 ```
+
+PowerShell đặt biến trước lệnh fe bằng `$env:BE_URL="http://host.docker.internal:8002"`. Container `be`, `agent` không chạy cùng lúc với cách này.
 
 Dùng trong code:
 
@@ -75,10 +78,11 @@ print(res['messages'][-1].text, res['stage'], res['cart'])
 ### Lệnh Docker thường dùng
 
 ```bash
-docker compose logs -f api                                # xem log
-docker compose up -d --build api                          # build lại sau khi sửa code hoặc chính sách
+docker compose logs -f agent be                           # xem log
+docker compose up -d --build agent be                     # build lại sau khi sửa code hoặc chính sách (1 image cho cả 2)
+docker compose restart fe                                 # sau khi sửa frontend/ (mount thẳng vào nginx, không cần build)
 docker compose run --rm db-seed                           # nạp lại dữ liệu sản phẩm (giữ đơn hàng, không mất volume)
-docker compose exec api python -m phone_sales.vector_db   # nạp lại chính sách
+docker compose exec agent python -m phone_sales.vector_db # nạp lại chính sách (bản chính sách có trong image)
 docker exec -it phone_db psql -U postgres -d phone        # mở psql vào database phone (thoát: \q)
 docker compose down                                       # dừng, giữ dữ liệu
 docker compose down -v                                    # dừng và xóa dữ liệu
@@ -89,7 +93,9 @@ docker builder prune                                      # xóa build cache cũ
 |---|---|---|
 | `phone_db` | 5433 | PostgreSQL, database `phone` |
 | `qdrant` | 6333, 6334 | Vector DB |
-| `phone_sales_api` | 8000 | Web app |
+| `phone_sales_fe` | 8000 | nginx: trang chat, chuyển API và `/docs` sang be |
+| `phone_sales_be` | (nội bộ) | API công khai: phiên, chat, đặt hàng, email (`api.py`) |
+| `phone_sales_agent` | (nội bộ) | Graph, lịch sử hội thoại, nạp chính sách (`agent_api.py`) |
 | `phone_mailpit` | 1025, 8025 | Bắt email khi phát triển: SMTP cổng 1025, xem email tại http://localhost:8025 |
 
 ## Cấu hình
@@ -151,7 +157,7 @@ Trong Docker, compose tự đặt `DATABASE_URL`, `QDRANT_URL`, `SMTP_HOST=mailp
 - Phiên tự kết thúc (trang chat gọi `/session` với `end_thread_id` của cuộc cũ):
   - đặt hàng xong 30 giây: mở phiên mới, giữ thẻ xác nhận đơn trên màn hình; khách nhắn tiếp trong 30 giây thì tính như hội thoại bình thường;
   - khách không gõ, bấm, gửi tin 15 phút (kể cả khi đang điền form thì gõ cũng tính là còn tương tác). Tab chạy nền làm hẹn giờ trễ thì lúc khách gửi tin, trang chat thấy đã quá hạn và mở phiên mới trước.
-- Server cũng tự dọn: mỗi phút xóa khỏi RAM các cuộc trò chuyện quá 15 phút không có request nào (`SESSION_TTL_S`, `expire_threads` trong `api.py`), kể cả khi khách đóng tab. Gọi API trực tiếp với `thread_id` đã bị xóa thì bắt đầu cuộc mới, lịch sử và giỏ hàng cũ không còn.
+- Server cũng tự dọn: mỗi phút xóa khỏi RAM các cuộc trò chuyện quá 15 phút không có request nào (`SESSION_TTL_S`, `expire_threads` trong `agent_api.py`), kể cả khi khách đóng tab. Gọi API trực tiếp với `thread_id` đã bị xóa thì bắt đầu cuộc mới, lịch sử và giỏ hàng cũ không còn.
 - `customer_token` = mã khách + chữ ký HMAC (khóa sinh từ `PII_KEY`), trình duyệt giữ trong `localStorage`. Có chữ ký nên không đổi được sang mã khách khác để xem tên, đơn của người khác. Mã sai hoặc khách không còn đơn thì trả `null`, trang chat xóa mã đã lưu. Database lỗi thì vẫn mở phiên, chào như khách mới, giữ mã.
 - Khách quen: lời chào và hồ sơ (`orders.customer_profile`: tên, số đơn, đơn gần nhất gồm mã, ngày, tên món) được ghi vào thread mới (`customer` trong trạng thái hội thoại). Không có số điện thoại, email, địa chỉ trong hồ sơ vì hồ sơ được gửi cho LLM.
 - `thread_id` của `/chat` vẫn có thể bỏ trống như trước (gọi API trực tiếp không cần `/session`).
@@ -245,10 +251,34 @@ Không tạo đơn, không đụng database. Ghi vào lịch sử hội thoại 
 
 ## Kiến trúc
 
+3 service, trình duyệt chỉ thấy `fe`:
+
+| Service | Code | Làm gì | Giữ dữ liệu gì |
+|---|---|---|---|
+| `fe` | `frontend/` (nginx) | Phục vụ `index.html`; mọi đường dẫn khác chuyển sang be | Không |
+| `be` | `api.py` | Kiểm tra, chuẩn hóa, che PII tin nhắn; phiên khách quen, đơn hàng, mã khuyến mãi, email | Postgres: khách, đơn hàng |
+| `agent` | `agent_api.py` | Chạy graph, giữ lịch sử và giỏ hàng theo `thread_id`, nạp chính sách vào Qdrant | RAM: hội thoại; Qdrant: chính sách |
+
+be gọi agent qua HTTP nội bộ (`AGENT_URL`), agent không mở cổng ra ngoài:
+
+| Endpoint của agent | be gọi khi |
+|---|---|
+| `POST /chat`, `POST /chat/stream` | Khách nhắn tin (be chuyển tiếp nguyên luồng SSE) |
+| `GET /threads/cart?thread_id=` | Tạo đơn, tính giá: giỏ hàng lấy từ hội thoại, không tin giỏ do trình duyệt gửi |
+| `POST /threads/update` | Đặt hàng xong, hủy đặt hàng, chào khách quen: ghi tin nhắn và trạng thái vào hội thoại |
+| `POST /threads/end` | Khách mở phiên mới |
+| `GET /health` | `GET /health` của be |
+
+- Đặt hàng xong mà agent lỗi khi ghi vào hội thoại thì be chỉ ghi log, vẫn trả thành công, để khách không gửi lại form và đặt trùng đơn.
+- Agent giữ hội thoại trong RAM (`InMemorySaver`) nên chỉ chạy 1 bản; muốn nhiều bản thì phải chuyển sang checkpointer Postgres.
+- `be` và `agent` dùng chung 1 image, khác lệnh chạy.
+
 ```mermaid
 flowchart TB
-    browser["Trình duyệt"] -- "POST /chat/stream" --> api["FastAPI<br/>api.py"]
-    api -- "state theo thread_id" --> agent["Agent<br/>graph.py / agent.py"]
+    browser["Trình duyệt"] --> fe["fe<br/>nginx"]
+    fe -- "POST /chat/stream" --> api["be<br/>api.py"]
+    api -- "HTTP nội bộ" --> agent_api["agent<br/>agent_api.py"]
+    agent_api -- "state theo thread_id" --> agent["Agent<br/>graph.py / agent.py"]
     agent <--> chain["Chuỗi LLM dự phòng<br/>fallback.py"]
     agent -- "gọi tool" --> tools["Tools<br/>tools.py"]
     tools --> postgres[("Postgres<br/>sản phẩm, phiên bản, tương thích")]
@@ -320,7 +350,7 @@ Form có ô **Mã khuyến mãi** và nút **Áp dụng** (Enter trong ô cũng 
 `POST /order` tạo đơn xong thì lên lịch `mailer.send_order_email` bằng `BackgroundTasks`: khách nhận kết quả ngay, email gửi sau (fastapi-mail, SMTP bất đồng bộ). Tiêu đề "Xác nhận đơn hàng #DH… - PhoneShop Demo" (tên cửa hàng lấy từ `MAIL_FROM`).
 
 - Đọc lại đơn từ database (`orders.get_order`, dữ liệu qua `orders.view`), không dùng dữ liệu form: email luôn khớp đơn đã lưu (tên món, giảm giá, tổng tiền), giống thẻ xác nhận trên khung chat.
-- Template `src/phone_sales/templates/order_confirmation.html` (Jinja2, tự escape tên, địa chỉ khách nhập): CSS viết inline và bố cục bảng vì Gmail, Outlook bỏ qua thẻ `<style>`. Kèm bản chữ thuần (`render_text`) cho trình đọc email không hiển thị HTML. Template nằm ngoài `static/` để không bị phục vụ công khai.
+- Template `src/phone_sales/templates/order_confirmation.html` (Jinja2, tự escape tên, địa chỉ khách nhập): CSS viết inline và bố cục bảng vì Gmail, Outlook bỏ qua thẻ `<style>`. Kèm bản chữ thuần (`render_text`) cho trình đọc email không hiển thị HTML. Template nằm ngoài `frontend/` để không bị phục vụ công khai.
 - Kết quả ghi vào `orders.email_status`: `pending` (đang chờ) → `sent`, `failed` (lỗi SMTP, chỉ ghi mã đơn vào log), hoặc `skipped` (khách không nhập email, chưa đặt `SMTP_HOST`). Gửi lỗi không ảnh hưởng đơn đã tạo.
 - Nội dung: lời chào theo tên người nhận, bảng sản phẩm (tên, phiên bản, số lượng, thành tiền), tạm tính và giảm giá (nếu có), tổng cộng, cách nhận hàng, địa chỉ (chỉ khi giao tận nơi), thanh toán, ghi chú nhân viên gọi xác nhận. Không đưa số điện thoại, email của khách vào nội dung.
 - Đây là email **xác nhận đơn hàng**, không phải hóa đơn GTGT: hóa đơn điện tử phải phát hành qua nhà cung cấp dịch vụ hóa đơn (Nghị định 123/2020/NĐ-CP).
@@ -375,7 +405,7 @@ Chỉ thêm `Annotated` là hết lỗi, nhưng reducer phải đúng nghĩa c�
 
 | Khóa | Reducer | Giá trị mới |
 |---|---|---|
-| `cart` | `cart_update` | `{'add': món}` thêm (trùng phiên bản thì cộng số lượng), `{'remove': [variant_id]}` bỏ; `list` thay cả giỏ (`api.py` ghi `[]` sau khi đặt/hủy đơn) |
+| `cart` | `cart_update` | `{'add': món}` thêm (trùng phiên bản thì cộng số lượng), `{'remove': [variant_id]}` bỏ; `list` thay cả giỏ (be ghi `[]` qua `POST /threads/update` của agent sau khi đặt/hủy đơn) |
 | `order_form` | `last` | Lấy giá trị mới nhất: chỉ là đúng/sai, gọi `show_order_form` 2 lần vẫn cùng kết quả |
 | `offered_alternatives`, `shown_products`, `objections` | `append_unique` | Nối thêm, bỏ trùng |
 | `sentiment_history`, `orders` | `append` | Nối thêm, giữ trùng (mỗi lượt / mỗi đơn 1 phần tử) |
@@ -435,7 +465,7 @@ Khách chê đắt, so giá với nơi khác hoặc do dự được nhận di�
 
 ### Chuẩn hóa tin nhắn và chống bịa số liệu
 
-**Chuẩn hóa tin nhắn** (`textnorm.py`, chạy trong `ChatRequest` của `api.py` và trong `track_user` của `graph.py`), để luật từ khóa, model và lịch sử cùng đọc một dạng:
+**Chuẩn hóa tin nhắn** (`textnorm.py`, chạy trong `ChatRequest` của `schemas.py`, kiểm tra ở be và agent và trong `track_user` của `graph.py`), để luật từ khóa, model và lịch sử cùng đọc một dạng:
 
 | Bước | Ví dụ |
 |---|---|
@@ -477,7 +507,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 | Chỗ | Cách xử lý |
 |---|---|
-| Trước khi tới LLM | `ChatRequest` (`api.py`) thay số điện thoại, email trong tin nhắn bằng `[SỐ ĐIỆN THOẠI]`, `[EMAIL]` (`pii.redact`), nên model, LangSmith và lịch sử hội thoại chỉ có bản đã che. `graph.py` che lại khi gọi graph trực tiếp (`langgraph dev`, eval). Prompt dặn model không hỏi lại, không chép nhãn vào câu trả lời (`clean_answer` đổi nhãn còn sót thành "số điện thoại anh/chị đã cung cấp"), thông tin nhận hàng khách điền ở form |
+| Trước khi tới LLM | `ChatRequest` (`schemas.py`, kiểm tra ở be) thay số điện thoại, email trong tin nhắn bằng `[SỐ ĐIỆN THOẠI]`, `[EMAIL]` (`pii.redact`), nên model, LangSmith và lịch sử hội thoại chỉ có bản đã che. `graph.py` che lại khi gọi graph trực tiếp (`langgraph dev`, eval). Prompt dặn model không hỏi lại, không chép nhãn vào câu trả lời (`clean_answer` đổi nhãn còn sót thành "số điện thoại anh/chị đã cung cấp"), thông tin nhận hàng khách điền ở form |
 | Khi hiển thị | Thẻ xác nhận (`orders.view`) và tóm tắt đơn (`orders.summary`, cũng nằm trong lịch sử gửi LLM ở lượt sau) hiện `0912 *** 678`, `ng***@gmail.com` |
 | Trong log | `RedactFilter` gắn vào handler của uvicorn và root khi khởi động: che trong nội dung log, tham số (kể cả path của access log) và traceback (lỗi psycopg có thể in tham số SQL) |
 | Trong database | `customers.phone`, `customers.email`, `orders.recipient_phone`, `orders.recipient_email` lưu dạng `enc:…` (Fernet, khóa `PII_KEY`). Fernet mỗi lần mã hóa ra chuỗi khác nên tra khách cũ, chặn trùng email bằng `phone_hash`, `email_hash` (HMAC-SHA256, khóa sinh từ `PII_KEY`; số điện thoại chuẩn hóa `+84…` → `0…`, email chuyển chữ thường trước khi băm) |
@@ -528,7 +558,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 9Router và OpenRouter được bật gọi tool song song (`parallel_tool_calls=True`). 9Router chờ tối đa 60 giây, thử lại 1 lần: combo chọn trúng model chậm (đã gặp `glm-5` mất ~83 giây) thì khách chờ tới ~2 phút mới sang OpenRouter.
 
-`FallbackMiddleware` thử lần lượt các model tới khi có model trả lời. Model gặp lỗi lặp lại sẽ tạm bị bỏ qua: hết quota ngày hoặc lỗi cấu hình (sai key, sai tên model) 1 giờ, giới hạn theo phút 1 phút, lỗi chứng chỉ SSL 10 phút. Lỗi tạm thời (mất mạng, 5xx) chỉ chuyển model cho lần gọi đó. Mỗi lần chuyển model đều ghi log (`docker compose logs api | grep LLM`).
+`FallbackMiddleware` thử lần lượt các model tới khi có model trả lời. Model gặp lỗi lặp lại sẽ tạm bị bỏ qua: hết quota ngày hoặc lỗi cấu hình (sai key, sai tên model) 1 giờ, giới hạn theo phút 1 phút, lỗi chứng chỉ SSL 10 phút. Lỗi tạm thời (mất mạng, 5xx) chỉ chuyển model cho lần gọi đó. Mỗi lần chuyển model đều ghi log (`docker compose logs agent | grep LLM`).
 
 Model `:free` của OpenRouter giới hạn 50 request/ngày (1000 request/ngày nếu tài khoản đã nạp từ 10 USD), reset lúc 7:00 sáng giờ Việt Nam; mỗi câu hỏi tốn 2–3 request.
 
@@ -574,7 +604,7 @@ Dữ liệu được cào từ apple.com/vn và samsung.com/vn bằng `data_sche
 |---|---|
 | Sản phẩm | `cd data_schema && python scrape_phone.py --refresh`, rồi `docker compose run --rm db-seed` |
 | Phân loại phụ kiện (sau khi sửa `accessory_type`) | `cd data_schema && python scrape_phone.py --from-json` (không tải lại trang, giữ nguyên giá), rồi `docker compose run --rm db-seed` |
-| Chính sách | Sửa file trong `data_schema/policies/`, rồi `docker compose up -d --build api` |
+| Chính sách | Sửa file trong `data_schema/policies/`, rồi `docker compose up -d --build agent` (agent thấy nội dung đổi thì tự nạp lại) |
 
 ## Cấu trúc thư mục
 
@@ -602,8 +632,10 @@ sales_agent/
 │   ├── orders.py               # Lưu đơn đặt hàng, tóm tắt đơn
 │   ├── mailer.py               # Email xác nhận đơn hàng
 │   ├── templates/              # Template email (order_confirmation.html)
-│   ├── api.py                  # FastAPI
-│   └── static/                 # Giao diện chat (index.html), mẫu form đặt hàng (order_form.html)
+│   ├── schemas.py              # ChatRequest, ChatResponse dùng chung be và agent
+│   ├── api.py                  # Service be (FastAPI)
+│   └── agent_api.py            # Service agent (FastAPI)
+├── frontend/                   # Service fe: index.html, mẫu form đặt hàng (order_form.html), cấu hình nginx
 ├── tests/                      # Unit test
 ├── evals/                      # Bộ câu hỏi, script đánh giá, user simulator (simulate.py, simulate_batch.py, personas.jsonl, scenarios.jsonl)
 ├── certs/                      # CA nội bộ cho mạng có SSL inspection (không commit)
@@ -662,7 +694,7 @@ Không gọi LLM, mạng, database hay máy chủ email thật (dùng model, d�
 - Tool (`test_tools.py`): khớp tên máy, lọc dung lượng và RAM, phụ kiện tương thích, củ sạc đủ công suất, máy rẻ hơn, giỏ hàng, mở form.
 - Trạng thái hội thoại (`test_conversation.py`, `test_objection.py`): nhu cầu, cảm xúc, chuyển nhân viên (có dấu, không dấu, câu mời không tính là đã chuyển), bán kèm, xử lý phản đối; graph chạy nhiều lượt với model giả.
 - Chống bịa số liệu, chuẩn hóa tin nhắn, dọn câu trả lời (`test_grounding.py`).
-- API (`test_api.py`): chat, stream, lỗi quota trả 429/502, đặt hàng từ giỏ trên server, hủy đơn, phiên khách quen, mã khách bị sửa thì từ chối, xóa cuộc trò chuyện quá 15 phút, tin nhắn quá dài trả 422.
+- API (`test_api.py`, be gọi agent thật trong cùng process): chat, stream, lỗi quota trả 429/502, đặt hàng từ giỏ trên server, hủy đơn, phiên khách quen, mã khách bị sửa thì từ chối, xóa cuộc trò chuyện quá 15 phút, tin nhắn quá dài trả 422.
 - Đơn hàng, khuyến mãi, email, PII (`test_orders.py`, `test_promotions.py`, `test_mailer.py`, `test_pii.py`): giới hạn lượt dùng mã, hạn khuyến mãi theo giờ Việt Nam, email escape dữ liệu khách, che số điện thoại và email trong log.
 - Chuỗi LLM dự phòng, cắt lịch sử, bộ câu hỏi eval, lớp kiểm tra của simulator (`test_llm.py`, `test_agent.py`, `test_history.py`, `test_eval_dataset.py`, `test_simulate.py`).
 - `requirements.txt` khớp `pyproject.toml` (`test_requirements.py`): thêm thư viện bằng `uv add` thì cập nhật file này.
@@ -948,19 +980,19 @@ Chỉ số là tỷ lệ đòn thành công theo nhóm, xếp theo mức nghiêm
 | Giá, sản phẩm chưa đổi sau khi cào lại | `docker compose run --rm db-seed` |
 | `password authentication failed` sau khi đổi mật khẩu | Mật khẩu chỉ đặt lúc tạo volume: `docker compose down -v` rồi chạy lại |
 | `search_policy` không tìm thấy gì | `uv run python -m phone_sales.vector_db` |
-| `/chat` trả 429 hoặc 502 | Mọi LLM đều hết quota hoặc lỗi; xem `docker compose logs api \| grep LLM` |
-| `/health` trả 503 | Kiểm tra Qdrant và `QDRANT_URL` |
-| Sửa code nhưng web app không đổi | `docker compose up -d --build api` |
-| Sửa `index.html` nhưng trình duyệt vẫn hiện bản cũ | Build lại `api`, rồi tải lại trang bằng Ctrl+F5 |
+| `/chat` trả 429 hoặc 502 | Mọi LLM đều hết quota hoặc lỗi; xem `docker compose logs agent \| grep LLM` |
+| `/health` trả 503 | Agent chưa chạy xong (lần đầu nạp chính sách, tải model) hoặc Qdrant lỗi: `docker compose logs agent` |
+| Sửa code nhưng web app không đổi | `docker compose up -d --build agent be` |
+| Sửa `frontend/index.html` nhưng trình duyệt vẫn hiện bản cũ | `docker compose restart fe`, rồi tải lại trang bằng Ctrl+F5 |
 | Thẻ xác nhận đơn hoặc form đặt hàng bị cắt, mất nội dung | Giữ `#log > * { flex-shrink: 0; }` trong `index.html`: thiếu dòng này, khung chat đầy sẽ ép dẹp các thẻ có `overflow: hidden` |
 | `db-seed` báo `cannot truncate a table referenced in a foreign key constraint` | `phone_seed.sql` sinh từ bản `scrape_phone.py` cũ (TRUNCATE). Sinh lại: `cd data_schema && python scrape_phone.py --from-json`, rồi chạy lại `db-seed` (bản mới upsert, giữ đơn hàng) |
 | Bot chỉ đưa khoảng giá khi khách nêu tên máy | Xem log tool: phải là `get_product_details`; kiểm tra quy tắc 2 trong `prompts.py` |
 | `InvalidUpdateError: At key '…': Can receive only one value per step` | Nhiều tool ghi cùng khóa state trong 1 bước (gọi song song). Khóa đó cần `Annotated[kiểu, reducer]` với reducer đúng nghĩa, xem [Nhiều tool cập nhật state cùng lúc](#nhiều-tool-cập-nhật-state-cùng-lúc) |
-| Không thấy email xác nhận | Xem `email_status` của đơn: `skipped` là khách không nhập email hoặc chưa đặt `SMTP_HOST`; `failed` thì xem `docker compose logs api \| grep "email xác nhận"` (Mailpit chưa chạy, sai `SMTP_*`); `pending` mãi là server khởi động lại đúng lúc đang gửi |
+| Không thấy email xác nhận | Xem `email_status` của đơn: `skipped` là khách không nhập email hoặc chưa đặt `SMTP_HOST`; `failed` thì xem `docker compose logs be \| grep "email xác nhận"` (Mailpit chưa chạy, sai `SMTP_*`); `pending` mãi là server khởi động lại đúng lúc đang gửi |
 | Gửi email lỗi `value is not a valid email address` | Tên miền trong `MAIL_FROM` không được là `.local`, `.localhost`…: dùng vd `no-reply@phoneshop.example` |
 | Câu trả lời chậm tới ~2 phút | 9Router chọn model chậm hoặc không chạy: chờ hết 60 giây, thử lại 1 lần rồi mới sang OpenRouter. Kiểm tra `curl http://localhost:20128/v1/models`, bỏ model chậm khỏi combo |
 | 9Router chạy trên máy được nhưng container báo lỗi kết nối | Trong container `localhost` là chính container; compose đã đặt `ROUTER9_BASE_URL=http://host.docker.internal:20128/v1`. 9Router phải nhận kết nối từ ngoài, không chỉ `127.0.0.1` |
-| `uvicorn` báo cổng 8000 đang dùng | Container `phone_sales_api` đang chạy; dùng `--port 8001` |
+| `uvicorn` báo cổng 8000 đang dùng | Container `phone_sales_fe` đang chạy; agent dùng `--port 8001`, be dùng `--port 8002` |
 | Trong Docker báo `CERTIFICATE_VERIFY_FAILED` | Xem [Mạng có SSL inspection](#mạng-có-ssl-inspection) |
 
 ### Mạng có SSL inspection
@@ -971,7 +1003,7 @@ Nếu mạng dùng proxy cấp lại chứng chỉ HTTPS bằng CA nội bộ, c
 # Đổi 'CN=ten-CA*' thành tên CA nội bộ
 $c = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like 'CN=ten-CA*' } | Select-Object -First 1
 "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($c.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----" | Set-Content -Encoding ascii certs\internal-ca.crt
-docker compose up -d --build api
+docker compose up -d --build agent be
 ```
 
 ### Windows

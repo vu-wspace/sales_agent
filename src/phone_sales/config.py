@@ -26,8 +26,11 @@ POLICY_SCORE_MARGIN = 0.08
 # Web app dùng agent nào: 'graph' (graph.py, có trạng thái hội thoại + giỏ hàng) hoặc 'agent' (agent.py)
 AGENT_IMPL = os.getenv('AGENT_IMPL', 'graph').lower()
 
-# Web app: collection rỗng thì tự nạp dữ liệu khi khởi động
+# Service agent (agent_api.py): collection rỗng hoặc chính sách đã sửa thì tự nạp lại khi khởi động
 AUTO_INGEST = os.getenv('AUTO_INGEST', 'true').lower() == 'true'
+
+# Service be (api.py) gọi service agent qua HTTP nội bộ. Chạy trên máy: agent ở cổng 8001
+AGENT_URL = os.getenv('AGENT_URL', 'http://localhost:8001')
 
 # Khóa mã hóa số điện thoại, email của khách trong database (Fernet, base64 32 byte). Tạo khóa:
 #   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

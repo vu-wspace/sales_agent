@@ -48,20 +48,19 @@ services:
       postgres:
         condition: service_healthy
 
-  api:
+  # Service agent: graph LangGraph (LLM, tools, lịch sử hội thoại trong RAM), tự nạp chính sách vào Qdrant.
+  # Không mở cổng ra ngoài: chỉ service be gọi tới qua mạng nội bộ. Lịch sử nằm trong RAM -> chỉ chạy 1 bản.
+  agent:
     build: .
     image: phone-sales-api
-    container_name: phone_sales_api
-    ports:
-      - "8000:8000"   # Web chat + API (docs tại /docs)
+    container_name: phone_sales_agent
+    command: ["uvicorn", "phone_sales.agent_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     env_file: .env    # ROUTER9_*, OPENROUTER_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, TAVILY_API_KEY, LANGSMITH_*
     environment:
       QDRANT_URL: http://qdrant:6333   # ghi đè QDRANT_URL=localhost trong .env
-      AUTO_INGEST: "true"              # collection rỗng thì tự nạp chính sách (data_schema/policies) khi khởi động
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
+      AUTO_INGEST: "true"              # collection rỗng hoặc chính sách đã sửa thì tự nạp lại khi khởi động
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone   # tools đọc sản phẩm
       ROUTER9_BASE_URL: http://host.docker.internal:20128/v1   # 9Router chạy trên máy host, không phải trong container
-      SMTP_HOST: mailpit                                       # ghi đè SMTP_HOST=localhost trong .env
-      SMTP_PORT: "1025"
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Linux cần dòng này; Docker Desktop (Windows/Mac) có sẵn
     depends_on:
@@ -69,8 +68,44 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Service be: API công khai (phiên, chat, đặt hàng, email). Cùng image với agent, khác lệnh chạy.
+  # Không mở cổng ra ngoài: trình duyệt đi qua service fe.
+  be:
+    image: phone-sales-api
+    container_name: phone_sales_be
+    env_file: .env    # PII_KEY, SMTP_*, LLM key (lời cảm ơn sau khi đặt hàng do LLM viết)
+    environment:
+      AGENT_URL: http://agent:8000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
+      ROUTER9_BASE_URL: http://host.docker.internal:20128/v1
+      SMTP_HOST: mailpit                                       # ghi đè SMTP_HOST=localhost trong .env
+      SMTP_PORT: "1025"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      agent:
+        condition: service_started   # image do service agent build; agent chưa sẵn sàng thì be trả 503
+      postgres:
+        condition: service_healthy
       mailpit:
         condition: service_started
+    restart: unless-stopped
+
+  # Service fe: nginx phục vụ giao diện chat (frontend/), chuyển API và /docs sang be
+  fe:
+    image: nginx:1.27.5-alpine
+    container_name: phone_sales_fe
+    ports:
+      - "8000:80"   # Web chat + API (docs tại /docs)
+    environment:
+      BE_URL: ${BE_URL:-http://be:8000}   # chạy be trên máy: BE_URL=http://host.docker.internal:8002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./frontend/index.html:/usr/share/nginx/html/index.html:ro
+      - ./frontend/default.conf.template:/etc/nginx/templates/default.conf.template:ro
     restart: unless-stopped
 
   # Bắt email khi phát triển: mọi email gửi tới cổng 1025 được giữ lại, xem tại http://localhost:8025,

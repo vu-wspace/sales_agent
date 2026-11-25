@@ -1,5 +1,6 @@
 import json
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 
 import groq
@@ -8,7 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
-from phone_sales import api
+from phone_sales import agent_api, api
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeAgent:
@@ -61,20 +64,26 @@ def sse_events(response) -> list[dict]:
     return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith('data: ')]
 
 
+@pytest.fixture(autouse=True)
+def agent_service(monkeypatch):
+    # be gọi service agent thật (agent_api) trong cùng process: TestClient cũng là httpx.Client.
+    # Không dùng `with TestClient(...)` để bỏ qua lifespan (không cần Qdrant/model thật)
+    monkeypatch.setattr(api, 'http', TestClient(agent_api.app))
+
+
 @pytest.fixture
 def client():
-    # Không dùng `with TestClient(...)` để bỏ qua lifespan (không cần Qdrant/model thật)
-    api.app.state.agent = FakeAgent()
+    agent_api.app.state.agent = FakeAgent()
     return TestClient(api.app)
 
 
-def test_index_serves_chat_page(client):
-    r = client.get('/')
-    assert r.status_code == 200
-    assert 'text/html' in r.headers['content-type']
-    assert 'Tư vấn điện thoại' in r.text
-    assert "fetch('/chat/stream'" in r.text  # giao diện dùng stream
-    assert r.headers['cache-control'] == 'no-cache'  # sửa giao diện xong trình duyệt không dùng bản cũ
+def test_frontend_chat_page():
+    # Giao diện do service fe (nginx) phục vụ: frontend/index.html, gọi API cùng origin qua nginx
+    html = (ROOT / 'frontend' / 'index.html').read_text(encoding='utf-8')
+    assert 'Tư vấn điện thoại' in html
+    assert "fetch('/chat/stream'" in html  # giao diện dùng stream
+    conf = (ROOT / 'frontend' / 'default.conf.template').read_text(encoding='utf-8')
+    assert 'add_header Cache-Control no-cache' in conf  # sửa giao diện xong trình duyệt không dùng bản cũ
 
 
 def test_chat_new_thread(client):
@@ -109,21 +118,21 @@ def test_chat_stream_keeps_thread(client):
     tid = sse_events(client.post('/chat/stream', json={'message': 'câu 1'}))[0]['thread_id']
     done = sse_events(client.post('/chat/stream', json={'message': 'câu 2', 'thread_id': tid}))[-1]
     assert done['thread_id'] == tid and done['answer'] == 'Trả lời: câu 2' and done['tools'] == ['get_product_details']
-    assert len(api.app.state.agent.threads[tid]) == 8
+    assert len(agent_api.app.state.agent.threads[tid]) == 8
 
 
 @pytest.mark.parametrize('fail_after_first_token', [False, True])
 def test_chat_stream_rate_limit_sends_error_event(client, fail_after_first_token):
     resp = httpx.Response(429, request=httpx.Request('POST', 'https://api.groq.com'))
-    api.app.state.agent = FakeAgent(error=groq.RateLimitError('rate limit', response=resp, body=None),
+    agent_api.app.state.agent = FakeAgent(error=groq.RateLimitError('rate limit', response=resp, body=None),
                                     fail_after_first_token=fail_after_first_token)
     events = sse_events(client.post('/chat/stream', json={'message': 'hi'}))
-    assert events[-1] == {'type': 'error', 'status': 429, 'detail': api.RATE_LIMIT_DETAIL}
+    assert events[-1] == {'type': 'error', 'status': 429, 'detail': agent_api.RATE_LIMIT_DETAIL}
     assert 'done' not in [e['type'] for e in events]
 
 
 def test_chat_stream_unexpected_error_sends_500_event(client):
-    api.app.state.agent = FakeAgent(error=KeyError('bug'))
+    agent_api.app.state.agent = FakeAgent(error=KeyError('bug'))
     assert sse_events(client.post('/chat/stream', json={'message': 'hi'}))[-1]['status'] == 500
 
 
@@ -136,11 +145,11 @@ def test_chat_stream_thinking_shows_status_not_content(client):
                                    {'langgraph_node': 'model'})
             yield 'messages', (AIMessageChunk(content='Dạ chào anh/chị'), {'langgraph_node': 'model'})
             self.threads.setdefault(config['configurable']['thread_id'], []).append(AIMessage('Dạ chào anh/chị'))
-    api.app.state.agent = ThinkingAgent()
+    agent_api.app.state.agent = ThinkingAgent()
     r = client.post('/chat/stream', json={'message': 'chào em'})
     events = sse_events(r)
     assert [e['type'] for e in events] == ['start', 'status', 'token', 'done']
-    assert events[1]['text'] == api.THINKING_STATUS
+    assert events[1]['text'] == agent_api.THINKING_STATUS
     assert 'bí mật' not in r.text
 
 
@@ -155,7 +164,7 @@ def test_chat_same_thread_only_reports_tools_of_current_turn(client):
     assert data['thread_id'] == tid
     assert data['answer'] == 'Trả lời: câu 2'
     assert data['tools'] == ['get_product_details']  # không lặp lại tool của lượt trước
-    assert len(api.app.state.agent.threads[tid]) == 8
+    assert len(agent_api.app.state.agent.threads[tid]) == 8
 
 
 @pytest.mark.parametrize('body', [{'message': ''}, {'message': ' \u200b '}, {'message': 'x' * 1001}, {}, {'message': 'hi', 'thread_id': 'x' * 101}])
@@ -165,7 +174,7 @@ def test_chat_validation(client, body):
 
 def test_chat_rate_limit_returns_429(client):
     resp = httpx.Response(429, request=httpx.Request('POST', 'https://api.groq.com'))
-    api.app.state.agent = FakeAgent(error=groq.RateLimitError('rate limit', response=resp, body=None))
+    agent_api.app.state.agent = FakeAgent(error=groq.RateLimitError('rate limit', response=resp, body=None))
     r = client.post('/chat', json={'message': 'hi'})
     assert r.status_code == 429
     assert 'quá tải' in r.json()['detail']
@@ -176,20 +185,20 @@ def test_chat_request_too_large_rate_limit_returns_429(client):
     resp = httpx.Response(413, request=httpx.Request('POST', 'https://api.groq.com'))
     body = {'error': {'message': 'Request too large ... (ITPM): Limit 7000, Requested 7142',
                       'type': 'tokens', 'code': 'rate_limit_exceeded'}}
-    api.app.state.agent = FakeAgent(error=groq.APIStatusError('413', response=resp, body=body))
+    agent_api.app.state.agent = FakeAgent(error=groq.APIStatusError('413', response=resp, body=body))
     r = client.post('/chat', json={'message': 'hi'})
     assert r.status_code == 429
 
 
 def test_chat_gemini_rate_limit_returns_429(client):
     from langchain_google_genai.chat_models import GoogleRateLimitError
-    api.app.state.agent = FakeAgent(error=GoogleRateLimitError("Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED)"))
+    agent_api.app.state.agent = FakeAgent(error=GoogleRateLimitError("Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED)"))
     assert client.post('/chat', json={'message': 'hi'}).status_code == 429
 
 
 def test_chat_gemini_other_error_returns_502(client):
     from langchain_google_genai.chat_models import GoogleInvalidRequestError
-    api.app.state.agent = FakeAgent(error=GoogleInvalidRequestError('bad request'))
+    agent_api.app.state.agent = FakeAgent(error=GoogleInvalidRequestError('bad request'))
     assert client.post('/chat', json={'message': 'hi'}).status_code == 502
 
 
@@ -197,7 +206,7 @@ def test_chat_openrouter_rate_limit_returns_429(client):
     import openrouter.errors as E
     resp = httpx.Response(429, request=httpx.Request('POST', 'https://openrouter.ai'))
     data = E.TooManyRequestsResponseErrorData(error={'code': 429, 'message': 'Rate limit exceeded: free-models-per-min'})
-    api.app.state.agent = FakeAgent(error=E.TooManyRequestsResponseError(data, resp))
+    agent_api.app.state.agent = FakeAgent(error=E.TooManyRequestsResponseError(data, resp))
     assert client.post('/chat', json={'message': 'hi'}).status_code == 429
 
 
@@ -209,26 +218,26 @@ def test_chat_openrouter_rate_limit_returns_429(client):
 def test_chat_openrouter_other_error_returns_502(client, make_error):
     # Lỗi OpenRouter không kế thừa ModelError: không bắt riêng thì API trả 500 kèm traceback
     import openrouter.errors as E
-    api.app.state.agent = FakeAgent(error=make_error(E))
+    agent_api.app.state.agent = FakeAgent(error=make_error(E))
     assert client.post('/chat', json={'message': 'hi'}).status_code == 502
 
 
 def test_chat_upstream_error_returns_502(client):
     resp = httpx.Response(500, request=httpx.Request('POST', 'https://api.groq.com'))
-    api.app.state.agent = FakeAgent(error=groq.InternalServerError('boom', response=resp, body=None))
+    agent_api.app.state.agent = FakeAgent(error=groq.InternalServerError('boom', response=resp, body=None))
     r = client.post('/chat', json={'message': 'hi'})
     assert r.status_code == 502
 
 
 def test_health_ok(client, monkeypatch):
-    monkeypatch.setattr(api, 'count_documents', lambda: 34)
+    monkeypatch.setattr(agent_api, 'count_documents', lambda: 34)
     assert client.get('/health').json() == {'status': 'ok', 'documents': 34}
 
 
 def test_health_qdrant_down(client, monkeypatch):
     def boom():
         raise ConnectionError()
-    monkeypatch.setattr(api, 'count_documents', boom)
+    monkeypatch.setattr(agent_api, 'count_documents', boom)
     assert client.get('/health').status_code == 503
 
 
@@ -239,19 +248,19 @@ def test_qdrant_client_is_reused():
 
 
 def test_prepare_vector_db_ingests_when_empty(monkeypatch):
-    monkeypatch.setattr(api, 'get_vector_store', lambda: 'db')
-    monkeypatch.setattr(api, 'count_documents', lambda: 0)
-    monkeypatch.setattr(api, 'ingest', lambda db: 34)
-    assert api.prepare_vector_db() == 34
+    monkeypatch.setattr(agent_api, 'get_vector_store', lambda: 'db')
+    monkeypatch.setattr(agent_api, 'count_documents', lambda: 0)
+    monkeypatch.setattr(agent_api, 'ingest', lambda db: 34)
+    assert agent_api.prepare_vector_db() == 34
 
 
 @pytest.mark.parametrize('up_to_date, expected', [(False, 65), (True, 60)])
 def test_prepare_vector_db_reingests_only_when_policies_changed(monkeypatch, up_to_date, expected):
-    monkeypatch.setattr(api, 'get_vector_store', lambda: 'db')
-    monkeypatch.setattr(api, 'count_documents', lambda: 60)
-    monkeypatch.setattr(api, 'is_up_to_date', lambda: up_to_date)
-    monkeypatch.setattr(api, 'ingest', lambda db: 65)
-    assert api.prepare_vector_db() == expected
+    monkeypatch.setattr(agent_api, 'get_vector_store', lambda: 'db')
+    monkeypatch.setattr(agent_api, 'count_documents', lambda: 60)
+    monkeypatch.setattr(agent_api, 'is_up_to_date', lambda: up_to_date)
+    monkeypatch.setattr(agent_api, 'ingest', lambda db: 65)
+    assert agent_api.prepare_vector_db() == expected
 
 
 def test_prepare_vector_db_retries_then_raises(monkeypatch):
@@ -259,9 +268,9 @@ def test_prepare_vector_db_retries_then_raises(monkeypatch):
     def boom():
         calls.append(1)
         raise ConnectionError()
-    monkeypatch.setattr(api, 'get_vector_store', boom)
+    monkeypatch.setattr(agent_api, 'get_vector_store', boom)
     with pytest.raises(ConnectionError):
-        api.prepare_vector_db(retries=3, delay=0)
+        agent_api.prepare_vector_db(retries=3, delay=0)
     assert len(calls) == 3
 
 
@@ -313,13 +322,13 @@ def fake_orders(monkeypatch):
 
 
 def test_chat_response_has_order_form_flag():
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     data = TestClient(api.app).post('/chat', json={'message': 'chốt đơn', 'thread_id': 't1'}).json()
     assert data['order_form'] is True and data['cart'] == CART
 
 
 def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
-    agent = api.app.state.agent = CartAgent(CART)
+    agent = agent_api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json={**ORDER_FORM, 'cart': [{'price': 0}]})  # giỏ client gửi bị bỏ qua
     assert r.status_code == 200
     assert r.json() == {'thread_id': 't1', 'order_id': 'DH0000000C', 'answer': 'Đơn #DH0000000C\n\nCảm ơn Nguyễn Văn A!',
@@ -333,19 +342,19 @@ def test_order_creates_from_server_cart_and_records_in_thread(fake_orders):
 
 
 def test_order_error_does_not_send_email(fake_orders):
-    api.app.state.agent = CartAgent([])
+    agent_api.app.state.agent = CartAgent([])
     assert TestClient(api.app).post('/order', json=ORDER_FORM).status_code == 409
     assert fake_orders.emails == []
 
 
 def test_order_empty_cart_returns_409(fake_orders):
-    api.app.state.agent = CartAgent([])
+    agent_api.app.state.agent = CartAgent([])
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
     assert r.status_code == 409 and r.json()['detail'] == 'Giỏ hàng đang trống'
 
 
 def test_order_email_optional_and_validated(fake_orders):
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     client = TestClient(api.app)
     assert client.post('/order', json={**ORDER_FORM, 'email': '  '}).status_code == 200      # để trống = không có
     assert client.post('/order', json={**ORDER_FORM, 'email': ' a@b.vn '}).status_code == 200
@@ -356,7 +365,7 @@ def test_order_email_optional_and_validated(fake_orders):
 
 @pytest.mark.parametrize('change', [{'phone': '12345'}, {'name': 'A'}, {'address': 'ngắn'}, {'payment': 'installment'}])
 def test_order_validation(fake_orders, change):
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     assert TestClient(api.app).post('/order', json={**ORDER_FORM, **change}).status_code == 422
     assert fake_orders == []
 
@@ -365,13 +374,13 @@ def test_order_database_error_returns_503(monkeypatch):
     def boom(*a, **k):
         raise api.psycopg.OperationalError('down')
     monkeypatch.setattr(api.orders, 'create_order', boom)
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
     assert r.status_code == 503 and 'chưa lưu được đơn hàng' in r.json()['detail']
 
 
 def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
-    agent = api.app.state.agent = CartAgent(CART)
+    agent = agent_api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order/cancel', json={'thread_id': 't1'})
     assert r.status_code == 200
     assert r.json() == {'thread_id': 't1', 'answer': api.orders.CANCEL_MESSAGE}
@@ -385,8 +394,8 @@ def test_order_cancel_records_in_thread_without_creating_order(fake_orders):
 def test_order_cancel_with_create_agent(fake_orders, monkeypatch):
     # AGENT_IMPL=agent: create_agent không có node track_reply (trước đây lỗi InvalidUpdateError -> 500)
     from langgraph.checkpoint.memory import InMemorySaver
-    monkeypatch.setattr(api, 'AS_NODE', None)
-    agent = api.app.state.agent = api.build_agent(checkpointer=InMemorySaver(), fallback=False)
+    monkeypatch.setattr(agent_api, 'AS_NODE', None)
+    agent = agent_api.app.state.agent = agent_api.build_agent(checkpointer=InMemorySaver(), fallback=False)
     r = TestClient(api.app).post('/order/cancel', json={'thread_id': 'a1'})
     assert r.status_code == 200 and r.json()['answer'] == api.orders.CANCEL_MESSAGE
     messages = agent.get_state({'configurable': {'thread_id': 'a1'}}).values['messages']
@@ -395,7 +404,7 @@ def test_order_cancel_with_create_agent(fake_orders, monkeypatch):
 
 
 def test_order_cancel_needs_thread(fake_orders):
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     assert TestClient(api.app).post('/order/cancel', json={}).status_code == 422
 
 
@@ -409,7 +418,7 @@ def test_order_without_pii_key_returns_503(monkeypatch):
     def no_key(*a, **k):
         raise api.pii.PiiKeyError('Chưa đặt PII_KEY')
     monkeypatch.setattr(api.orders, 'create_order', no_key)
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     r = TestClient(api.app).post('/order', json=ORDER_FORM)
     assert r.status_code == 503 and 'chưa lưu được đơn hàng' in r.json()['detail']
 
@@ -428,22 +437,22 @@ class SessionAgent(CartAgent):
 
 @pytest.fixture
 def session_agent(monkeypatch):
-    agent = api.app.state.agent = SessionAgent()
+    agent = agent_api.app.state.agent = SessionAgent()
     monkeypatch.setattr(api.orders, 'customer_profile', lambda cid: PROFILE if cid == 'KH00000001' else None)
     return agent
 
 
 def test_idle_threads_expire_after_ttl(session_agent, monkeypatch):
-    monkeypatch.setattr(api, '_last_seen', {})
+    monkeypatch.setattr(agent_api, '_last_seen', {})
     client = TestClient(api.app)
     client.post('/chat', json={'message': 'chào em', 'thread_id': 'idle'})
     client.post('/chat', json={'message': 'chào em', 'thread_id': 'active'})
-    api._last_seen['idle'] -= api.SESSION_TTL_S + 1
-    assert api.expire_threads(session_agent) == ['idle']
-    assert session_agent.checkpointer.deleted == ['idle'] and list(api._last_seen) == ['active']
-    # Khách tự mở phiên mới: thread cũ thôi theo dõi, thread mới bắt đầu tính giờ
-    new = client.post('/session', json={'end_thread_id': 'active'}).json()['thread_id']
-    assert list(api._last_seen) == [new]
+    agent_api._last_seen['idle'] -= agent_api.SESSION_TTL_S + 1
+    assert agent_api.expire_threads(session_agent) == ['idle']
+    assert session_agent.checkpointer.deleted == ['idle'] and list(agent_api._last_seen) == ['active']
+    # Khách tự mở phiên mới: thread cũ thôi theo dõi; thread mới chỉ tính giờ từ lượt chat đầu tiên
+    client.post('/session', json={'end_thread_id': 'active'})
+    assert agent_api._last_seen == {} and session_agent.checkpointer.deleted == ['idle', 'active']
 
 
 def test_new_session_for_new_customer_greets_normally_and_ends_old_thread(session_agent):
@@ -476,7 +485,7 @@ def test_new_session_customer_without_orders_is_new(session_agent):
 
 
 def test_order_returns_customer_token(fake_orders, monkeypatch):
-    api.app.state.agent = CartAgent(CART)
+    agent_api.app.state.agent = CartAgent(CART)
     monkeypatch.setattr(api.orders, 'get_order', lambda order_id: {'order_id': order_id, 'customer_id': 'KH00000001'})
     data = TestClient(api.app).post('/order', json=ORDER_FORM).json()
     assert api.pii.verify_customer_token(data['customer_token']) == 'KH00000001'
