@@ -11,7 +11,7 @@ from phone_common import promotions
 from phone_agent.conversation import (_current_turn, added_to_cart_this_turn, cart_update, cross_sell_step,
                                     wants_order_now)
 from phone_common.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
-from phone_agent.prompts import POLICY_GUIDE, POLICY_PROMPTS
+from phone_agent.prompts import POLICY_GUIDE
 from phone_common.textnorm import strip_accents
 from phone_agent.vector_db import get_vector_store
 from tavily import TavilyClient
@@ -504,7 +504,7 @@ def search_policy(query: str) -> str:
         by_source.setdefault(doc.metadata['source'], []).append(doc)
     parts = [POLICY_GUIDE]
     for source, docs in by_source.items():
-        guide = POLICY_PROMPTS.get(source)
+        guide = docs[0].metadata.get('prompt')  # prompt riêng của tài liệu, sửa ở be (bảng policies)
         parts.append(f'=== [{source}] ===' + (f'\nHướng dẫn trả lời: {guide}' if guide else '')
                      + '\n' + '\n\n'.join(d.page_content for d in docs))
     return '\n\n'.join(parts)

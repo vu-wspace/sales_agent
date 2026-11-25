@@ -129,46 +129,5 @@ POLICY_GUIDE = dedent("""
     - Đoạn không trả lời được câu hỏi thì nói chưa có thông tin, hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không; không đoán.
 """).strip()
 
-# Prompt riêng cho từng file chính sách (key = tên file trong data_schema/policies/).
-# Mỗi prompt nói rõ: phạm vi, ý bắt buộc phải nêu, điều không được nói, khi nào chuyển nhân viên / chuyển chủ đề.
-POLICY_PROMPTS = {
-    'doi-tra.md': dedent("""
-        Phạm vi: đổi máy, trả hàng, hoàn tiền cho hàng mua tại cửa hàng.
-        Xác định trước khách thuộc trường hợp nào: (a) lỗi nhà sản xuất trong 30 ngày, (b) lỗi từ ngày 31 (chuyển sang
-        bảo hành hãng), (c) đổi ý khi còn nguyên seal trong 7 ngày (phí 10% với điện thoại), (d) đã mở seal/kích hoạt
-        mà không lỗi (không trả, chỉ thu cũ), (e) giao sai/thiếu (báo trong 48 giờ). Chỉ trả lời trường hợp đó;
-        chưa rõ trường hợp thì hỏi lại 1 câu (máy có lỗi không, đã mở seal chưa, nhận hàng bao lâu rồi).
-        Khi khách muốn làm thủ tục đổi trả: nhắc mang hóa đơn/mã đơn và đăng xuất iCloud/Samsung Account, rồi báo chuyển nhân viên.
-        Không hứa đổi trả cho trường hợp thuộc mục "không áp dụng".
-    """).strip(),
-    'giao-hang.md': dedent("""
-        Phạm vi: thời gian giao, phí giao, nhận tại cửa hàng, thanh toán khi nhận, kiểm tra hàng, đổi địa chỉ/hủy đơn.
-        Trả lời theo khu vực khách nói (nội thành HN/HCM/Đà Nẵng, tỉnh khác, huyện đảo); khách không nói khu vực thì
-        nêu ngắn mốc nội thành và tỉnh khác. Đơn có điện thoại luôn miễn phí giao, không nêu biểu phí phụ kiện nếu khách
-        không hỏi. Không hứa giờ giao cụ thể cho một đơn hàng: đơn bị chậm, giao sai, thiếu hàng thì báo chuyển nhân viên kiểm tra.
-    """).strip(),
-    'tra-gop.md': dedent("""
-        Phạm vi: các hình thức trả góp, điều kiện, hồ sơ, lãi suất/phí, quy trình, tất toán sớm.
-        Trả lời đúng hình thức khách hỏi (thẻ tín dụng, công ty tài chính, ví). Khách hỏi điều kiện trả góp 0% mà không nói
-        hình thức nào thì nêu đủ cả hai: thẻ tín dụng (đơn từ 3 triệu, kỳ hạn tối đa 12 tháng, không cần trả trước) và
-        công ty tài chính (trả trước tối thiểu 30%, kỳ hạn tối đa 12 tháng). Nói rõ lãi suất và đối tác là của cửa hàng demo,
-        số tiền góp hằng tháng chỉ là ước tính, số chính xác theo hợp đồng của đối tác. Chỉ tính ví dụ góp hằng tháng khi khách
-        hỏi, và tính bằng giá máy lấy từ get_product_details. Không khẳng định hồ sơ chắc chắn được duyệt; không xin số thẻ,
-        CVV, ảnh CCCD qua chat.
-    """).strip(),
-    'bao-hanh-apple.md': dedent("""
-        Phạm vi: bảo hành iPhone và phụ kiện Apple: thời hạn, được/không được bảo hành, pin, AppleCare+, quyền lợi thêm của
-        cửa hàng, quy trình. Phân biệt rõ bảo hành của Apple (12 tháng, theo Apple) với quyền lợi của cửa hàng (1 đổi 1 trong
-        30 ngày, gói mở rộng, gói rơi vỡ). Rơi vỡ, vào nước: nói thẳng là không thuộc bảo hành Apple, rồi mới nêu gói hỗ trợ.
-        Câu hỏi về máy Samsung thì không dùng đoạn này.
-    """).strip(),
-    'bao-hanh-samsung.md': dedent("""
-        Phạm vi: bảo hành điện thoại và phụ kiện Samsung: thời hạn theo loại sản phẩm, được/không được bảo hành, Knox,
-        lưu ý màn hình gập Z Fold/Z Flip, Samsung Care+, quyền lợi thêm của cửa hàng, quy trình. Nêu đúng thời hạn của loại
-        sản phẩm khách hỏi (máy 12 tháng, ốp/miếng dán/S Pen mua rời 6 tháng...). Phân biệt bảo hành của Samsung với quyền lợi
-        của cửa hàng. Câu hỏi về iPhone thì không dùng đoạn này.
-    """).strip(),
-}
-
 def get_system_prompt(agent: str) -> str:
     return AGENT_PROMPTS[agent]

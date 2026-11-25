@@ -10,7 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import groq
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.exceptions import ModelError
 from langchain_core.messages import AIMessage, HumanMessage
@@ -21,9 +21,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from phone_agent.agent import build_agent
 from phone_agent.graph import build_graph
-from phone_agent.vector_db import count_documents, get_vector_store, ingest, is_up_to_date
+from phone_agent.vector_db import (count_documents, delete_policy, get_vector_store, ingest_seed, policy_hashes,
+                                   upsert_policy)
 from phone_common import pii
 from phone_common.config import AGENT_API_KEY, AGENT_IMPL, AUTO_INGEST
+from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
 from phone_common.llm import is_rate_limited
 from phone_common.textnorm import normalize_user_text
 
@@ -89,12 +91,13 @@ def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
     # Qdrant có thể khởi động chậm hơn agent khi chạy bằng docker compose -> thử lại vài lần
     for attempt in range(1, retries + 1):
         try:
-            db = get_vector_store()  # tạo collection nếu chưa có
+            get_vector_store()  # tạo collection nếu chưa có
             n = count_documents()
-            # Nạp lại cả khi file chính sách .md đã sửa (id chunk không còn khớp), không chỉ khi collection rỗng
-            if AUTO_INGEST and (n == 0 or not is_up_to_date()):
-                log.info('Chính sách trong Qdrant rỗng hoặc đã cũ, đang nạp lại...')
-                n = ingest(db)
+            # Chính sách do be đẩy sang (PUT /policies/{slug}). AUTO_INGEST: chạy agent không có be thì nạp dữ liệu mẫu
+            # khi Qdrant rỗng; không nạp đè khi đã có dữ liệu, để không xóa bản be đã sửa
+            if AUTO_INGEST and n == 0:
+                log.info('Qdrant chưa có chính sách, đang nạp dữ liệu mẫu (data_schema/policies)...')
+                n = ingest_seed()
             return n
         except Exception as e:
             if attempt == retries:
@@ -172,6 +175,11 @@ class NewThread(BaseModel):
     greeting: str | None = Field(default=None, max_length=2000)  # lời chào ghi vào lịch sử như agent đã nói
     customer: dict | None = None                                  # hồ sơ khách quen (chỉ dùng khi AGENT_IMPL=graph)
     end_thread_id: str | None = Field(default=None, max_length=100)  # cuộc trò chuyện cũ cần xóa
+
+
+class PolicyIn(BaseModel):
+    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)  # markdown: # tiêu đề, ## mục, ### mục con
+    prompt: str | None = Field(default=None, max_length=MAX_PROMPT)  # hướng dẫn trả lời riêng, kèm kết quả search_policy
 
 
 class OrderPlaced(BaseModel):
@@ -339,3 +347,26 @@ def order_cancelled(thread_id: str, req: OrderCancelled, request: Request):
         {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(req.answer)],
          'cart': [], 'order_form': False, 'cross_sell': None, 'wanted': None},
         as_node=AS_NODE)
+
+
+@app.get('/policies')
+def list_policies() -> dict[str, str | None]:
+    """{slug: hash} các tài liệu chính sách đang có trong Qdrant; be so với bảng policies để biết cần đẩy lại gì."""
+    return policy_hashes()
+
+
+@app.put('/policies/{slug}')
+def put_policy(req: PolicyIn, slug: str = Path(pattern=SLUG)):
+    """Thêm/sửa 1 tài liệu: chunk + embed, thay chunk cũ. Chạy đồng bộ (vài giây mỗi tài liệu trên CPU)."""
+    try:
+        n = upsert_policy(slug, req.content_md, req.prompt)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    log.info('Đã cập nhật chính sách %s: %d đoạn', slug, n)
+    return {'slug': slug, 'chunks': n}
+
+
+@app.delete('/policies/{slug}', status_code=204)
+def remove_policy(slug: str = Path(pattern=SLUG)):
+    delete_policy(slug)
+    log.info('Đã xóa chính sách %s', slug)

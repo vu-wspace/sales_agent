@@ -1,22 +1,27 @@
 # Backend cửa hàng: đơn hàng, phiên chat, email xác nhận. Chat chuyển tiếp sang agent service (services/agent) qua
 # HTTP; giỏ hàng nằm trong state của agent nên đọc từ agent (GET /threads/{id}), không tin giỏ do trình duyệt gửi.
 # Agent tắt: be vẫn chạy - mở phiên, hủy form vẫn được; chat, tính giá, đặt hàng báo 503 (không có giỏ để đọc).
+import asyncio
 import json
 import logging
 import re
+import secrets
 import uuid
 from contextlib import asynccontextmanager
 from typing import Literal
 
 import httpx
 import psycopg
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from datetime import datetime
+
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
-from phone_api import mailer, orders
+from phone_api import mailer, orders, policies
 from phone_common import pii, promotions
-from phone_common.config import AGENT_API_KEY, AGENT_URL, PII_KEY, SMTP_HOST
+from phone_common.config import ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, PII_KEY, POLICY_SYNC_S, SMTP_HOST
+from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
 
 log = logging.getLogger('uvicorn.error')
 
@@ -115,6 +120,44 @@ class SessionResponse(BaseModel):
     customer_token: str | None = None   # None: mã sai / khách không còn -> trình duyệt xóa mã đã lưu
 
 
+class PolicyIn(BaseModel):
+    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)  # markdown: # tiêu đề, ## mục, ### mục con
+    prompt: str | None = Field(default=None, max_length=MAX_PROMPT)  # hướng dẫn trả lời riêng cho tài liệu này
+
+    @field_validator('content_md')
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError('Nội dung chính sách trống')
+        return v
+
+    @field_validator('prompt', mode='before')
+    @classmethod
+    def blank_prompt(cls, v):
+        return (v.strip() or None) if isinstance(v, str) else v
+
+
+class PolicyOut(BaseModel):
+    slug: str
+    content_md: str
+    prompt: str | None = None
+    updated_at: datetime | None = None
+    synced: bool | None = None   # PUT/DELETE: đã cập nhật sang agent chưa (False: agent tắt, sync sau sẽ đẩy bù)
+
+
+async def _policy_sync_loop(app: FastAPI):
+    # Đẩy bù chính sách sửa lúc agent tắt, và lấp Qdrant mới (lần đầu chạy, volume bị xóa)
+    while True:
+        try:
+            await asyncio.to_thread(policies.sync, app.state.agent_http)
+            delay = POLICY_SYNC_S
+        except (httpx.HTTPError, psycopg.Error) as e:
+            # Lúc mới deploy agent khởi động chậm hơn be (nạp model embedding): thử lại sớm thay vì chờ cả vòng
+            delay = min(30, POLICY_SYNC_S)
+            log.warning('Chưa đồng bộ được chính sách sang agent (%s), thử lại sau %ss', type(e).__name__, delay)
+        await asyncio.sleep(delay)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pii.install_log_filter()  # che số điện thoại, email trong log (handler của uvicorn đã có lúc này)
@@ -129,11 +172,20 @@ async def lifespan(app: FastAPI):
         log.error('Chưa tạo được bảng đơn hàng (%s): POST /order sẽ lỗi tới khi Postgres sẵn sàng', type(e).__name__)
     except pii.PiiKeyError as e:
         log.error('Chưa mã hóa được thông tin khách cũ: %s', e)
+    try:
+        if n := policies.ensure_table():
+            log.info('Đã nạp %d chính sách mẫu vào bảng policies', n)
+    except psycopg.Error as e:
+        log.error('Chưa tạo được bảng chính sách (%s)', type(e).__name__)
+    if not ADMIN_API_KEY:
+        log.warning('Chưa đặt ADMIN_API_KEY: /admin/policies bị tắt')
     headers = {'Authorization': f'Bearer {AGENT_API_KEY}'} if AGENT_API_KEY else {}
     # read 180s: 1 lượt chat có thể chạy vài tool + model dự phòng; connect 5s: agent tắt thì báo lỗi ngay
     app.state.agent_http = httpx.Client(base_url=AGENT_URL, headers=headers, timeout=httpx.Timeout(180, connect=5))
     log.info('Agent: %s', AGENT_URL)
+    syncing = asyncio.create_task(_policy_sync_loop(app))
     yield
+    syncing.cancel()
     app.state.agent_http.close()
 
 
@@ -292,3 +344,87 @@ def cancel_order(req: CancelRequest, request: Request):
     except HTTPException as e:
         log.warning('Chưa ghi được việc hủy đặt hàng vào cuộc trò chuyện: %s', e.detail)
     return CancelResponse(thread_id=req.thread_id, answer=orders.CANCEL_MESSAGE)
+
+
+# ---------------------------------------------------------------- quản trị chính sách
+
+def require_admin(request: Request) -> None:
+    if not ADMIN_API_KEY:
+        raise HTTPException(503, 'Chưa đặt ADMIN_API_KEY: endpoint quản trị đang tắt')
+    given = request.headers.get('authorization', '').removeprefix('Bearer ')
+    if not secrets.compare_digest(given.encode(), ADMIN_API_KEY.encode()):
+        raise HTTPException(401, 'Sai hoặc thiếu ADMIN_API_KEY')
+
+
+admin = [Depends(require_admin)]
+DB_DOWN = 'Chưa đọc/ghi được database chính sách, thử lại sau.'
+
+
+@app.get('/admin/policies', response_model=list[PolicyOut], dependencies=admin)
+def admin_list_policies():
+    try:
+        return policies.list_all()
+    except psycopg.Error as e:
+        log.error('Lỗi đọc bảng policies', exc_info=e)
+        raise HTTPException(503, DB_DOWN)
+
+
+@app.get('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
+def admin_get_policy(slug: str = Path(pattern=SLUG)):
+    try:
+        doc = policies.get(slug)
+    except psycopg.Error as e:
+        log.error('Lỗi đọc bảng policies', exc_info=e)
+        raise HTTPException(503, DB_DOWN)
+    if not doc:
+        raise HTTPException(404, f'Không có chính sách {slug}')
+    return doc
+
+
+@app.put('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
+def admin_put_policy(req: PolicyIn, request: Request, slug: str = Path(pattern=SLUG)):
+    """Thêm/sửa 1 tài liệu chính sách (slug dạng 'ten-tai-lieu.md'): lưu database rồi đẩy sang agent để embed lại.
+    Agent tắt hoặc lỗi thì vẫn lưu, synced=false; vòng đồng bộ của be sẽ đẩy bù."""
+    try:
+        doc = policies.save(slug, req.content_md, req.prompt)
+    except psycopg.Error as e:
+        log.error('Lỗi ghi bảng policies', exc_info=e)
+        raise HTTPException(503, DB_DOWN)
+    try:
+        policies.push(request.app.state.agent_http, doc)
+        synced = True
+    except httpx.HTTPError as e:
+        log.warning('Đã lưu chính sách %s nhưng chưa đẩy được sang agent (%s)', slug, type(e).__name__)
+        synced = False
+    return {**doc, 'synced': synced}
+
+
+@app.delete('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
+def admin_delete_policy(request: Request, slug: str = Path(pattern=SLUG)):
+    try:
+        doc = policies.get(slug)
+        if not doc:
+            raise HTTPException(404, f'Không có chính sách {slug}')
+        policies.delete(slug)
+    except psycopg.Error as e:
+        log.error('Lỗi ghi bảng policies', exc_info=e)
+        raise HTTPException(503, DB_DOWN)
+    try:
+        request.app.state.agent_http.delete(f'/policies/{slug}').raise_for_status()
+        synced = True
+    except httpx.HTTPError as e:
+        log.warning('Đã xóa chính sách %s nhưng chưa xóa được trên agent (%s)', slug, type(e).__name__)
+        synced = False
+    return {**doc, 'synced': synced}
+
+
+@app.post('/admin/policies/sync', dependencies=admin)
+def admin_sync_policies(request: Request):
+    """Đồng bộ ngay (không chờ vòng POLICY_SYNC_S): {pushed: [slug], removed: [slug]}."""
+    try:
+        return policies.sync(request.app.state.agent_http)
+    except httpx.HTTPError as e:
+        raise HTTPException(503, f'Chưa đồng bộ được sang agent ({type(e).__name__})')
+    except psycopg.Error as e:
+        log.error('Lỗi đọc bảng policies', exc_info=e)
+        raise HTTPException(503, DB_DOWN)

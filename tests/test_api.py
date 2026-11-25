@@ -251,19 +251,13 @@ def test_qdrant_client_is_reused():
     assert get_client() is get_client()
 
 
-def test_prepare_vector_db_ingests_when_empty(monkeypatch):
+@pytest.mark.parametrize('auto_ingest, stored, expected', [(True, 0, 34), (True, 60, 60), (False, 0, 0)])
+def test_prepare_vector_db_seeds_only_when_empty_and_enabled(monkeypatch, auto_ingest, stored, expected):
+    # Chính sách do be đẩy sang; agent chỉ nạp dữ liệu mẫu khi bật AUTO_INGEST và Qdrant rỗng (không đè bản be đã sửa)
+    monkeypatch.setattr(svc, 'AUTO_INGEST', auto_ingest)
     monkeypatch.setattr(svc, 'get_vector_store', lambda: 'db')
-    monkeypatch.setattr(svc, 'count_documents', lambda: 0)
-    monkeypatch.setattr(svc, 'ingest', lambda db: 34)
-    assert svc.prepare_vector_db() == 34
-
-
-@pytest.mark.parametrize('up_to_date, expected', [(False, 65), (True, 60)])
-def test_prepare_vector_db_reingests_only_when_policies_changed(monkeypatch, up_to_date, expected):
-    monkeypatch.setattr(svc, 'get_vector_store', lambda: 'db')
-    monkeypatch.setattr(svc, 'count_documents', lambda: 60)
-    monkeypatch.setattr(svc, 'is_up_to_date', lambda: up_to_date)
-    monkeypatch.setattr(svc, 'ingest', lambda db: 65)
+    monkeypatch.setattr(svc, 'count_documents', lambda: stored)
+    monkeypatch.setattr(svc, 'ingest_seed', lambda: 34)
     assert svc.prepare_vector_db() == expected
 
 
