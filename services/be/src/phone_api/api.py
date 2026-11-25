@@ -6,7 +6,10 @@ import json
 import logging
 import re
 import secrets
+import threading
+import time
 import uuid
+from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -20,7 +23,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from phone_api import mailer, orders, policies
 from phone_common import pii, promotions
-from phone_common.config import ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, PII_KEY, POLICY_SYNC_S, SMTP_HOST
+from phone_common.config import (ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, CHAT_RATE_PER_MIN, PII_KEY, POLICY_SYNC_S,
+                                 SMTP_HOST)
 from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
 
 log = logging.getLogger('uvicorn.error')
@@ -238,6 +242,35 @@ def _cart(request: Request, thread_id: str) -> list[dict]:
     return _agent(request, 'GET', f'/threads/{thread_id}').json()['cart']
 
 
+# Chống spam: mỗi IP tối đa CHAT_RATE_PER_MIN lượt /chat, /chat/stream, /session, /order* trong 60 giây gần nhất.
+# IP thật lấy qua uvicorn --proxy-headers (X-Forwarded-For do nginx của fe thêm, FORWARDED_ALLOW_IPS trong compose).
+# shortcut: đếm trong RAM, đúng với 1 worker (Dockerfile); chạy nhiều worker/nhiều máy thì chuyển sang Redis.
+RATE_DETAIL = 'Dạ, anh/chị nhắn hơi nhanh, chờ em khoảng 1 phút rồi nhắn tiếp giúp em nha.'
+MAX_IPS = 10_000  # trần số IP nhớ cùng lúc: quá thì bỏ IP im lâu nhất (O(1), không quét cả dict)
+_hits: OrderedDict[str, deque] = OrderedDict()  # thứ tự: IP nhắn gần nhất ở cuối
+_hits_lock = threading.Lock()
+
+
+def limit_rate(request: Request) -> None:
+    if CHAT_RATE_PER_MIN <= 0:
+        return
+    ip = request.client.host if request.client else 'unknown'
+    now = time.monotonic()
+    with _hits_lock:
+        q = _hits.setdefault(ip, deque())
+        _hits.move_to_end(ip)
+        while len(_hits) > MAX_IPS:
+            _hits.popitem(last=False)
+        while q and now - q[0] >= 60:
+            q.popleft()
+        if len(q) >= CHAT_RATE_PER_MIN:
+            raise HTTPException(429, RATE_DETAIL, headers={'Retry-After': str(int(60 - (now - q[0])) + 1)})
+        q.append(now)
+
+
+rate_limited = [Depends(limit_rate)]
+
+
 @app.get('/health')
 def health(request: Request):
     # be khỏe kể cả khi agent tắt; trường agent cho biết chat có dùng được không
@@ -248,12 +281,12 @@ def health(request: Request):
     return {'status': 'ok', 'agent': agent}
 
 
-@app.post('/chat')
+@app.post('/chat', dependencies=rate_limited)
 def chat(req: ChatRequest, request: Request):
     return _agent(request, 'POST', '/chat', json=req.model_dump(exclude_none=True)).json()
 
 
-@app.post('/chat/stream')
+@app.post('/chat/stream', dependencies=rate_limited)
 def chat_stream(req: ChatRequest, request: Request):
     """Chuyển tiếp Server-Sent Events của agent (xem phone_agent.service.chat_stream) tới trình duyệt."""
     http = request.app.state.agent_http
@@ -282,7 +315,7 @@ def chat_stream(req: ChatRequest, request: Request):
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
-@app.post('/order', response_model=OrderResponse)
+@app.post('/order', response_model=OrderResponse, dependencies=rate_limited)
 def order(req: OrderRequest, request: Request, background: BackgroundTasks):
     """Khách gửi form đặt hàng: tạo đơn từ giỏ hàng của thread trên agent (không tin giỏ do trình duyệt gửi lên),
     trả tóm tắt đơn lấy từ database + 1-2 câu cảm ơn do LLM viết, và ghi vào lịch sử hội thoại.
@@ -314,7 +347,7 @@ def order(req: OrderRequest, request: Request, background: BackgroundTasks):
                          customer_token=pii.customer_token(saved['customer_id']) if saved.get('customer_id') else None)
 
 
-@app.post('/order/quote', response_model=QuoteResponse)
+@app.post('/order/quote', response_model=QuoteResponse, dependencies=rate_limited)
 def order_quote(req: QuoteRequest, request: Request):
     """Form đặt hàng hỏi giá trước khi gửi: tạm tính, giảm giá (mã khách nhập hoặc khuyến mãi tự động), tổng tiền.
     Tính từ giỏ hàng của thread trên agent. Mã không dùng được thì 409 kèm lý do."""
@@ -331,7 +364,7 @@ def order_quote(req: QuoteRequest, request: Request):
                          promo=promotions.label(promo), promo_text=promotions.describe(promo) if promo else None)
 
 
-@app.post('/session', response_model=SessionResponse)
+@app.post('/session', response_model=SessionResponse, dependencies=rate_limited)
 def new_session(req: SessionRequest, request: Request):
     """Kết thúc cuộc trò chuyện cũ và mở cuộc trò chuyện mới trên agent.
     Khách đã đặt hàng (customer_token hợp lệ, có đơn) thì chào lại theo tên, ghi khách quen vào trạng thái hội thoại;
@@ -358,7 +391,7 @@ def new_session(req: SessionRequest, request: Request):
     return SessionResponse(thread_id=thread_id, greeting=greeting, returning=bool(profile), customer_token=token)
 
 
-@app.post('/order/cancel', response_model=CancelResponse)
+@app.post('/order/cancel', response_model=CancelResponse, dependencies=rate_limited)
 def cancel_order(req: CancelRequest, request: Request):
     """Khách bấm "Hủy đặt hàng" trên form: không tạo đơn, ghi vào lịch sử hội thoại câu trả lời cố định
     (không gọi LLM) và làm trống giỏ hàng để agent không mời chốt đơn / bán kèm tiếp cho giỏ đã hủy."""

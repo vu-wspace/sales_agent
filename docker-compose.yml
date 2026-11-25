@@ -57,7 +57,7 @@ services:
     image: phone-sales-agent
     container_name: phone_agent
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"   # chỉ máy này gọi được; khách đi qua fe (8000), không tới thẳng agent
     env_file: .env    # ROUTER9_*, OPENROUTER_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, TAVILY_API_KEY, LANGSMITH_*, AGENT_API_KEY
     environment:
       QDRANT_URL: http://qdrant:6333   # ghi đè QDRANT_URL=localhost trong .env
@@ -81,10 +81,12 @@ services:
     image: phone-sales-be
     container_name: phone_be
     ports:
-      - "8002:8002"   # API (docs tại /docs)
+      - "127.0.0.1:8002:8002"   # API (docs tại /docs); chỉ máy này: ngoài LAN gọi thẳng be thì tự khai X-Forwarded-For được, lách giới hạn chat theo IP
     env_file: .env    # PII_KEY, SMTP_*, MAIL_FROM, LLM key (lời cảm ơn sau đặt hàng), AGENT_API_KEY, ADMIN_API_KEY
     environment:
       AGENT_URL: http://agent:8001
+      # Tin X-Forwarded-For từ mạng docker (nginx của fe) để giới hạn chat theo IP thật của khách
+      FORWARDED_ALLOW_IPS: 172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
       ROUTER9_BASE_URL: http://host.docker.internal:20128/v1
       SMTP_HOST: mailpit                                       # ghi đè SMTP_HOST=localhost trong .env

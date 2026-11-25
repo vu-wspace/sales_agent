@@ -59,4 +59,5 @@ AGENT_API_KEY = os.getenv('AGENT_API_KEY', '')
 
 # be: key cho /admin/policies (header "Authorization: Bearer <key>"). Để trống thì tắt các endpoint quản trị
 ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', '')
+CHAT_RATE_PER_MIN = int(os.getenv('CHAT_RATE_PER_MIN', '20'))  # be: số lượt chat, mở phiên, đặt hàng tối đa mỗi IP mỗi phút (0: tắt)
 POLICY_SYNC_S = int(os.getenv('POLICY_SYNC_S', '300'))  # be đối chiếu chính sách với agent mỗi ngần này giây

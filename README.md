@@ -132,6 +132,7 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `AGENT_API_KEY` | (trống: không kiểm tra) | Đặt thì mọi endpoint của agent trừ `/health` đòi header `Authorization: Bearer <key>`; be tự gửi key này. Bắt buộc khi mở agent cho hệ thống khác |
 | `AUTO_INGEST` | `false` | Agent tự nạp dữ liệu mẫu `data_schema/policies` khi Qdrant rỗng. Chỉ dùng khi chạy agent không có be (có be thì be đẩy chính sách sang) |
 | `ADMIN_API_KEY` | (trống: tắt `/admin`) | Key của be cho `/admin/policies` (header `Authorization: Bearer <key>`) |
+| `CHAT_RATE_PER_MIN` | `20` | be: mỗi IP tối đa ngần này lượt `/chat`, `/chat/stream`, `/session`, `/order*` mỗi phút, quá thì `429` (`0`: tắt) |
 | `POLICY_SYNC_S` | `300` | be đối chiếu chính sách với agent mỗi ngần này giây (lỗi thì thử lại sau 30 giây) |
 | `PII_KEY` | (bắt buộc để đặt hàng) | Khóa Fernet mã hóa số điện thoại, email của khách trong database, xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii). Tạo: `uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Sao lưu khóa**: mất khóa là không đọc lại được dữ liệu đã mã hóa |
 | `SMTP_HOST` | (trống: không gửi email) | Máy chủ SMTP gửi email xác nhận đơn. Chạy trên máy với Mailpit: `localhost` |
