@@ -1,0 +1,17 @@
+[project]
+name = "phone-api"
+version = "0.1.0"
+description = "Backend cửa hàng: đơn hàng, phiên chat, email xác nhận; gọi agent qua HTTP"
+requires-python = ">=3.12.15"
+dependencies = [
+    "phone-common",
+    "psycopg[binary]>=3.2",
+    "fastapi>=0.120.0",
+    "uvicorn[standard]>=0.38.0",
+    "fastapi-mail>=1.6.8",
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

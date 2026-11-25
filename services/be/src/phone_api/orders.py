@@ -8,10 +8,10 @@ import psycopg
 from langchain_core.messages import HumanMessage, SystemMessage
 from psycopg.rows import dict_row
 
-from phone_sales import llm, pii, promotions
-from phone_sales.config import DATABASE_URL, ROOT
-from phone_sales.fallback import FallbackMiddleware
-from phone_sales.textnorm import clean_answer, keep_name
+from phone_common import llm, pii, promotions
+from phone_common.config import DATABASE_URL, ROOT
+from phone_common.fallback import FallbackMiddleware
+from phone_common.textnorm import clean_answer, keep_name
 
 log = logging.getLogger(__name__)
 SCHEMA = ROOT / 'data_schema' / 'orders.sql'

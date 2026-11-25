@@ -1,0 +1,22 @@
+[project]
+name = "phone-common"
+version = "0.1.0"
+description = "Phần dùng chung của agent và be: config, LLM + fallback, mã hóa PII, khuyến mãi, chuẩn hóa chữ tiếng Việt"
+requires-python = ">=3.12.15"
+dependencies = [
+    "langchain>=1.4.7",
+    "langchain-core>=1.7.0",
+    "langgraph>=1.2.16",
+    "langchain-openai>=1.7.3",
+    "langchain-openrouter>=0.2.9",
+    "langchain-google-genai>=4.4.2",
+    "langchain-groq>=1.1.3",
+    "langchain-nvidia-ai-endpoints>=1.5.0",
+    "cryptography>=50.0.2",
+    "python-dotenv>=1.2.4",
+    "truststore>=0.10.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

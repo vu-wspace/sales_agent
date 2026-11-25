@@ -5,10 +5,10 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from phone_sales import llm
-from phone_sales.conversation import track_user_message
-from phone_sales.grounding import sources_of, ungrounded
-from phone_sales.textnorm import clean_answer, normalize_user_text
+from phone_common import llm
+from phone_agent.conversation import track_user_message
+from phone_agent.grounding import sources_of, ungrounded
+from phone_common.textnorm import clean_answer, normalize_user_text
 
 
 # ---------------------------------------------------------------- chuẩn hóa tin nhắn của khách
@@ -90,7 +90,7 @@ def test_graph_rewrites_answer_with_ungrounded_price(monkeypatch):
     script = iter([AIMessage('Dạ iPhone 17 giá 25.000.000đ ạ.'),           # bịa giá
                    AIMessage('Dạ em chưa tra giá, anh/chị chờ em chút ạ.')])  # viết lại
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('iphone 17 giá bn')]}, {'configurable': {'thread_id': 'g'}})
     texts = [m.text for m in res['messages']]
@@ -100,7 +100,7 @@ def test_graph_rewrites_answer_with_ungrounded_price(monkeypatch):
 def test_graph_keeps_grounded_answer(monkeypatch):
     script = iter([AIMessage('Dạ anh/chị cho em biết ngân sách khoảng 20 triệu đúng không ạ?')])
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('tầm 20tr')]}, {'configurable': {'thread_id': 'g'}})
     assert res['messages'][-1].text == 'Dạ anh/chị cho em biết ngân sách khoảng 20 triệu đúng không?'  # bỏ chữ "ạ"
@@ -125,12 +125,12 @@ def test_clean_answer_replaces_pii_tokens():
     ('Cảm ơn anh/chị nha.', 'Lan', 'Cảm ơn anh/chị nha.'),
 ])
 def test_keep_name_restores_customer_spelling(text, name, expected):
-    from phone_sales.textnorm import keep_name
+    from phone_common.textnorm import keep_name
     assert keep_name(text, name) == expected
 
 
 def test_graph_retries_empty_answer_then_falls_back(monkeypatch):
-    from phone_sales.graph import EMPTY_FALLBACK, build_graph
+    from phone_agent.graph import EMPTY_FALLBACK, build_graph
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=iter([AIMessage(''), AIMessage('Dạ em đây nha.')])))
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('alo')]}, {'configurable': {'thread_id': 'e1'}})
@@ -150,7 +150,7 @@ def test_graph_sets_handoff_when_answer_announces_it(monkeypatch):
     # Khách không nói từ khóa chuyển nhân viên, model vẫn báo chuyển -> handoff phải bật thật
     script = iter([AIMessage('Dạ em đã chuyển yêu cầu của chị cho nhân viên hỗ trợ rồi nha.')])
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('chị cần làm thủ tục đổi máy')]}, {'configurable': {'thread_id': 'h'}})
     assert res['handoff'] and res['stage'] == 'handoff'

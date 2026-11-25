@@ -3,7 +3,7 @@ import groq
 import openai
 from langchain_core.exceptions import ModelNotFoundError
 
-from phone_sales.llm import (FALLBACK_LLMS, RETRIES_IN_CHAIN, RETRIES_LAST, google_llm, google_llm_alt, groq_llm,
+from phone_common.llm import (FALLBACK_LLMS, RETRIES_IN_CHAIN, RETRIES_LAST, google_llm, google_llm_alt, groq_llm,
                            is_permanent_error, is_rate_limited, model_name, nvidia_llm, nvidia_status, open_llm,
                            openai_llm)
 
@@ -46,7 +46,7 @@ def test_fallback_chain_has_distinct_models():
 
 def test_9router_reads_config_from_env():
     # Địa chỉ, key của 9Router lấy từ .env (ROUTER9_*), không ghi thẳng trong code
-    from phone_sales import config
+    from phone_common import config
     assert openai_llm.openai_api_base == config.ROUTER9_BASE_URL
     assert openai_llm.openai_api_key.get_secret_value() == config.ROUTER9_API_KEY
     assert openai_llm.model_name == config.ROUTER9_MODEL

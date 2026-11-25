@@ -4,7 +4,7 @@ import re
 from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langgraph.graph.message import add_messages
-from phone_sales.textnorm import strip_accents
+from phone_common.textnorm import strip_accents
 
 Stage = Literal['discovery', 'recommending', 'comparing', 'closing', 'handoff']
 Sentiment = Literal['positive', 'neutral', 'negative']
@@ -44,7 +44,7 @@ def steps(old: list | None, new: list | None) -> list:
     return [] if new is None else append_unique(old, new)
 
 def cart_update(old: list | None, new: list | dict | None) -> list:
-    """Giỏ hàng. list: thay cả giỏ (api.py làm trống sau khi đặt/hủy đơn). dict: thao tác của tool giỏ hàng,
+    """Giỏ hàng. list: thay cả giỏ (service.py làm trống khi be báo đã đặt/hủy đơn). dict: thao tác của tool giỏ hàng,
     {'add': món (quantity = số lượng thêm)} hoặc {'remove': [variant_id]}. Model dự phòng có thể gọi 2 tool giỏ hàng
     song song trong 1 bước (vd thêm máy và củ sạc): mỗi thao tác áp lên kết quả trước, không món nào bị mất
     (khóa không có reducer thì LangGraph báo InvalidUpdateError: Can receive only one value per step)."""
@@ -80,13 +80,13 @@ class AgentState(TypedDict, total=False):
     cross_sell: Annotated[list[str], steps]               # bước bán kèm đã làm: 'charger', 'accessories', 'confirm'
     declined: bool                                        # tin nhắn mới nhất của khách là từ chối ("không cần")
     order_form: Annotated[bool, last]                     # lượt này hiện form đặt hàng (show_order_form)
-    orders: Annotated[list[str], append]                  # mã các đơn đã đặt trong cuộc trò chuyện (api.py: /order)
+    orders: Annotated[list[str], append]                  # mã các đơn đã đặt trong cuộc trò chuyện (be: POST /order -> service.py: order-placed)
     objection: str | None                                 # phản đối trong tin nhắn lượt này: price, competitor, hesitation
     objection_type: str | None                            # loại phản đối đang xử lý (đổi loại thì làm lại từ bước đầu)
     objection_step: int                                   # đã xử lý loại đó bao nhiêu lượt (bậc thang khi khách do dự)
     offered_alternatives: Annotated[list[str], append_unique]  # máy rẻ hơn đã gợi ý (find_cheaper_alternatives không lặp lại)
     wanted: Annotated[dict, wanted_update]                # phụ kiện khách đã yêu cầu mua {loại: tin nhắn}, xem wanted_of
-    customer: Annotated[dict | None, last]                # khách quen (đã đặt hàng trước), api.py: POST /session
+    customer: Annotated[dict | None, last]                # khách quen (đã đặt hàng trước), be: POST /session -> service.py: POST /threads
 
 # ---------------------------------------------------------------- trích từ tin nhắn của khách
 
@@ -423,7 +423,7 @@ def describe(state: dict) -> str:
     return '\n'.join(lines)
 
 def customer_hint(state: dict) -> str | None:
-    """Khách quen: phiên chat mới của khách đã đặt hàng trước đó (api.py: POST /session)."""
+    """Khách quen: phiên chat mới của khách đã đặt hàng trước đó (be: POST /session)."""
     c = state.get('customer')
     if not c:
         return None

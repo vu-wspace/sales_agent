@@ -2,7 +2,7 @@ import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 
-from phone_sales import tools
+from phone_agent import tools
 
 PHONES = [
     {'product_id': 'apple-iphone-18-pro', 'name': 'iPhone 18 Pro', 'brand': 'Apple'},
@@ -298,7 +298,7 @@ def test_search_policy_off_topic_returns_not_found(monkeypatch):
 
 
 def test_every_policy_file_has_a_prompt():
-    from phone_sales.config import POLICY_DIR
+    from phone_common.config import POLICY_DIR
     assert set(tools.POLICY_PROMPTS) == {f.name for f in POLICY_DIR.glob('*.md')}
 
 

@@ -2,7 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from phone_sales import orders, pii
+from phone_api import orders
+from phone_common import pii
 
 CART = [{'variant_id': 'S26-256-DEN', 'name': 'Galaxy S26', 'storage': '256GB', 'color': 'Đen Classic',
          'price': 29990001, 'quantity': 1},

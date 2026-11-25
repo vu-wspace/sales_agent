@@ -1,9 +1,9 @@
 {
   "$schema": "https://langgra.ph/schema.json",
   "python_version": "3.12",
-  "dependencies": ["."],
+  "dependencies": ["./packages/common", "./services/agent"],
   "graphs": {
-    "agent_main": "./src/phone_sales/agent.py:agent",
-    "phone_graph": "./src/phone_sales/graph.py:graph"
+    "agent_main": "./services/agent/src/phone_agent/agent.py:agent",
+    "phone_graph": "./services/agent/src/phone_agent/graph.py:graph"
   }
 }

@@ -14,7 +14,7 @@ VN_TZ = timezone(timedelta(hours=7))
 
 
 class PromoError(Exception):
-    """Mã khuyến mãi không dùng được (hết hạn, chưa đủ điều kiện...): api.py trả nguyên văn cho giao diện."""
+    """Mã khuyến mãi không dùng được (hết hạn, chưa đủ điều kiện...): be (phone_api/api.py) trả nguyên văn cho giao diện."""
 
 
 def _price(v: int) -> str:

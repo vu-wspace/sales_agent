@@ -3,8 +3,9 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from phone_sales import conversation as conv
-from phone_sales import llm, tools
+from phone_agent import conversation as conv
+from phone_common import llm
+from phone_agent import tools
 
 
 # ---------------------------------------------------------------- nhận diện phản đối
@@ -129,7 +130,7 @@ class ScriptedModel(GenericFakeChatModel):
 
 def test_graph_tracks_objection_steps(monkeypatch):
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=iter([AIMessage('Dạ vâng.')] * 6)))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     cfg = {'configurable': {'thread_id': 'o'}}
     say = lambda text: g.invoke({'messages': [HumanMessage(text)]}, cfg)

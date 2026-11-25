@@ -13,7 +13,8 @@ from pathlib import Path
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from phone_sales import config, orders
+from phone_common import config
+from phone_api import orders
 
 log = logging.getLogger(__name__)
 TEMPLATES = Path(__file__).parent / 'templates'

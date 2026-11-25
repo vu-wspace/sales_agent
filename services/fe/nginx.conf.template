@@ -1,0 +1,21 @@
+# nginx image tự thay ${BE_URL} khi khởi động (envsubst trên /etc/nginx/templates/*.template)
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    # no-cache: trình duyệt luôn hỏi lại server, sửa giao diện xong không bị dùng bản cũ trong cache
+    location = / {
+        add_header Cache-Control no-cache;
+        try_files /index.html =404;
+    }
+
+    # Giao diện gọi đường dẫn tương đối (/chat/stream, /order, /session...) -> chuyển sang be
+    location ~ ^/(chat|order|session|health|docs|openapi\.json) {
+        proxy_pass ${BE_URL};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_buffering off;        # Server-Sent Events: chữ tới trình duyệt ngay khi LLM sinh ra
+        proxy_read_timeout 300s;    # 1 lượt chat có thể chạy vài tool + model dự phòng
+    }
+}

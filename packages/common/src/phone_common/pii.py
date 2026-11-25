@@ -11,7 +11,7 @@ from functools import lru_cache
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from phone_sales import config
+from phone_common import config
 
 PHONE_TOKEN = '[SỐ ĐIỆN THOẠI]'
 EMAIL_TOKEN = '[EMAIL]'
@@ -117,7 +117,7 @@ def email_key(email: str | None) -> str | None:
 # ---------------------------------------------------------------- mã khách cho phiên chat mới
 
 def customer_token(customer_id: str) -> str:
-    """Mã khách kèm chữ ký HMAC, trình duyệt giữ để phiên chat sau nhận ra khách quen (api.py: POST /session).
+    """Mã khách kèm chữ ký HMAC, trình duyệt giữ để phiên chat sau nhận ra khách quen (phone_api/api.py: POST /session).
     Có chữ ký nên không đoán/đổi được mã khách khác để xem tên, đơn cũ của họ."""
     return f"{customer_id}.{_blind('customer:' + customer_id)[:32]}"
 
@@ -155,7 +155,7 @@ def install_log_filter() -> None:
     handlers = [h for name in ('', 'uvicorn', 'uvicorn.error', 'uvicorn.access')
                 for h in logging.getLogger(name).handlers]
     if logging.lastResort:
-        handlers.append(logging.lastResort)  # log của phone_sales.* khi root chưa có handler
+        handlers.append(logging.lastResort)  # log của phone_common/phone_agent/phone_api khi root chưa có handler
     for h in handlers:
         if not any(isinstance(f, RedactFilter) for f in h.filters):
             h.addFilter(RedactFilter())

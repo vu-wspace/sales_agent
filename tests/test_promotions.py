@@ -2,7 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from phone_sales import orders, promotions
+from phone_api import orders
+from phone_common import promotions
 from test_orders import ADDRESS, CART, FakeConn
 
 NOW = datetime.now(timezone.utc)

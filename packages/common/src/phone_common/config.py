@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-# Đường dẫn dữ liệu (dự án cài dạng editable nên tính từ vị trí file này: src/phone_sales/config.py)
-ROOT = Path(__file__).resolve().parents[2]
+# Thư mục gốc repo (data_schema/...). Package cài dạng editable nên tính từ vị trí file: packages/common/src/phone_common/config.py
+ROOT = Path(__file__).resolve().parents[4]
 POLICY_DIR = ROOT / 'data_schema' / 'policies'   # chính sách đổi trả, giao hàng, trả góp, bảo hành (.md) -> nạp vào Qdrant
 CHUNK_MAX_CHARS = 900                            # model bkai cắt ở 256 token, chunk dài hơn sẽ mất phần cuối khi embed
 
@@ -23,10 +23,10 @@ POLICY_TOP_K = 3
 POLICY_MIN_SCORE = 0.25
 POLICY_SCORE_MARGIN = 0.08
 
-# Web app dùng agent nào: 'graph' (graph.py, có trạng thái hội thoại + giỏ hàng) hoặc 'agent' (agent.py)
+# Agent service dùng bản nào: 'graph' (graph.py, có trạng thái hội thoại + giỏ hàng) hoặc 'agent' (agent.py)
 AGENT_IMPL = os.getenv('AGENT_IMPL', 'graph').lower()
 
-# Web app: collection rỗng thì tự nạp dữ liệu khi khởi động
+# Agent service: collection rỗng thì tự nạp dữ liệu khi khởi động
 AUTO_INGEST = os.getenv('AUTO_INGEST', 'true').lower() == 'true'
 
 # Khóa mã hóa số điện thoại, email của khách trong database (Fernet, base64 32 byte). Tạo khóa:
@@ -49,3 +49,9 @@ SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
 SMTP_STARTTLS = os.getenv('SMTP_STARTTLS', 'false').lower() == 'true'
 SMTP_SSL = os.getenv('SMTP_SSL', 'false').lower() == 'true'          # cổng 465
 MAIL_FROM = os.getenv('MAIL_FROM', 'PhoneShop Demo <no-reply@phoneshop.example>')
+
+# Agent chạy thành service riêng (services/agent, phone_agent.service). be gọi agent qua AGENT_URL.
+# AGENT_API_KEY: đặt thì mọi endpoint của agent (trừ /health) đòi header "Authorization: Bearer <key>" -
+# bắt buộc khi mở agent cho hệ thống khác tích hợp; để trống chỉ dùng trong mạng nội bộ (docker compose).
+AGENT_URL = os.getenv('AGENT_URL', 'http://localhost:8001')
+AGENT_API_KEY = os.getenv('AGENT_API_KEY', '')

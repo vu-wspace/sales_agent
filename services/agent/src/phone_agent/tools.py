@@ -7,13 +7,13 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from psycopg.rows import dict_row
 from typing import Annotated, Any
-from phone_sales import promotions
-from phone_sales.conversation import (_current_turn, added_to_cart_this_turn, cart_update, cross_sell_step,
+from phone_common import promotions
+from phone_agent.conversation import (_current_turn, added_to_cart_this_turn, cart_update, cross_sell_step,
                                     wants_order_now)
-from phone_sales.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
-from phone_sales.prompts import POLICY_GUIDE, POLICY_PROMPTS
-from phone_sales.textnorm import strip_accents
-from phone_sales.vector_db import get_vector_store
+from phone_common.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
+from phone_agent.prompts import POLICY_GUIDE, POLICY_PROMPTS
+from phone_common.textnorm import strip_accents
+from phone_agent.vector_db import get_vector_store
 from tavily import TavilyClient
 from functools import lru_cache
 
@@ -641,7 +641,7 @@ def show_order_form(state: Annotated[dict, InjectedState],
         return _cart_reply(tool_call_id, 'Chưa mở form: khách chưa nói đặt hàng. Làm theo mục "Bán kèm" trong trạng '
                            'thái hội thoại (mời ốp lưng, cường lực), rồi hỏi khách lấy thêm hay xác nhận đặt hàng.')
     total = sum(i['price'] * i['quantity'] for i in cart)
-    # Giao diện đọc order_form trong state để hiện form; khách gửi form thì api.py (POST /order) tạo đơn
+    # Giao diện đọc order_form trong state để hiện form; khách gửi form thì be (phone_api/api.py: POST /order) tạo đơn
     return Command(update={'order_form': True, 'messages': [ToolMessage(
         f'Đã hiện form đặt hàng cho {len(cart)} sản phẩm, tổng {_price(total)}. Trả lời 1 câu ngắn mời khách điền '
         'form bên dưới; không hỏi lại tên, số điện thoại, địa chỉ hay cách thanh toán.', tool_call_id=tool_call_id)]})

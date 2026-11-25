@@ -1,52 +1,27 @@
-[project]
-name = "phone-sales"
-version = "0.1.0"
-description = "Agent tư vấn bán điện thoại tiếng Việt (LangChain/LangGraph + Postgres + Qdrant + FastAPI)"
-readme = "README.md"
-authors = [
-    { name = "Vu Truong Anh", email = "vu.wspace@gmail.com" }
-]
-requires-python = ">=3.12.15"
-dependencies = [
-    "langchain[mcp]>=1.4.7",
-    "langchain-core>=1.7.0",
-    "langchain-google-genai>=4.4.2",
-    "langchain-groq>=1.1.3",
-    "langchain-qdrant>=1.1.0",
-    "langgraph>=1.2.16",
-    "pandas>=3.1.0",
-    "python-dotenv>=1.2.4",
-    "pyvi>=0.1.1",
-    "qdrant-client>=1.20.0",
-    "sentence-transformers>=6.2.0",
-    "tavily-python>=0.8.5",
-    "torch>=2.14.1",
-    "truststore>=0.10.5",
-    "fastapi>=0.120.0",
-    "uvicorn[standard]>=0.38.0",
-    "langchain-openrouter>=0.2.9",
-    "psycopg[binary]>=3.2",
-    "langchain-nvidia-ai-endpoints>=1.5.0",
-    "cryptography>=50.0.2",
-    "langchain-openai>=1.7.3",
-    "fastapi-mail>=1.6.8",
-]
+# uv workspace: 3 package Python, mỗi service cài riêng thư viện của mình
+#   packages/common  (phone-common): config, LLM + fallback, PII, khuyến mãi, chuẩn hóa chữ - agent và be dùng chung
+#   services/agent   (phone-agent):  LangGraph agent + HTTP API (cổng 8001), Qdrant, embedding (torch)
+#   services/be      (phone-api):    đơn hàng, phiên chat, email; gọi agent qua HTTP (cổng 8002), không kéo torch
+#   services/fe      : nginx phục vụ giao diện, chuyển /chat, /order, /session sang be (cổng 8000), không có Python
+# Cài tất cả để chạy test/eval trên máy: uv sync --all-packages
+[tool.uv.workspace]
+members = ["packages/common", "services/agent", "services/be"]
 
-[build-system]
-requires = ["uv_build>=0.12.23,<0.13.0"]
-build-backend = "uv_build"
-
-[dependency-groups]
-dev = [
-    "langgraph-cli[inmem]>=0.4.8",
-    "pytest>=8.4.0",
-]
-
-# torch bản CPU (không kéo CUDA ~ vài GB khi build Docker trên Linux)
 [tool.uv.sources]
+phone-common = { workspace = true }
+phone-agent = { workspace = true }
+phone-api = { workspace = true }
+# torch bản CPU (không kéo CUDA ~ vài GB khi build Docker trên Linux)
 torch = [{ index = "pytorch-cpu" }]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "langgraph-cli[inmem]>=0.4.8",
+    "pytest>=8.4.0",
+    "pandas>=3.1.0",   # evals/run_eval.py
+]

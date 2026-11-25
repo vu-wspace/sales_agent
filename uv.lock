@@ -20,6 +20,20 @@ resolution-markers = [
     "python_full_version < '3.13' and sys_platform == 'darwin'",
 ]
 
+[manifest]
+members = [
+    "phone-agent",
+    "phone-api",
+    "phone-common",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4.8" },
+    { name = "pandas", specifier = ">=3.1.0" },
+    { name = "pytest", specifier = ">=8.4.0" },
+]
+
 [[package]]
 name = "aiofile"
 version = "3.12.3"
@@ -2716,71 +2730,93 @@ wheels = [
 ]
 
 [[package]]
-name = "phone-sales"
+name = "phone-agent"
 version = "0.1.0"
-source = { editable = "." }
+source = { editable = "services/agent" }
 dependencies = [
-    { name = "cryptography" },
     { name = "fastapi" },
-    { name = "fastapi-mail" },
     { name = "langchain", extra = ["mcp"] },
-    { name = "langchain-core" },
-    { name = "langchain-google-genai" },
-    { name = "langchain-groq" },
-    { name = "langchain-nvidia-ai-endpoints" },
-    { name = "langchain-openai" },
-    { name = "langchain-openrouter" },
     { name = "langchain-qdrant" },
-    { name = "langgraph" },
-    { name = "pandas" },
+    { name = "phone-common" },
     { name = "psycopg", extra = ["binary"] },
-    { name = "python-dotenv" },
     { name = "pyvi" },
     { name = "qdrant-client" },
     { name = "sentence-transformers" },
     { name = "tavily-python" },
     { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-    { name = "truststore" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "langgraph-cli", extra = ["inmem"] },
-    { name = "pytest" },
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.120.0" },
+    { name = "langchain", extras = ["mcp"], specifier = ">=1.4.7" },
+    { name = "langchain-qdrant", specifier = ">=1.1.0" },
+    { name = "phone-common", editable = "packages/common" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pyvi", specifier = ">=0.1.1" },
+    { name = "qdrant-client", specifier = ">=1.20.0" },
+    { name = "sentence-transformers", specifier = ">=6.2.0" },
+    { name = "tavily-python", specifier = ">=0.8.5" },
+    { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
+]
+
+[[package]]
+name = "phone-api"
+version = "0.1.0"
+source = { editable = "services/be" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "fastapi-mail" },
+    { name = "httpx" },
+    { name = "phone-common" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.120.0" },
+    { name = "fastapi-mail", specifier = ">=1.6.8" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "phone-common", editable = "packages/common" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
+]
+
+[[package]]
+name = "phone-common"
+version = "0.1.0"
+source = { editable = "packages/common" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "langchain" },
+    { name = "langchain-core" },
+    { name = "langchain-google-genai" },
+    { name = "langchain-groq" },
+    { name = "langchain-nvidia-ai-endpoints" },
+    { name = "langchain-openai" },
+    { name = "langchain-openrouter" },
+    { name = "langgraph" },
+    { name = "python-dotenv" },
+    { name = "truststore" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=50.0.2" },
-    { name = "fastapi", specifier = ">=0.120.0" },
-    { name = "fastapi-mail", specifier = ">=1.6.8" },
-    { name = "langchain", extras = ["mcp"], specifier = ">=1.4.7" },
+    { name = "langchain", specifier = ">=1.4.7" },
     { name = "langchain-core", specifier = ">=1.7.0" },
     { name = "langchain-google-genai", specifier = ">=4.4.2" },
     { name = "langchain-groq", specifier = ">=1.1.3" },
     { name = "langchain-nvidia-ai-endpoints", specifier = ">=1.5.0" },
     { name = "langchain-openai", specifier = ">=1.7.3" },
     { name = "langchain-openrouter", specifier = ">=0.2.9" },
-    { name = "langchain-qdrant", specifier = ">=1.1.0" },
     { name = "langgraph", specifier = ">=1.2.16" },
-    { name = "pandas", specifier = ">=3.1.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
-    { name = "pyvi", specifier = ">=0.1.1" },
-    { name = "qdrant-client", specifier = ">=1.20.0" },
-    { name = "sentence-transformers", specifier = ">=6.2.0" },
-    { name = "tavily-python", specifier = ">=0.8.5" },
-    { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "truststore", specifier = ">=0.10.5" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4.8" },
-    { name = "pytest", specifier = ">=8.4.0" },
 ]
 
 [[package]]

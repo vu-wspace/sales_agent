@@ -1,5 +1,5 @@
-from phone_sales.config import CHUNK_MAX_CHARS
-from phone_sales.data_prep import load_policy_chunks, split_markdown
+from phone_common.config import CHUNK_MAX_CHARS
+from phone_agent.data_prep import load_policy_chunks, split_markdown
 
 MD = """# Chính sách A
 

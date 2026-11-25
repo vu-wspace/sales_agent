@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from phone_sales import pii
+from phone_common import pii
 
 
 @pytest.mark.parametrize('text, expected', [

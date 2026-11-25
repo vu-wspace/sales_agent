@@ -18,7 +18,7 @@ import os
 
 os.environ['LANGSMITH_TRACING'] = 'false'
 
-import phone_sales  # noqa: E402,F401 - phải import đầu tiên (xem __init__.py)
+import phone_common  # noqa: E402,F401 - phải import đầu tiên (xem __init__.py)
 import argparse  # noqa: E402
 import csv  # noqa: E402
 import importlib.util  # noqa: E402
@@ -36,8 +36,9 @@ import httpx  # noqa: E402
 from langchain_openai import ChatOpenAI  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
-from phone_sales import config, llm, orders  # noqa: E402
-from phone_sales.fallback import FallbackMiddleware  # noqa: E402
+from phone_common import config, llm  # noqa: E402
+from phone_api import orders  # noqa: E402
+from phone_common.fallback import FallbackMiddleware  # noqa: E402
 
 warnings.filterwarnings('ignore', message='.*uses fixed sampling defaults.*')
 

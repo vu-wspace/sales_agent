@@ -3,8 +3,9 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from phone_sales import conversation as conv
-from phone_sales import llm, tools
+from phone_agent import conversation as conv
+from phone_common import llm
+from phone_agent import tools
 
 
 @pytest.mark.parametrize('text, expected', [
@@ -69,7 +70,7 @@ def test_handoff_on_request_or_two_negative_turns():
     ('em mới mua củ sạc ở chỗ khác, có dùng được cho A57 không', False),
 ])
 def test_handoff_phrases_with_and_without_accents(text, expected):
-    from phone_sales.textnorm import normalize_user_text
+    from phone_common.textnorm import normalize_user_text
     assert conv.track_user_message(normalize_user_text(text))['wants_handoff'] is expected
     assert not conv.needs_handoff({'sentiment_history': ['neutral', 'negative']}, False)
     assert conv.needs_handoff({'sentiment_history': ['negative', 'negative']}, False)
@@ -247,7 +248,7 @@ def test_graph_parallel_add_to_cart_keeps_both(monkeypatch, fake_catalog):
         AIMessage('Dạ em đã thêm máy và ốp lưng vào giỏ.'),
     ])
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     res = g.invoke({'messages': [HumanMessage('lấy galaxy s26 256gb đen với ốp lưng trong suốt')]},
                    {'configurable': {'thread_id': 'p'}})
@@ -299,7 +300,7 @@ def test_graph_keeps_state_across_turns(monkeypatch, fake_catalog):
         AIMessage('Dạ em đã thêm Galaxy S26 vào giỏ ạ.'),                            # lượt 2 sau khi gọi tool
     ])
     monkeypatch.setattr(llm, 'openai_llm', ScriptedModel(messages=script))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     g = build_graph(fallback=False, checkpointer=InMemorySaver())
     cfg = {'configurable': {'thread_id': 't'}}
 
@@ -374,7 +375,7 @@ def test_primary_allows_parallel_tool_calls(monkeypatch):
             return self
 
     monkeypatch.setattr(llm, 'openai_llm', Recording(messages=iter([])))
-    from phone_sales.graph import build_graph
+    from phone_agent.graph import build_graph
     build_graph(fallback=False)
     assert seen == {'parallel_tool_calls': True}
 

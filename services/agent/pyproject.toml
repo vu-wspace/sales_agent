@@ -1,0 +1,22 @@
+[project]
+name = "phone-agent"
+version = "0.1.0"
+description = "Agent tư vấn bán điện thoại tiếng Việt (LangGraph + Qdrant), chạy như 1 HTTP service riêng"
+requires-python = ">=3.12.15"
+dependencies = [
+    "phone-common",
+    "langchain[mcp]>=1.4.7",
+    "langchain-qdrant>=1.1.0",
+    "qdrant-client>=1.20.0",
+    "sentence-transformers>=6.2.0",
+    "torch>=2.14.1",
+    "pyvi>=0.1.1",
+    "tavily-python>=0.8.5",
+    "psycopg[binary]>=3.2",
+    "fastapi>=0.120.0",
+    "uvicorn[standard]>=0.38.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

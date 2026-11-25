@@ -8,7 +8,7 @@ from langchain_openrouter import ChatOpenRouter
 from openrouter import errors as openrouter_errors
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_groq import ChatGroq
-from phone_sales.config import ROUTER9_API_KEY, ROUTER9_BASE_URL, ROUTER9_MODEL
+from phone_common.config import ROUTER9_API_KEY, ROUTER9_BASE_URL, ROUTER9_MODEL
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # Số lần SDK tự thử lại khi lỗi tạm thời (5xx, quá tải, mất kết nối) trước khi báo lỗi.

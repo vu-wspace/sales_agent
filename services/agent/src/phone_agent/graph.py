@@ -1,18 +1,18 @@
-import phone_sales  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
+import phone_common  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
 import logging
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Checkpointer
-from phone_sales import llm, pii
-from phone_sales.conversation import (AgentState, announces_handoff, append_unique, cross_sell_step, decide_stage,
+from phone_common import llm, pii
+from phone_agent.conversation import (AgentState, announces_handoff, append_unique, cross_sell_step, decide_stage,
                                     describe, needs_handoff, products_mentioned, track_tool_results, track_user_message)
-from phone_sales.fallback import FallbackMiddleware
-from phone_sales.grounding import correction, sources_of, ungrounded
-from phone_sales.history import trim_history
-from phone_sales.prompts import get_system_prompt
-from phone_sales.textnorm import clean_answer, normalize_user_text
-from phone_sales.tools import get_agent_tools
+from phone_common.fallback import FallbackMiddleware
+from phone_agent.grounding import correction, sources_of, ungrounded
+from phone_agent.history import trim_history
+from phone_agent.prompts import get_system_prompt
+from phone_common.textnorm import clean_answer, normalize_user_text
+from phone_agent.tools import get_agent_tools
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ EMPTY_FALLBACK = 'Dạ, em chưa trả lời được câu này, anh/chị nhắ
 
 def _last_user_text(state: AgentState) -> str:
     human = [m for m in state.get('messages', []) if isinstance(m, HumanMessage)]
-    # api.py đã chuẩn hóa và che số điện thoại, email; làm lại cho trường hợp gọi graph trực tiếp (langgraph dev, eval)
+    # service.py (agent HTTP API) đã chuẩn hóa và che số điện thoại, email; làm lại cho trường hợp gọi graph trực tiếp (langgraph dev, eval)
     return pii.redact(normalize_user_text(human[-1].text)) if human else ''
 
 def track_user(state: AgentState) -> dict:
@@ -74,7 +74,7 @@ def track_reply(state: AgentState) -> dict:
     return {'shown_products': shown, 'cross_sell': [step] if step else [], 'stage': _stage_now(after), **handled}
 
 def build_graph(fallback: bool = True, checkpointer: Checkpointer = None):
-    # checkpointer (vd InMemorySaver) lưu cả trạng thái hội thoại theo thread_id - api.py dùng cách này.
+    # checkpointer (vd InMemorySaver) lưu cả trạng thái hội thoại theo thread_id - service.py dùng cách này.
     # Không truyền khi chạy qua `langgraph dev` vì server tự quản lý bộ nhớ.
     primary = llm.openai_llm
     models = [primary, *llm.FALLBACK_LLMS] if fallback else [primary]

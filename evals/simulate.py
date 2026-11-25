@@ -23,10 +23,10 @@ SIM_PHONE và được xóa khi chạy xong (trả lại tồn kho, lượt dùn
 """
 import os
 
-# Tắt trace LangSmith của phía giả lập (phải đặt trước khi import phone_sales vì load_dotenv không ghi đè biến đã có)
+# Tắt trace LangSmith của phía giả lập (phải đặt trước khi import phone_common vì load_dotenv không ghi đè biến đã có)
 os.environ['LANGSMITH_TRACING'] = 'false'
 
-import phone_sales  # noqa: E402,F401 - phải import đầu tiên (xem __init__.py)
+import phone_common  # noqa: E402,F401 - phải import đầu tiên (xem __init__.py)
 import argparse  # noqa: E402
 import csv  # noqa: E402
 import hashlib  # noqa: E402
@@ -44,9 +44,10 @@ import httpx  # noqa: E402
 from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
-from phone_sales import config, llm, orders, pii  # noqa: E402
-from phone_sales import conversation as conv  # noqa: E402
-from phone_sales.fallback import FallbackMiddleware  # noqa: E402
+from phone_common import config, llm, pii  # noqa: E402
+from phone_api import orders  # noqa: E402
+from phone_agent import conversation as conv  # noqa: E402
+from phone_common.fallback import FallbackMiddleware  # noqa: E402
 
 # gemini-3.5-flash-lite bỏ qua temperature và cảnh báo mỗi lần gọi
 warnings.filterwarnings('ignore', message='.*uses fixed sampling defaults.*')

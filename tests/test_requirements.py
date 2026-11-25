@@ -11,8 +11,10 @@ def _name(spec: str) -> str:
 
 
 def test_requirements_txt_matches_pyproject():
-    # requirements.txt (cho người dùng pip) phải khớp pyproject.toml (nguồn chính, dùng với uv)
-    deps = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))['project']['dependencies']
+    # requirements.txt (cho người dùng pip) phải khớp pyproject.toml của 3 package (nguồn chính, dùng với uv)
+    members = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['uv']['workspace']['members']
+    deps = [d for m in members for d in tomllib.loads((ROOT / m / 'pyproject.toml').read_text(encoding='utf-8'))
+            ['project']['dependencies'] if not d.startswith('phone-')]
     reqs = [line for line in (ROOT / 'requirements.txt').read_text(encoding='utf-8').splitlines()
             if line.strip() and not line.startswith(('#', '-'))]
     assert {_name(d) for d in deps} == {_name(r) for r in reqs}

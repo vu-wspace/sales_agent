@@ -1,3 +1,5 @@
+# Agent service (LangGraph + Qdrant + embedding). Build context: thư mục gốc repo (cần packages/common, uv.lock)
+#   docker build -f services/agent/Dockerfile .
 FROM python:3.12.15-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
@@ -17,36 +19,36 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 # uv chỉ mount lúc build, không nằm trong image
-# Cài thư viện trước (layer cache: chỉ cài lại khi pyproject/uv.lock đổi).
-# Không copy README.md ở đây: sửa README sẽ làm mất cache và phải tải lại model embedding bên dưới.
+# Cài thư viện trước (layer cache: chỉ cài lại khi pyproject/uv.lock đổi). uv cần pyproject của mọi member workspace.
 COPY pyproject.toml uv.lock ./
+COPY packages/common/pyproject.toml packages/common/
+COPY services/agent/pyproject.toml services/agent/
+COPY services/be/pyproject.toml services/be/
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project
+    uv sync --locked --no-dev --package phone-agent --no-install-workspace
 
 # Tải sẵn model embedding vào image để container khởi động không cần mạng tới Hugging Face.
-# Đặt trước COPY src để sửa code không phải tải lại model (~540MB). Phải trùng EMBEDDING_MODEL trong config.py.
+# Đặt trước COPY code để sửa code không phải tải lại model (~540MB). Phải trùng EMBEDDING_MODEL trong config.py.
 ARG EMBEDDING_MODEL=bkai-foundation-models/vietnamese-bi-encoder
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
 ENV HF_HUB_OFFLINE=1
 
-# README.md cần cho bước cài package của dự án (pyproject.toml khai báo readme)
-COPY README.md ./
-COPY src ./src
+COPY packages/common ./packages/common
+COPY services/agent ./services/agent
 COPY data_schema/policies ./data_schema/policies
-COPY data_schema/orders.sql ./data_schema/orders.sql
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+    uv sync --locked --no-dev --package phone-agent
 
 # Chạy bằng user thường. Không chown -R /app: lệnh đó nhân đôi ~2.5GB venv + model thành layer mới,
 # mà app chỉ cần quyền đọc
 RUN useradd --create-home --uid 1000 app
 USER app
 
-EXPOSE 8000
+EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=4)"
 
-# 1 worker: lịch sử hội thoại (InMemorySaver) nằm trong RAM của process
-CMD ["uvicorn", "phone_sales.api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# 1 worker: lịch sử hội thoại, giỏ hàng (InMemorySaver) nằm trong RAM của process
+CMD ["uvicorn", "phone_agent.service:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]

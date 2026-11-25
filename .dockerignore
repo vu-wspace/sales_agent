@@ -1,7 +1,11 @@
-# Image chỉ cần: pyproject.toml, uv.lock, README.md, certs/, src/, data_schema/policies/, data_schema/orders.sql (xem Dockerfile)
+# Image agent/be cần: pyproject.toml, uv.lock, packages/, services/, certs/, data_schema/policies/, data_schema/orders.sql
+# (xem services/*/Dockerfile). Image fe build từ services/fe.
 .git
 .env
 .venv
+**/.venv
+.claude
+graphify-out
 .langgraph_api
 .pytest_cache
 .ruff_cache
