@@ -56,6 +56,8 @@ Lần build đầu mất khoảng 8 phút, chủ yếu để tải model embeddi
 | be | `services/be` | `phone_api` | 8002 | Phiên chat, khách quen, đơn hàng, khuyến mãi, email; chuyển chat sang agent |
 | agent | `services/agent` | `phone_agent` | 8001 | LangGraph agent, tools, RAG; giữ lịch sử hội thoại và giỏ hàng theo `thread_id` |
 
+`be` và `agent` giao tiếp qua HTTP và cùng kết nối trực tiếp tới PostgreSQL, database `phone`. Agent đọc danh mục, tồn kho và khuyến mãi. Backend đọc các dữ liệu này để tính giá, lưu thông tin khách và đơn hàng, rồi cập nhật tồn kho khi đặt hàng. Hai service vì vậy cùng phụ thuộc vào schema PostgreSQL. Agent dùng thêm Qdrant để tra cứu chính sách.
+
 Phần dùng chung (config, LLM và chuỗi dự phòng, PII, khuyến mãi, chuẩn hóa chữ) nằm ở `packages/common` (`phone_common`). Ba package Python là một [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/), dùng chung `uv.lock`; mỗi image chỉ cài thư viện của service mình.
 
 - **Agent tích hợp được vào hệ thống khác**: web khác, Zalo, Messenger... gọi thẳng HTTP API của agent ([API của agent](#api-của-agent)), không cần be. Mở agent ra ngoài mạng nội bộ thì đặt `AGENT_API_KEY`.
@@ -139,7 +141,7 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `MAIL_FROM` | `PhoneShop Demo <no-reply@phoneshop.example>` | Người gửi; phần tên cũng là tên cửa hàng trong email. Không dùng tên miền `.local` (thư viện kiểm tra email từ chối) |
 | `LANGSMITH_*` | tắt | Trace LangSmith (tùy chọn) |
 
-Trong Docker, compose tự đặt `DATABASE_URL`, `QDRANT_URL`, `AGENT_URL`, `SMTP_HOST=mailpit` trỏ tới các container và `ROUTER9_BASE_URL` trỏ tới `host.docker.internal` (9Router chạy trên máy host).
+Trong Docker, Compose đặt cùng `DATABASE_URL` trỏ tới `postgres:5432/phone` cho `be` và `agent`. Compose đặt `QDRANT_URL` cho `agent`, `AGENT_URL` và `SMTP_HOST=mailpit` cho `be`, và `ROUTER9_BASE_URL` trỏ tới `host.docker.internal` (9Router chạy trên máy host).
 
 ## API
 
@@ -554,7 +556,7 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 - 5 file trong `data_schema/policies/` được tách theo mục `##`/`###` (mục FAQ tách theo từng cặp hỏi/đáp), tổng cộng 66 đoạn, mỗi đoạn tối đa 900 ký tự.
 - `search_policy` lấy 3 đoạn gần nhất, bỏ đoạn có điểm dưới 0,25 hoặc kém đoạn tốt nhất quá 0,08 (`config.py`), để câu hỏi lạc đề không nhận chính sách không liên quan.
 - Kết quả được gom theo file, mỗi file kèm hướng dẫn trả lời riêng (`POLICY_PROMPTS` trong `prompts.py`). Khi thêm file chính sách mới phải thêm prompt tương ứng (có test kiểm tra).
-- Khi khởi động, web app so ID các đoạn trong Qdrant với các file `.md`; nếu khác thì nạp lại.
+- Khi khởi động với `AUTO_INGEST=true`, agent nạp chính sách nếu Qdrant rỗng hoặc ID các đoạn khác với dữ liệu tạo từ các file `.md`.
 
 ### Chuỗi LLM dự phòng
 
