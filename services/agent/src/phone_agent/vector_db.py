@@ -1,16 +1,15 @@
 import phone_common  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
 import uuid
 from functools import lru_cache
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_qdrant import QdrantVectorStore
 from pyvi import ViTokenizer
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, FieldCondition, Filter, FilterSelector, MatchValue, PointStruct, VectorParams
+from qdrant_client.models import Distance, Filter, FilterSelector, VectorParams
 from sentence_transformers import SentenceTransformer
-from phone_common.config import (COLLECTION, EMBEDDING_MODEL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K,
-                                 QDRANT_URL, VECTOR_SIZE)
-from phone_agent.data_prep import split_markdown
-from phone_common.policies import load_seed, policy_hash
+from phone_common.config import COLLECTION, EMBEDDING_MODEL, QDRANT_URL, VECTOR_SIZE
+from phone_agent.data_prep import load_policy_chunks
 
 class BkaiEmbeddings(Embeddings):
     def __init__(self, model_name: str = EMBEDDING_MODEL):
@@ -50,103 +49,42 @@ def count_documents() -> int:
     return get_client().count(COLLECTION).count
 
 def chunk_ids(chunks) -> list[str]:
-    # id tính từ cả nội dung chunk: cùng nội dung thì cùng id
+    # id tính từ cả nội dung chunk: sửa file .md -> id đổi -> so với id trong Qdrant là biết dữ liệu đã cũ
     return [str(uuid.uuid5(uuid.NAMESPACE_URL, f'{c.source}#{i}#{c.page_content}')) for i, c in enumerate(chunks)]
 
-def _of(slug: str) -> FilterSelector:
-    return FilterSelector(filter=Filter(must=[FieldCondition(key='metadata.source', match=MatchValue(value=slug))]))
-
-def upsert_policy(slug: str, content_md: str, prompt: str | None = None) -> int:
-    """Chunk + embed 1 tài liệu chính sách, thay toàn bộ chunk cũ của nó. prompt (hướng dẫn trả lời riêng) và hash
-    lưu trong payload từng chunk: search_policy đọc prompt từ đây, be đọc hash (policy_hashes) để biết đã đồng bộ chưa."""
-    chunks = split_markdown(content_md, slug)
-    if not chunks:
-        raise ValueError(f'Tài liệu {slug} không có nội dung')
-    meta = {'source': slug, 'prompt': prompt, 'doc_hash': policy_hash(content_md, prompt)}
-    texts = [c.page_content for c in chunks]
-    get_vector_store()  # tạo collection nếu chưa có
-    # Embed trước rồi mới xóa: embed lỗi thì chunk cũ vẫn còn. Xóa chunk cũ vì sửa tài liệu làm số chunk/nội dung đổi.
-    # Payload theo dạng QdrantVectorStore đọc (page_content + metadata) để search_policy dùng được ngay
-    vectors = get_embeddings().embed_documents(texts)
-    points = [PointStruct(id=i, vector=v, payload={'page_content': t, 'metadata': {
-                  **meta, 'title': c.title, 'section': c.section}})
-              for i, v, t, c in zip(chunk_ids(chunks), vectors, texts, chunks)]
-    get_client().delete(COLLECTION, points_selector=_of(slug))
-    get_client().upsert(COLLECTION, points=points)
-    return len(points)
-
-def delete_policy(slug: str) -> None:
-    get_client().delete(COLLECTION, points_selector=_of(slug))
-
-def policy_hashes() -> dict[str, str]:
-    """{slug: hash} của các tài liệu đang có trong Qdrant (mỗi chunk mang hash của tài liệu)."""
-    hashes, offset = {}, None
+def stored_ids() -> set[str]:
+    ids, offset = set(), None
     while True:
-        points, offset = get_client().scroll(COLLECTION, limit=256, offset=offset, with_vectors=False,
-                                             with_payload=['metadata.source', 'metadata.doc_hash'])
-        for p in points:
-            m = (p.payload or {}).get('metadata') or {}
-            hashes[m.get('source')] = m.get('doc_hash')
+        points, offset = get_client().scroll(COLLECTION, limit=256, offset=offset,
+                                             with_payload=False, with_vectors=False)
+        ids |= {str(p.id) for p in points}
         if offset is None:
-            return hashes
+            return ids
 
-def relevant_hits(scored: list[tuple]) -> list[tuple]:
-    """scored: [(đoạn, điểm cosine)] giảm dần. Bỏ đoạn dưới ngưỡng, và đoạn kém đoạn tốt nhất quá MARGIN.
-    Dùng chung cho search_policy và check_policy để bản nháp được kiểm tra đúng như lúc khách hỏi."""
-    if not scored or scored[0][1] < POLICY_MIN_SCORE:
-        return []
-    best = scored[0][1]
-    return [(d, s) for d, s in scored if s >= POLICY_MIN_SCORE and best - s <= POLICY_SCORE_MARGIN]
+def is_up_to_date() -> bool:
+    return stored_ids() == set(chunk_ids(load_policy_chunks()))
 
-def _norm(text: str) -> str:
-    # Như evals/run_eval.py: không phân biệt hoa thường, "7,4" và "7.4"
-    return text.lower().replace(',', '.')
-
-def check_policy(slug: str, content_md: str, questions: list[dict]) -> dict:
-    """Thử bản nháp trước khi xuất bản, không ghi gì vào Qdrant, không gọi LLM: embed bản nháp trong bộ nhớ, trộn với
-    các tài liệu khác đang có, rồi với mỗi câu hỏi xem search_policy có lấy ra tài liệu này không (passed: có đoạn của
-    nó sau bộ lọc điểm) và các đoạn đó có đủ ý bắt buộc không (must_contain: [[cách viết 1, cách viết 2], ...]).
-    Không tính prompt riêng: sửa nội dung (30 -> 15 ngày) mà prompt còn ghi "30 ngày" thì vẫn phải báo thiếu.
-    questions: [{question, must_contain}]."""
-    chunks = split_markdown(content_md, slug)
-    if not chunks:
-        raise ValueError(f'Tài liệu {slug} không có nội dung')
-    emb = get_embeddings()
-    draft = list(zip(emb.embed_documents([c.page_content for c in chunks]), (c.page_content for c in chunks)))
-    get_vector_store()  # tạo collection nếu chưa có
-    others = Filter(must_not=[FieldCondition(key='metadata.source', match=MatchValue(value=slug))])
-    results = []
-    for q in questions:
-        qv = emb.embed_query(q['question'])
-        # Vector đã chuẩn hóa (normalize_embeddings=True): tích vô hướng = cosine, cùng thang điểm với Qdrant
-        scored = [((slug, text), sum(a * b for a, b in zip(qv, v))) for v, text in draft]
-        for p in get_client().query_points(COLLECTION, query=qv, limit=POLICY_TOP_K, query_filter=others,
-                                           with_payload=True).points:
-            scored.append((((p.payload or {}).get('metadata', {}).get('source'), ''), p.score))
-        hits = relevant_hits(sorted(scored, key=lambda x: x[1], reverse=True)[:POLICY_TOP_K])
-        found = '\n'.join(t for (source, t), _ in hits if source == slug)
-        seen = _norm(found)
-        missing = [g for g in q.get('must_contain') or [] if not any(_norm(kw) in seen for kw in g)]
-        results.append({'question': q['question'], 'retrieved': [source for (source, _), _ in hits],
-                        'missing': missing, 'passed': bool(found) and not missing})
-    return {'passed': all(r['passed'] for r in results), 'results': results}
-
-def ingest_seed() -> int:
-    """Nạp dữ liệu mẫu (data_schema/policies) thẳng vào Qdrant, khi chạy agent không có be. Có be thì be đẩy sang."""
-    seed = load_seed()
-    for slug in set(policy_hashes()) - {d['slug'] for d in seed}:
-        delete_policy(slug)
-    return sum(upsert_policy(d['slug'], d['content_md'], d['prompt']) for d in seed)
+def ingest(db: QdrantVectorStore) -> int:
+    chunks = load_policy_chunks()
+    docs = [
+        Document(page_content=c.page_content,
+                 metadata={'source': c.source, 'title': c.title, 'section': c.section})
+        for c in chunks
+    ]
+    # Xóa chunk cũ trước khi nạp: sửa file .md làm số chunk/nội dung đổi, giữ lại sẽ trả về chính sách cũ
+    get_client().delete(COLLECTION, points_selector=FilterSelector(filter=Filter()))
+    db.add_documents(docs, ids=chunk_ids(chunks))
+    return len(docs)
 
 def get_retriever(k: int = 3):
     return get_vector_store().as_retriever(search_kwargs={'k': k})
 
 def main():
     print('1. Đang kết nối Qdrant + tải model...', flush=True)
-    get_vector_store()
+    db = get_vector_store()
 
-    print('2. Đang nạp dữ liệu mẫu (data_schema/policies)...', flush=True)
-    n = ingest_seed()
+    print('2. Đang nạp dữ liệu...', flush=True)
+    n = ingest(db)
     print(f"3. Đã nạp {n} chunk chính sách vào '{COLLECTION}'", flush=True)
 
     for h in get_retriever().invoke('máy mới mua bị lỗi có được đổi không'):

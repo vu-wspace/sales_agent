@@ -1,31 +1,22 @@
 # Backend cửa hàng: đơn hàng, phiên chat, email xác nhận. Chat chuyển tiếp sang agent service (services/agent) qua
 # HTTP; giỏ hàng nằm trong state của agent nên đọc từ agent (GET /threads/{id}), không tin giỏ do trình duyệt gửi.
 # Agent tắt: be vẫn chạy - mở phiên, hủy form vẫn được; chat, tính giá, đặt hàng báo 503 (không có giỏ để đọc).
-import asyncio
 import json
 import logging
 import re
-import secrets
-import threading
-import time
 import uuid
-from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
 from typing import Literal
 
 import httpx
 import psycopg
-from datetime import datetime
-
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
-from phone_api import mailer, orders, policies
+from phone_api import mailer, orders
 from phone_common import pii, promotions
-from phone_common.config import (ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, CHAT_RATE_PER_MIN, PII_KEY, POLICY_SYNC_S,
-                                 SMTP_HOST)
-from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
+from phone_common.config import AGENT_API_KEY, AGENT_URL, PII_KEY, SMTP_HOST
 
 log = logging.getLogger('uvicorn.error')
 
@@ -124,67 +115,6 @@ class SessionResponse(BaseModel):
     customer_token: str | None = None   # None: mã sai / khách không còn -> trình duyệt xóa mã đã lưu
 
 
-class PolicyIn(BaseModel):
-    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)  # markdown: # tiêu đề, ## mục, ### mục con
-    prompt: str | None = Field(default=None, max_length=MAX_PROMPT)  # hướng dẫn trả lời riêng cho tài liệu này
-
-    @field_validator('content_md')
-    @classmethod
-    def not_blank(cls, v):
-        if not v.strip():
-            raise ValueError('Nội dung chính sách trống')
-        return v
-
-    @field_validator('prompt', mode='before')
-    @classmethod
-    def blank_prompt(cls, v):
-        return (v.strip() or None) if isinstance(v, str) else v
-
-
-class PolicyOut(BaseModel):
-    slug: str
-    content_md: str
-    prompt: str | None = None
-    version: int | None = None
-    updated_at: datetime | None = None
-    synced: bool | None = None   # xuất bản/xóa: đã cập nhật sang agent chưa (False: agent tắt, sync sau sẽ đẩy bù)
-
-
-class DraftOut(BaseModel):
-    slug: str
-    content_md: str
-    prompt: str | None = None
-    updated_at: datetime | None = None
-    check_result: dict | None = None  # kết quả kiểm tra gần nhất (None: chưa kiểm hoặc đã sửa sau khi kiểm)
-
-
-class CheckIn(BaseModel):
-    question: str = Field(min_length=1, max_length=1000)
-    must_contain: list[list[str]] = []   # mỗi nhóm: chỉ cần 1 cách viết xuất hiện, vd [["30 ngày"], ["7", "bảy"]]
-
-
-class PublishIn(BaseModel):
-    by: str | None = Field(default=None, max_length=100)     # người xuất bản (ghi vào lịch sử)
-    note: str | None = Field(default=None, max_length=500)   # lý do sửa
-
-
-class RollbackIn(PublishIn):
-    version: int = Field(ge=1)
-
-
-async def _policy_sync_loop(app: FastAPI):
-    # Đẩy bù chính sách sửa lúc agent tắt, và lấp Qdrant mới (lần đầu chạy, volume bị xóa)
-    while True:
-        try:
-            await asyncio.to_thread(policies.sync, app.state.agent_http)
-            delay = POLICY_SYNC_S
-        except (httpx.HTTPError, psycopg.Error) as e:
-            # Lúc mới deploy agent khởi động chậm hơn be (nạp model embedding): thử lại sớm thay vì chờ cả vòng
-            delay = min(30, POLICY_SYNC_S)
-            log.warning('Chưa đồng bộ được chính sách sang agent (%s), thử lại sau %ss', type(e).__name__, delay)
-        await asyncio.sleep(delay)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pii.install_log_filter()  # che số điện thoại, email trong log (handler của uvicorn đã có lúc này)
@@ -199,20 +129,11 @@ async def lifespan(app: FastAPI):
         log.error('Chưa tạo được bảng đơn hàng (%s): POST /order sẽ lỗi tới khi Postgres sẵn sàng', type(e).__name__)
     except pii.PiiKeyError as e:
         log.error('Chưa mã hóa được thông tin khách cũ: %s', e)
-    try:
-        if n := policies.ensure_table():
-            log.info('Đã nạp %d chính sách mẫu vào bảng policies', n)
-    except psycopg.Error as e:
-        log.error('Chưa tạo được bảng chính sách (%s)', type(e).__name__)
-    if not ADMIN_API_KEY:
-        log.warning('Chưa đặt ADMIN_API_KEY: /admin/policies bị tắt')
     headers = {'Authorization': f'Bearer {AGENT_API_KEY}'} if AGENT_API_KEY else {}
     # read 180s: 1 lượt chat có thể chạy vài tool + model dự phòng; connect 5s: agent tắt thì báo lỗi ngay
     app.state.agent_http = httpx.Client(base_url=AGENT_URL, headers=headers, timeout=httpx.Timeout(180, connect=5))
     log.info('Agent: %s', AGENT_URL)
-    syncing = asyncio.create_task(_policy_sync_loop(app))
     yield
-    syncing.cancel()
     app.state.agent_http.close()
 
 
@@ -242,35 +163,6 @@ def _cart(request: Request, thread_id: str) -> list[dict]:
     return _agent(request, 'GET', f'/threads/{thread_id}').json()['cart']
 
 
-# Chống spam: mỗi IP tối đa CHAT_RATE_PER_MIN lượt /chat, /chat/stream, /session, /order* trong 60 giây gần nhất.
-# IP thật lấy qua uvicorn --proxy-headers (X-Forwarded-For do nginx của fe thêm, FORWARDED_ALLOW_IPS trong compose).
-# shortcut: đếm trong RAM, đúng với 1 worker (Dockerfile); chạy nhiều worker/nhiều máy thì chuyển sang Redis.
-RATE_DETAIL = 'Dạ, anh/chị nhắn hơi nhanh, chờ em khoảng 1 phút rồi nhắn tiếp giúp em nha.'
-MAX_IPS = 10_000  # trần số IP nhớ cùng lúc: quá thì bỏ IP im lâu nhất (O(1), không quét cả dict)
-_hits: OrderedDict[str, deque] = OrderedDict()  # thứ tự: IP nhắn gần nhất ở cuối
-_hits_lock = threading.Lock()
-
-
-def limit_rate(request: Request) -> None:
-    if CHAT_RATE_PER_MIN <= 0:
-        return
-    ip = request.client.host if request.client else 'unknown'
-    now = time.monotonic()
-    with _hits_lock:
-        q = _hits.setdefault(ip, deque())
-        _hits.move_to_end(ip)
-        while len(_hits) > MAX_IPS:
-            _hits.popitem(last=False)
-        while q and now - q[0] >= 60:
-            q.popleft()
-        if len(q) >= CHAT_RATE_PER_MIN:
-            raise HTTPException(429, RATE_DETAIL, headers={'Retry-After': str(int(60 - (now - q[0])) + 1)})
-        q.append(now)
-
-
-rate_limited = [Depends(limit_rate)]
-
-
 @app.get('/health')
 def health(request: Request):
     # be khỏe kể cả khi agent tắt; trường agent cho biết chat có dùng được không
@@ -281,12 +173,12 @@ def health(request: Request):
     return {'status': 'ok', 'agent': agent}
 
 
-@app.post('/chat', dependencies=rate_limited)
+@app.post('/chat')
 def chat(req: ChatRequest, request: Request):
     return _agent(request, 'POST', '/chat', json=req.model_dump(exclude_none=True)).json()
 
 
-@app.post('/chat/stream', dependencies=rate_limited)
+@app.post('/chat/stream')
 def chat_stream(req: ChatRequest, request: Request):
     """Chuyển tiếp Server-Sent Events của agent (xem phone_agent.service.chat_stream) tới trình duyệt."""
     http = request.app.state.agent_http
@@ -315,7 +207,7 @@ def chat_stream(req: ChatRequest, request: Request):
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
-@app.post('/order', response_model=OrderResponse, dependencies=rate_limited)
+@app.post('/order', response_model=OrderResponse)
 def order(req: OrderRequest, request: Request, background: BackgroundTasks):
     """Khách gửi form đặt hàng: tạo đơn từ giỏ hàng của thread trên agent (không tin giỏ do trình duyệt gửi lên),
     trả tóm tắt đơn lấy từ database + 1-2 câu cảm ơn do LLM viết, và ghi vào lịch sử hội thoại.
@@ -347,7 +239,7 @@ def order(req: OrderRequest, request: Request, background: BackgroundTasks):
                          customer_token=pii.customer_token(saved['customer_id']) if saved.get('customer_id') else None)
 
 
-@app.post('/order/quote', response_model=QuoteResponse, dependencies=rate_limited)
+@app.post('/order/quote', response_model=QuoteResponse)
 def order_quote(req: QuoteRequest, request: Request):
     """Form đặt hàng hỏi giá trước khi gửi: tạm tính, giảm giá (mã khách nhập hoặc khuyến mãi tự động), tổng tiền.
     Tính từ giỏ hàng của thread trên agent. Mã không dùng được thì 409 kèm lý do."""
@@ -364,7 +256,7 @@ def order_quote(req: QuoteRequest, request: Request):
                          promo=promotions.label(promo), promo_text=promotions.describe(promo) if promo else None)
 
 
-@app.post('/session', response_model=SessionResponse, dependencies=rate_limited)
+@app.post('/session', response_model=SessionResponse)
 def new_session(req: SessionRequest, request: Request):
     """Kết thúc cuộc trò chuyện cũ và mở cuộc trò chuyện mới trên agent.
     Khách đã đặt hàng (customer_token hợp lệ, có đơn) thì chào lại theo tên, ghi khách quen vào trạng thái hội thoại;
@@ -391,7 +283,7 @@ def new_session(req: SessionRequest, request: Request):
     return SessionResponse(thread_id=thread_id, greeting=greeting, returning=bool(profile), customer_token=token)
 
 
-@app.post('/order/cancel', response_model=CancelResponse, dependencies=rate_limited)
+@app.post('/order/cancel', response_model=CancelResponse)
 def cancel_order(req: CancelRequest, request: Request):
     """Khách bấm "Hủy đặt hàng" trên form: không tạo đơn, ghi vào lịch sử hội thoại câu trả lời cố định
     (không gọi LLM) và làm trống giỏ hàng để agent không mời chốt đơn / bán kèm tiếp cho giỏ đã hủy."""
@@ -400,143 +292,3 @@ def cancel_order(req: CancelRequest, request: Request):
     except HTTPException as e:
         log.warning('Chưa ghi được việc hủy đặt hàng vào cuộc trò chuyện: %s', e.detail)
     return CancelResponse(thread_id=req.thread_id, answer=orders.CANCEL_MESSAGE)
-
-
-# ---------------------------------------------------------------- quản trị chính sách
-# Sửa nháp -> kiểm tra (câu hỏi mẫu) -> xuất bản (thêm version vào lịch sử) -> đẩy sang agent. Khách chỉ thấy bản đã
-# xuất bản. Quay lại bản cũ: rollback (thành version mới, không kiểm tra lại).
-
-def require_admin(request: Request) -> None:
-    if not ADMIN_API_KEY:
-        raise HTTPException(503, 'Chưa đặt ADMIN_API_KEY: endpoint quản trị đang tắt')
-    given = request.headers.get('authorization', '').removeprefix('Bearer ')
-    if not secrets.compare_digest(given.encode(), ADMIN_API_KEY.encode()):
-        raise HTTPException(401, 'Sai hoặc thiếu ADMIN_API_KEY')
-
-
-admin = [Depends(require_admin)]
-DB_DOWN = 'Chưa đọc/ghi được database chính sách, thử lại sau.'
-SlugPath = Path(pattern=SLUG)
-
-
-def _db(fn, *args):
-    """Gọi phone_api.policies: lỗi database -> 503, PolicyError (sai trạng thái) -> 409."""
-    try:
-        return fn(*args)
-    except policies.PolicyError as e:
-        raise HTTPException(409, str(e))
-    except psycopg.Error as e:
-        log.error('Lỗi database chính sách', exc_info=e)
-        raise HTTPException(503, DB_DOWN)
-
-
-def _found(doc, what: str):
-    if not doc:
-        raise HTTPException(404, f'Không có {what}')
-    return doc
-
-
-def _push(request: Request, doc: dict) -> dict:
-    try:
-        policies.push(request.app.state.agent_http, doc)
-        return {**doc, 'synced': True}
-    except httpx.HTTPError as e:
-        log.warning('Đã xuất bản %s nhưng chưa đẩy được sang agent (%s), sync sau sẽ đẩy bù', doc['slug'], type(e).__name__)
-        return {**doc, 'synced': False}
-
-
-@app.get('/admin/policies', dependencies=admin)
-def admin_list_policies():
-    """Mọi tài liệu: version đang dùng, có nháp không, nháp đã đạt kiểm tra chưa."""
-    return _db(policies.overview)
-
-
-@app.get('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
-def admin_get_policy(slug: str = SlugPath):
-    return _found(_db(policies.get, slug), f'chính sách {slug}')
-
-
-@app.get('/admin/policies/{slug}/draft', response_model=DraftOut, dependencies=admin)
-def admin_get_draft(slug: str = SlugPath):
-    return _found(_db(policies.get_draft, slug), f'bản nháp {slug}')
-
-
-@app.put('/admin/policies/{slug}/draft', response_model=DraftOut, dependencies=admin)
-def admin_save_draft(req: PolicyIn, slug: str = SlugPath):
-    """Lưu bản nháp (thêm tài liệu mới cũng bắt đầu từ đây). Chưa đổi gì với khách; sửa nháp thì phải kiểm lại."""
-    return _db(policies.save_draft, slug, req.content_md, req.prompt)
-
-
-@app.delete('/admin/policies/{slug}/draft', status_code=204, dependencies=admin)
-def admin_delete_draft(slug: str = SlugPath):
-    _found(_db(policies.delete_draft, slug), f'bản nháp {slug}')
-
-
-@app.get('/admin/policies/{slug}/checks', response_model=list[CheckIn], dependencies=admin)
-def admin_get_checks(slug: str = SlugPath):
-    return _db(policies.get_checks, slug)
-
-
-@app.put('/admin/policies/{slug}/checks', response_model=list[CheckIn], dependencies=admin)
-def admin_set_checks(checks: list[CheckIn], slug: str = SlugPath):
-    """Thay bộ câu hỏi kiểm tra. Đổi nội dung chính sách (vd 30 ngày -> 15 ngày) thì sửa must_contain ở đây trước."""
-    if len(checks) > 100:
-        raise HTTPException(422, 'Tối đa 100 câu hỏi kiểm tra mỗi tài liệu')
-    return _db(policies.set_checks, slug, [c.model_dump() for c in checks])
-
-
-@app.post('/admin/policies/{slug}/draft/check', dependencies=admin)
-def admin_check_draft(request: Request, slug: str = SlugPath):
-    """Agent thử bản nháp với câu hỏi mẫu (không ghi vào Qdrant, không gọi LLM): mỗi câu, search_policy có lấy ra
-    tài liệu này không và đoạn lấy ra có đủ must_contain không. {passed, results: [{question, retrieved, missing, passed}]}"""
-    try:
-        return _db(policies.check_draft, request.app.state.agent_http, slug)
-    except httpx.HTTPError as e:
-        raise HTTPException(503, f'Agent chưa kiểm tra được bản nháp ({type(e).__name__})')
-
-
-@app.post('/admin/policies/{slug}/publish', response_model=PolicyOut, dependencies=admin)
-def admin_publish(request: Request, req: PublishIn | None = None, slug: str = SlugPath):
-    """Xuất bản bản nháp đã đạt kiểm tra: thành version mới, ghi lịch sử, đẩy sang agent."""
-    req = req or PublishIn()
-    return _push(request, _db(policies.publish, slug, req.by, req.note))
-
-
-@app.get('/admin/policies/{slug}/versions', dependencies=admin)
-def admin_versions(slug: str = SlugPath):
-    """Lịch sử xuất bản (mới nhất trước): version, người, lý do, lúc xuất bản."""
-    return _db(policies.versions, slug)
-
-
-@app.get('/admin/policies/{slug}/versions/{version}', dependencies=admin)
-def admin_get_version(version: int, slug: str = SlugPath):
-    return _found(_db(policies.get_version, slug, version), f'{slug} version {version}')
-
-
-@app.post('/admin/policies/{slug}/rollback', response_model=PolicyOut, dependencies=admin)
-def admin_rollback(req: RollbackIn, request: Request, slug: str = SlugPath):
-    """Quay lại 1 version cũ ngay (thành version mới, không kiểm tra lại): dùng khi bản vừa xuất bản bị lỗi."""
-    return _push(request, _db(policies.rollback, slug, req.version, req.by, req.note))
-
-
-@app.delete('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
-def admin_delete_policy(request: Request, slug: str = SlugPath):
-    """Gỡ tài liệu khỏi agent (khách không còn thấy). Lịch sử và câu hỏi kiểm tra giữ lại."""
-    doc = _found(_db(policies.get, slug), f'chính sách {slug}')
-    _db(policies.delete, slug)
-    try:
-        request.app.state.agent_http.delete(f'/policies/{slug}').raise_for_status()
-        synced = True
-    except httpx.HTTPError as e:
-        log.warning('Đã xóa chính sách %s nhưng chưa xóa được trên agent (%s)', slug, type(e).__name__)
-        synced = False
-    return {**doc, 'synced': synced}
-
-
-@app.post('/admin/policies/sync', dependencies=admin)
-def admin_sync_policies(request: Request):
-    """Đồng bộ ngay (không chờ vòng POLICY_SYNC_S): {pushed: [slug], removed: [slug]}."""
-    try:
-        return _db(policies.sync, request.app.state.agent_http)
-    except httpx.HTTPError as e:
-        raise HTTPException(503, f'Chưa đồng bộ được sang agent ({type(e).__name__})')

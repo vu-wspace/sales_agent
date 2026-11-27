@@ -593,13 +593,10 @@
     await starting;
   }
 
-  // Enter gọi requestSubmit(), vẫn gửi được khi nút Gửi đang tắt: chặn ở đây để 1 lần chỉ có 1 tin đang chờ trả lời
-  let busy = false;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const message = input.value.trim();
-    if (!message || busy) return;
-    busy = true;
+    if (!message) return;
     if (starting) await starting;  // chờ phiên mới có thread_id
     // Tab chạy nền thì hẹn giờ có thể trễ: đã quá hạn thì mở phiên mới trước, không nhắn vào phiên server đã xóa
     if (Date.now() >= resetAt) await greet(keepCard);
@@ -639,7 +636,6 @@
     } catch (err) {
       fill(pending.div, err.message || 'Không kết nối được máy chủ.', 'err');
     } finally {
-      busy = false;
       send.disabled = false;
       input.focus();
       armReset(IDLE_MS);
@@ -647,8 +643,7 @@
   });
 
   input.addEventListener('keydown', (e) => {
-    // isComposing: Enter của bộ gõ (đang ghép chữ) không tính là gửi
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
   });
   document.getElementById('reset').addEventListener('click', () => greet());
   greet();

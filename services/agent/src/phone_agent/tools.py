@@ -10,10 +10,10 @@ from typing import Annotated, Any
 from phone_common import promotions
 from phone_agent.conversation import (_current_turn, added_to_cart_this_turn, cart_update, cross_sell_step,
                                     wants_order_now)
-from phone_common.config import DATABASE_URL, POLICY_TOP_K
-from phone_agent.prompts import POLICY_GUIDE
+from phone_common.config import DATABASE_URL, POLICY_MIN_SCORE, POLICY_SCORE_MARGIN, POLICY_TOP_K
+from phone_agent.prompts import POLICY_GUIDE, POLICY_PROMPTS
 from phone_common.textnorm import strip_accents
-from phone_agent.vector_db import get_vector_store, relevant_hits
+from phone_agent.vector_db import get_vector_store
 from tavily import TavilyClient
 from functools import lru_cache
 
@@ -68,6 +68,13 @@ DB_ERROR = ('Lỗi hệ thống khi tra cứu kho hàng ({}). Không tự đưa 
 @lru_cache
 def _policy_store():
     return get_vector_store()
+
+def _relevant_policy_hits(scored: list[tuple]) -> list[tuple]:
+    # scored: [(Document, điểm cosine)] giảm dần. Bỏ đoạn dưới ngưỡng, và đoạn kém đoạn tốt nhất quá MARGIN
+    if not scored or scored[0][1] < POLICY_MIN_SCORE:
+        return []
+    best = scored[0][1]
+    return [(d, s) for d, s in scored if s >= POLICY_MIN_SCORE and best - s <= POLICY_SCORE_MARGIN]
 
 def _norm_text(text: str) -> str:
     text = strip_accents(text.lower().replace('+', ' plus '))
@@ -487,7 +494,7 @@ def search_policy(query: str) -> str:
         # ToolNode chỉ bắt lỗi sai tham số; lỗi khác (Qdrant sập...) sẽ làm hỏng cả lượt hội thoại
         return (f'Lỗi hệ thống khi tra cứu dữ liệu nội bộ ({type(e).__name__}). '
                 'Không tự đưa ra chính sách; xin lỗi anh/chị và hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không.')
-    hits = relevant_hits(scored)
+    hits = _relevant_policy_hits(scored)
     if not hits:
         return ('Không tìm thấy chính sách liên quan tới câu hỏi trong dữ liệu nội bộ. Không tự trả lời về chính sách; '
                 'nói chưa có thông tin và hỏi khách có cần nhân viên cửa hàng hỗ trợ thêm không.')
@@ -497,7 +504,7 @@ def search_policy(query: str) -> str:
         by_source.setdefault(doc.metadata['source'], []).append(doc)
     parts = [POLICY_GUIDE]
     for source, docs in by_source.items():
-        guide = docs[0].metadata.get('prompt')  # prompt riêng của tài liệu, sửa ở be (bảng policies)
+        guide = POLICY_PROMPTS.get(source)
         parts.append(f'=== [{source}] ===' + (f'\nHướng dẫn trả lời: {guide}' if guide else '')
                      + '\n' + '\n\n'.join(d.page_content for d in docs))
     return '\n\n'.join(parts)

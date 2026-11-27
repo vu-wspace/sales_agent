@@ -18,18 +18,11 @@ class FakeAgent:
 
     def __init__(self, error: Exception | None = None, fail_after_first_token: bool = False):
         self.threads: dict[str, list] = {}
-        self.extra: dict[str, dict] = {}  # state ngoài messages (handoff, stage...) ghi qua update_state
         self.error = error
         self.fail_after_first_token = fail_after_first_token
 
     def get_state(self, config):
-        thread_id = config['configurable']['thread_id']
-        return SimpleNamespace(values={**self.extra.get(thread_id, {}), 'messages': list(self.threads.get(thread_id, []))})
-
-    def update_state(self, config, values, as_node=None):
-        thread_id = config['configurable']['thread_id']
-        self.threads.setdefault(thread_id, []).extend(values.get('messages', []))
-        self.extra.setdefault(thread_id, {}).update({k: v for k, v in values.items() if k != 'messages'})
+        return SimpleNamespace(values={'messages': list(self.threads.get(config['configurable']['thread_id'], []))})
 
     def _turn(self, config, text):
         history = self.threads.setdefault(config['configurable']['thread_id'], [])
@@ -76,8 +69,6 @@ def wire_services():
     # Không dùng `with TestClient(...)` để bỏ qua lifespan (không cần Qdrant/model/Postgres thật)
     svc.app.state.agent = FakeAgent()
     be.app.state.agent_http = TestClient(svc.app)
-    be._hits.clear()   # giới hạn theo IP: mọi test dùng chung IP 'testclient'
-    svc._busy.clear()
 
 
 @pytest.fixture
@@ -260,13 +251,19 @@ def test_qdrant_client_is_reused():
     assert get_client() is get_client()
 
 
-@pytest.mark.parametrize('auto_ingest, stored, expected', [(True, 0, 34), (True, 60, 60), (False, 0, 0)])
-def test_prepare_vector_db_seeds_only_when_empty_and_enabled(monkeypatch, auto_ingest, stored, expected):
-    # Chính sách do be đẩy sang; agent chỉ nạp dữ liệu mẫu khi bật AUTO_INGEST và Qdrant rỗng (không đè bản be đã sửa)
-    monkeypatch.setattr(svc, 'AUTO_INGEST', auto_ingest)
+def test_prepare_vector_db_ingests_when_empty(monkeypatch):
     monkeypatch.setattr(svc, 'get_vector_store', lambda: 'db')
-    monkeypatch.setattr(svc, 'count_documents', lambda: stored)
-    monkeypatch.setattr(svc, 'ingest_seed', lambda: 34)
+    monkeypatch.setattr(svc, 'count_documents', lambda: 0)
+    monkeypatch.setattr(svc, 'ingest', lambda db: 34)
+    assert svc.prepare_vector_db() == 34
+
+
+@pytest.mark.parametrize('up_to_date, expected', [(False, 65), (True, 60)])
+def test_prepare_vector_db_reingests_only_when_policies_changed(monkeypatch, up_to_date, expected):
+    monkeypatch.setattr(svc, 'get_vector_store', lambda: 'db')
+    monkeypatch.setattr(svc, 'count_documents', lambda: 60)
+    monkeypatch.setattr(svc, 'is_up_to_date', lambda: up_to_date)
+    monkeypatch.setattr(svc, 'ingest', lambda db: 65)
     assert svc.prepare_vector_db() == expected
 
 
@@ -552,135 +549,3 @@ def test_agent_thread_state_for_integrators():
     svc.app.state.agent = CartAgent(CART)
     assert TestClient(svc.app).get('/threads/t1').json() == {'thread_id': 't1', 'stage': None, 'cart': CART,
                                                              'order_form': True, 'orders': []}
-
-
-# ---------------------------------------------------------------- chống spam
-
-def test_thread_runs_one_turn_at_a_time(client):
-    import time
-    svc._busy['t1'] = time.monotonic()           # lượt trước của t1 chưa xong
-    r = client.post('/chat', json={'message': 'còn hàng không', 'thread_id': 't1'})
-    assert r.status_code == 409 and r.json()['detail'] == svc.BUSY_DETAIL
-    # Stream: giữ thread trong generator nên báo bằng sự kiện error (giao diện hiện detail)
-    events = sse_events(client.post('/chat/stream', json={'message': 'còn hàng không', 'thread_id': 't1'}))
-    assert events == [{'type': 'error', 'status': 409, 'detail': svc.BUSY_DETAIL}]
-    assert client.post('/chat', json={'message': 'hi', 'thread_id': 't2'}).status_code == 200   # thread khác vẫn chạy
-    svc._busy['t1'] = time.monotonic() - svc.TURN_TIMEOUT_S - 1  # lượt cũ chết, không nhả được: hết hạn thì mở lại
-    assert client.post('/chat', json={'message': 'hi', 'thread_id': 't1'}).status_code == 200
-
-
-def test_thread_released_after_turn_and_errors(client):
-    client.post('/chat', json={'message': 'hi', 'thread_id': 't1'})
-    sse_events(client.post('/chat/stream', json={'message': 'hi', 'thread_id': 't1'}))
-    svc.app.state.agent = FakeAgent(error=KeyError('bug'))
-    sse_events(client.post('/chat/stream', json={'message': 'hi', 'thread_id': 't1'}))
-    assert svc._busy == {}
-
-
-def test_rate_limit_per_ip(client, monkeypatch):
-    monkeypatch.setattr(be, 'CHAT_RATE_PER_MIN', 3)
-    for i in range(3):
-        assert client.post('/chat', json={'message': 'hi', 'thread_id': f't{i}'}).status_code == 200
-    r = client.post('/chat/stream', json={'message': 'hi', 'thread_id': 't9'})
-    assert r.status_code == 429 and r.json()['detail'] == be.RATE_DETAIL and 0 < int(r.headers['retry-after']) <= 61
-    assert client.post('/session', json={}).status_code == 429
-    be._hits['testclient'] = type(be._hits['testclient'])(t - 61 for t in be._hits['testclient'])  # 1 phút sau
-    assert client.post('/chat', json={'message': 'hi', 'thread_id': 't1'}).status_code == 200
-
-
-def test_same_message_over_and_over_nudges_then_hands_off(client, monkeypatch):
-    calls = []
-    agent = svc.app.state.agent
-    monkeypatch.setattr(agent, 'invoke', lambda input, config, real=agent.invoke: calls.append(1) or real(input, config))
-    send = lambda text: client.post('/chat', json={'message': text, 'thread_id': 't1'}).json()
-    send('cho tui xem giá')
-    assert send('Cho tui xem giá!!')['answer'] == 'Trả lời: Cho tui xem giá!!'   # gửi lại 1 lần: trả lời bình thường
-    r = send('cho tui  xem giá ?')                                               # lần 3: nhắc nhẹ, không gọi LLM
-    assert r['answer'] == svc.NUDGE and not r['handoff'] and len(calls) == 2
-    events = sse_events(client.post('/chat/stream', json={'message': 'cho tui xem giá', 'thread_id': 't1'}))
-    done = events[-1]                                                            # lần 4: chuyển nhân viên
-    assert done['type'] == 'done' and done['answer'] == svc.SPAM_HANDOFF and done['handoff'] and done['stage'] == 'handoff'
-    assert len(calls) == 2 and svc._busy == {}
-    # Lịch sử có đủ tin của khách và câu trả lời sẵn (lượt sau model đọc được)
-    texts = [m.text for m in agent.threads['t1']]
-    assert texts[-4:] == ['cho tui xem giá ?', svc.NUDGE, 'cho tui xem giá', svc.SPAM_HANDOFF]
-    assert send('cho tui xem giá iphone 16')['answer'] == 'Trả lời: cho tui xem giá iphone 16'   # nói rõ: bình thường
-    assert send('cho tui xem giá')['answer'] == 'Trả lời: cho tui xem giá'
-    assert send('cho tui xem giá')['answer'].startswith('Trả lời')
-    assert client.post('/chat', json={'message': 'cho tui xem giá', 'thread_id': 't2'}).json()['answer'].startswith('Trả lời')
-
-
-def test_lock_released_when_reading_state_fails(client):
-    class Broken(FakeAgent):
-        def get_state(self, config):
-            raise RuntimeError('checkpointer lỗi')
-    svc.app.state.agent = Broken()
-    with pytest.raises(RuntimeError):
-        client.post('/chat', json={'message': 'hi', 'thread_id': 't1'})
-    assert svc._busy == {}
-    events = sse_events(client.post('/chat/stream', json={'message': 'hi', 'thread_id': 't1'}))
-    assert events[-1]['type'] == 'error' and events[-1]['status'] == 500 and svc._busy == {}
-
-
-def test_stream_dropped_before_start_does_not_lock(client):
-    # Khách ngắt kết nối trước khi stream chạy: generator bị close khi chưa chạy -> không được giữ thread
-    gen = svc._stream_events(svc.app.state.agent, 'hi', 't1', svc._config('t1'))
-    gen.close()
-    assert svc._busy == {}
-    assert client.post('/chat', json={'message': 'hi', 'thread_id': 't1'}).status_code == 200
-
-
-def test_short_replies_to_different_questions_are_not_spam(client):
-    for text in ('ok', 'ok', 'Ok!', 'ok', 'có', 'có', 'có', '👍', '👍', '👍', '👍'):
-        r = client.post('/chat', json={'message': text, 'thread_id': 't1'}).json()
-        assert r['answer'] == f'Trả lời: {text}' and not r['handoff']
-
-
-def test_repeat_key_ignores_case_and_punctuation_only():
-    assert svc._key('Cho  tui xem GIÁ!!') == svc._key('cho tui xem giá')
-    assert svc._key('👍') != svc._key('😡')
-
-
-def test_two_real_concurrent_turns_on_one_thread(client):
-    import threading
-    entered, go = threading.Event(), threading.Event()
-
-    class Slow(FakeAgent):
-        def invoke(self, input, config):
-            entered.set()
-            assert go.wait(10)
-            return super().invoke(input, config)
-    svc.app.state.agent = Slow()
-    first = {}
-    t = threading.Thread(target=lambda: first.update(
-        r=TestClient(be.app).post('/chat', json={'message': 'iphone 16 còn không', 'thread_id': 't1'})))
-    t.start()
-    assert entered.wait(10)                                 # lượt 1 đang chạy LLM
-    r = client.post('/chat', json={'message': 'alo', 'thread_id': 't1'})
-    assert r.status_code == 409 and r.json()['detail'] == svc.BUSY_DETAIL   # be chuyển nguyên 409 của agent
-    go.set()
-    t.join(10)
-    assert first['r'].status_code == 200
-    assert [m.text for m in svc.app.state.agent.threads['t1'] if m.type == 'human'] == ['iphone 16 còn không']
-    assert svc._busy == {}
-
-
-def test_rate_limit_counts_each_ip_and_can_be_disabled(monkeypatch):
-    monkeypatch.setattr(be, 'CHAT_RATE_PER_MIN', 1)
-    a, b = TestClient(be.app, client=('1.1.1.1', 1)), TestClient(be.app, client=('2.2.2.2', 1))
-    assert a.post('/session', json={}).status_code == 200
-    assert a.post('/session', json={}).status_code == 429
-    assert b.post('/session', json={}).status_code == 200      # IP khác: đếm riêng
-    assert a.post('/order/quote', json={'thread_id': 't1'}).status_code == 429   # đặt hàng cũng bị giới hạn
-    monkeypatch.setattr(be, 'CHAT_RATE_PER_MIN', 0)
-    assert a.post('/session', json={}).status_code == 200      # 0: tắt
-
-
-def test_rate_limit_memory_is_capped(monkeypatch):
-    monkeypatch.setattr(be, 'MAX_IPS', 3)
-    for ip in ('1.0.0.1', '1.0.0.2', '1.0.0.3', '1.0.0.4'):
-        TestClient(be.app, client=(ip, 1)).post('/session', json={})
-    assert list(be._hits) == ['1.0.0.2', '1.0.0.3', '1.0.0.4']   # bỏ IP im lâu nhất
-    TestClient(be.app, client=('1.0.0.2', 1)).post('/session', json={})
-    TestClient(be.app, client=('1.0.0.5', 1)).post('/session', json={})
-    assert list(be._hits) == ['1.0.0.4', '1.0.0.2', '1.0.0.5']   # IP vừa nhắn lại được giữ

@@ -26,9 +26,7 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
 
 COPY packages/common ./packages/common
 COPY services/be ./services/be
-COPY data_schema/orders.sql data_schema/policies.sql ./data_schema/
-# Dữ liệu mẫu nạp vào bảng policies khi bảng rỗng (lần đầu chạy)
-COPY data_schema/policies ./data_schema/policies
+COPY data_schema/orders.sql ./data_schema/orders.sql
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package phone-api
