@@ -1,0 +1,159 @@
+{
+  "doi-tra.md": [
+    {
+      "question": "mới mua iphone được 2 tuần thì màn hình bị sọc, có đổi máy mới được không",
+      "must_contain": [
+        [
+          "30 ngày"
+        ]
+      ]
+    },
+    {
+      "question": "mình chưa bóc seal, giờ không muốn lấy nữa thì trả lại có mất phí không",
+      "must_contain": [
+        [
+          "10%"
+        ],
+        [
+          "7 ngày"
+        ]
+      ]
+    },
+    {
+      "question": "máy đã kích hoạt rồi nhưng không lỗi gì, đem trả được không",
+      "must_contain": []
+    },
+    {
+      "question": "trả hàng mua bằng thẻ tín dụng thì bao lâu tiền về lại",
+      "must_contain": [
+        [
+          "7"
+        ],
+        [
+          "15"
+        ]
+      ]
+    }
+  ],
+  "giao-hang.md": [
+    {
+      "question": "đặt điện thoại online có tốn tiền ship không",
+      "must_contain": [
+        [
+          "miễn phí"
+        ]
+      ]
+    },
+    {
+      "question": "ở sài gòn đặt hàng thì bao lâu có hàng",
+      "must_contain": [
+        [
+          "2 giờ"
+        ]
+      ]
+    },
+    {
+      "question": "shipper tới thì mình có được mở hộp kiểm tra trước khi trả tiền không",
+      "must_contain": [
+        [
+          "seal"
+        ]
+      ]
+    },
+    {
+      "question": "đặt nhận tại cửa hàng thì cửa hàng giữ máy cho mình mấy ngày",
+      "must_contain": [
+        [
+          "3 ngày"
+        ]
+      ]
+    }
+  ],
+  "tra-gop.md": [
+    {
+      "question": "không có thẻ tín dụng thì mua trả góp được không",
+      "must_contain": [
+        [
+          "cccd",
+          "căn cước"
+        ]
+      ]
+    },
+    {
+      "question": "trả góp lãi 0 phần trăm cần điều kiện gì",
+      "must_contain": [
+        [
+          "30%"
+        ]
+      ]
+    },
+    {
+      "question": "đang trả góp mà muốn trả hết nợ sớm có bị phạt không",
+      "must_contain": []
+    },
+    {
+      "question": "bao nhiêu tuổi thì được làm hồ sơ trả góp",
+      "must_contain": [
+        [
+          "18"
+        ],
+        [
+          "60"
+        ]
+      ]
+    }
+  ],
+  "bao-hanh-apple.md": [
+    {
+      "question": "iphone bảo hành chính hãng bao lâu",
+      "must_contain": [
+        [
+          "12 tháng"
+        ]
+      ]
+    },
+    {
+      "question": "pin iphone còn 82% sau 1 năm có được thay miễn phí không",
+      "must_contain": [
+        [
+          "80%"
+        ]
+      ]
+    },
+    {
+      "question": "làm rơi iphone nứt màn hình thì có được bảo hành không",
+      "must_contain": []
+    },
+    {
+      "question": "trước khi mang iphone đi bảo hành cần làm gì",
+      "must_contain": [
+        [
+          "tìm iphone",
+          "find my"
+        ]
+      ]
+    }
+  ],
+  "bao-hanh-samsung.md": [
+    {
+      "question": "ốp lưng samsung chính hãng được bảo hành mấy tháng",
+      "must_contain": [
+        [
+          "6 tháng"
+        ]
+      ]
+    },
+    {
+      "question": "điện thoại samsung root máy rồi còn bảo hành không",
+      "must_contain": [
+        [
+          "knox"
+        ]
+      ]
+    },
+    {
+      "question": "màn hình z fold có vết gấp ở giữa có phải lỗi không",
+      "must_contain": []
+    }
+  ]
+}

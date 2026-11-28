@@ -26,8 +26,9 @@ POLICY_SCORE_MARGIN = 0.08
 # Agent service dùng bản nào: 'graph' (graph.py, có trạng thái hội thoại + giỏ hàng) hoặc 'agent' (agent.py)
 AGENT_IMPL = os.getenv('AGENT_IMPL', 'graph').lower()
 
-# Agent service: collection rỗng thì tự nạp dữ liệu khi khởi động
-AUTO_INGEST = os.getenv('AUTO_INGEST', 'true').lower() == 'true'
+# Chính sách: bản gốc ở be (bảng policies), be đẩy sang agent. AUTO_INGEST=true: chạy agent không có be thì nạp dữ liệu
+# mẫu (data_schema/policies) khi Qdrant rỗng
+AUTO_INGEST = os.getenv('AUTO_INGEST', 'false').lower() == 'true'
 
 # Khóa mã hóa số điện thoại, email của khách trong database (Fernet, base64 32 byte). Tạo khóa:
 #   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -55,3 +56,8 @@ MAIL_FROM = os.getenv('MAIL_FROM', 'PhoneShop Demo <no-reply@phoneshop.example>'
 # bắt buộc khi mở agent cho hệ thống khác tích hợp; để trống chỉ dùng trong mạng nội bộ (docker compose).
 AGENT_URL = os.getenv('AGENT_URL', 'http://localhost:8001')
 AGENT_API_KEY = os.getenv('AGENT_API_KEY', '')
+
+# be: key cho /admin/policies (header "Authorization: Bearer <key>"). Để trống thì tắt các endpoint quản trị
+ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', '')
+CHAT_RATE_PER_MIN = int(os.getenv('CHAT_RATE_PER_MIN', '20'))  # be: số lượt chat, mở phiên, đặt hàng tối đa mỗi IP mỗi phút (0: tắt)
+POLICY_SYNC_S = int(os.getenv('POLICY_SYNC_S', '300'))  # be đối chiếu chính sách với agent mỗi ngần này giây

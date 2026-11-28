@@ -257,7 +257,9 @@ def test_search_policy_handles_backend_error(monkeypatch):
 
 
 def doc(source: str, text: str) -> Document:
-    return Document(page_content=text, metadata={'source': source, 'title': 'T', 'section': 'S'})
+    # prompt riêng lưu trong payload của chunk (vector_db.upsert_policy), như khi be đẩy chính sách sang
+    return Document(page_content=text, metadata={'source': source, 'title': 'T', 'section': 'S',
+                                                 'prompt': f'Hướng dẫn của {source}'})
 
 
 def fake_policy_store(monkeypatch, scored):
@@ -278,7 +280,7 @@ def test_search_policy_groups_by_file_with_its_prompt(monkeypatch):
     doi_tra = out.index('=== [doi-tra.md] ===')
     assert doi_tra < out.index('=== [bao-hanh-apple.md] ===')     # file có đoạn liên quan nhất đứng trước
     assert out.count('=== [doi-tra.md] ===') == 1                 # 2 đoạn cùng file gom chung 1 nhóm
-    assert f"Hướng dẫn trả lời: {tools.POLICY_PROMPTS['doi-tra.md']}" in out
+    assert 'Hướng dẫn trả lời: Hướng dẫn của doi-tra.md' in out
     assert out.index('Đổi mới') < out.index('7-15 ngày') < out.index('=== [bao-hanh-apple.md] ===')
 
 
@@ -297,9 +299,10 @@ def test_search_policy_off_topic_returns_not_found(monkeypatch):
     assert out.startswith('Không tìm thấy chính sách liên quan') and 'Trả góp' not in out
 
 
-def test_every_policy_file_has_a_prompt():
-    from phone_common.config import POLICY_DIR
-    assert set(tools.POLICY_PROMPTS) == {f.name for f in POLICY_DIR.glob('*.md')}
+def test_every_seed_policy_has_a_prompt():
+    from phone_common.policies import load_seed
+    seed = load_seed()
+    assert len(seed) == 5 and all(d['prompt'] for d in seed)
 
 
 def test_web_search_handles_backend_error(monkeypatch):

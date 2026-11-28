@@ -4,13 +4,15 @@
 import asyncio
 import json
 import logging
+import re
 import secrets
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 import groq
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.exceptions import ModelError
 from langchain_core.messages import AIMessage, HumanMessage
@@ -21,9 +23,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from phone_agent.agent import build_agent
 from phone_agent.graph import build_graph
-from phone_agent.vector_db import count_documents, get_vector_store, ingest, is_up_to_date
+from phone_agent.vector_db import (check_policy, count_documents, delete_policy, get_vector_store, ingest_seed,
+                                   policy_hashes, upsert_policy)
 from phone_common import pii
 from phone_common.config import AGENT_API_KEY, AGENT_IMPL, AUTO_INGEST
+from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
 from phone_common.llm import is_rate_limited
 from phone_common.textnorm import normalize_user_text
 
@@ -53,6 +57,28 @@ SESSION_TTL_S = 15 * 60
 _last_seen: dict[str, float] = {}  # thread_id -> lúc khách tương tác gần nhất (time.monotonic)
 # Ghi lịch sử như lượt trả lời của agent; agent.py (create_agent) không có node track_reply
 AS_NODE = 'track_reply' if AGENT_IMPL == 'graph' else None
+
+
+# Mỗi thread chỉ chạy 1 lượt một lúc: 2 lượt song song cùng đọc rồi cùng ghi state làm lệch giỏ hàng, lịch sử
+# (khách bấm gửi liên tục, script gọi thẳng API). Endpoint sync chạy trong threadpool nên cần Lock.
+# Quá TURN_TIMEOUT_S coi như lượt cũ đã chết (lỡ không nhả được) để thread không bị khóa mãi.
+TURN_TIMEOUT_S = 300
+BUSY_DETAIL = 'Dạ, em đang trả lời tin trước, anh/chị chờ em xíu rồi nhắn tiếp nha.'
+_busy: dict[str, float] = {}  # thread_id -> lúc bắt đầu lượt đang chạy
+_busy_lock = threading.Lock()
+
+
+def _claim(thread_id: str) -> None:
+    now = time.monotonic()
+    with _busy_lock:
+        if now - _busy.get(thread_id, -TURN_TIMEOUT_S) < TURN_TIMEOUT_S:
+            raise HTTPException(409, BUSY_DETAIL)
+        _busy[thread_id] = now
+
+
+def _release(thread_id: str) -> None:
+    with _busy_lock:
+        _busy.pop(thread_id, None)
 
 
 def _touch(thread_id: str) -> None:
@@ -89,12 +115,13 @@ def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
     # Qdrant có thể khởi động chậm hơn agent khi chạy bằng docker compose -> thử lại vài lần
     for attempt in range(1, retries + 1):
         try:
-            db = get_vector_store()  # tạo collection nếu chưa có
+            get_vector_store()  # tạo collection nếu chưa có
             n = count_documents()
-            # Nạp lại cả khi file chính sách .md đã sửa (id chunk không còn khớp), không chỉ khi collection rỗng
-            if AUTO_INGEST and (n == 0 or not is_up_to_date()):
-                log.info('Chính sách trong Qdrant rỗng hoặc đã cũ, đang nạp lại...')
-                n = ingest(db)
+            # Chính sách do be đẩy sang (PUT /policies/{slug}). AUTO_INGEST: chạy agent không có be thì nạp dữ liệu mẫu
+            # khi Qdrant rỗng; không nạp đè khi đã có dữ liệu, để không xóa bản be đã sửa
+            if AUTO_INGEST and n == 0:
+                log.info('Qdrant chưa có chính sách, đang nạp dữ liệu mẫu (data_schema/policies)...')
+                n = ingest_seed()
             return n
         except Exception as e:
             if attempt == retries:
@@ -174,6 +201,21 @@ class NewThread(BaseModel):
     end_thread_id: str | None = Field(default=None, max_length=100)  # cuộc trò chuyện cũ cần xóa
 
 
+class PolicyIn(BaseModel):
+    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)  # markdown: # tiêu đề, ## mục, ### mục con
+    prompt: str | None = Field(default=None, max_length=MAX_PROMPT)  # hướng dẫn trả lời riêng, kèm kết quả search_policy
+
+
+class CheckQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    must_contain: list[list[str]] = []   # mỗi nhóm: chỉ cần 1 cách viết xuất hiện, vd [["30 ngày"], ["7", "bảy"]]
+
+
+class PolicyCheck(BaseModel):
+    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)
+    questions: list[CheckQuestion] = Field(max_length=100)
+
+
 class OrderPlaced(BaseModel):
     order_id: str = Field(min_length=1, max_length=50)
     answer: str = Field(min_length=1, max_length=5000)  # tóm tắt đơn + lời cảm ơn, ghi vào lịch sử
@@ -204,14 +246,63 @@ def _llm_failure(e: Exception) -> tuple[int, str]:
     return 502, f'Không tạo được câu trả lời ({type(e).__name__}).'
 
 
+# Khách gửi đi gửi lại đúng 1 câu ("cho tui xem giá" x10) là spam/lạc đề: trả lời sẵn, không tốn lượt LLM.
+# Lần 1-2: trả lời bình thường (gửi lại 1 lần vì lượt trước lỗi, chưa ưng là chuyện thường).
+# Lần 3: nhắc nhẹ khách nói rõ hơn. Lần 4 trở đi: chuyển nhân viên (bật handoff như khi khách đòi gặp người thật).
+# So sau khi bỏ hoa thường, dấu câu, khoảng trắng.
+NUDGE_AT, HANDOFF_AT = 3, 4
+MIN_WORDS = 3
+NUDGE = ('Dạ, câu này anh/chị vừa hỏi, em đã trả lời ở trên rồi ạ. Anh/chị nói rõ hơn giúp em '
+         '(vd tên máy, dung lượng, tầm giá) để em tư vấn đúng ý nha.')
+SPAM_HANDOFF = ('Dạ, có vẻ em chưa giúp được đúng ý anh/chị. Em đã chuyển cho nhân viên hỗ trợ, '
+                'anh/chị chờ chút nhân viên sẽ liên hệ ạ.')
+
+
+def _key(text: str) -> str:
+    # Chỉ có emoji/dấu câu ("👍", "???"): không có chữ để so -> so nguyên văn
+    return ' '.join(re.findall(r'\w+', text.casefold())) or text.strip()
+
+
+def _times_sent(messages: list, message: str) -> int:
+    """Tin này là lần thứ mấy liên tiếp khách gửi đúng câu đó (tính cả tin này).
+    Câu dưới MIN_WORDS từ ("ok", "có", "vâng", "👍") không tính: khách đáp lại các câu hỏi khác nhau của bot
+    ("lấy màu đen không?", "thêm ốp không?") là bình thường, không phải spam."""
+    key = _key(message)
+    if len(key.split()) < MIN_WORDS:
+        return 1
+    n = 1
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            if _key(m.text) != key:
+                break
+            n += 1
+    return n
+
+
+def _answer_spam(agent, config: dict, message: str) -> dict | None:
+    """Khách lặp lại 1 câu: ghi tin của khách + câu trả lời sẵn vào lịch sử, trả state mới. Không lặp thì None."""
+    n = _times_sent(agent.get_state(config).values.get('messages', []), message)
+    if n < NUDGE_AT:
+        return None
+    update = {'messages': [HumanMessage(message), AIMessage(NUDGE if n < HANDOFF_AT else SPAM_HANDOFF)]}
+    if n >= HANDOFF_AT and AGENT_IMPL == 'graph':
+        update |= {'handoff': True, 'stage': 'handoff'}
+    log.info('Thread %s gửi lặp 1 câu %d lần: %s', config['configurable']['thread_id'], n,
+             'chuyển nhân viên' if n >= HANDOFF_AT else 'nhắc nhẹ')
+    agent.update_state(config, update, as_node=AS_NODE)
+    return agent.get_state(config).values
+
+
 def _start_turn(req: ChatRequest, request: Request):
     agent = request.app.state.agent
     thread_id = req.thread_id or str(uuid.uuid4())
     _touch(thread_id)
-    config = _config(thread_id)
+    return agent, thread_id, _config(thread_id)
+
+
+def _n_messages(agent, config: dict) -> int:
     # Agent trả về cả lịch sử của thread -> nhớ số message trước lượt này để chỉ lấy message mới
-    n_before = len(agent.get_state(config).values.get('messages', []))
-    return agent, thread_id, config, n_before
+    return len(agent.get_state(config).values.get('messages', []))
 
 
 def _response(thread_id: str, values: dict, n_before: int) -> ChatResponse:
@@ -224,11 +315,16 @@ def _response(thread_id: str, values: dict, n_before: int) -> ChatResponse:
 
 @app.post('/chat', response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
-    agent, thread_id, config, n_before = _start_turn(req, request)
-    try:
-        res = agent.invoke({'messages': [{'role': 'user', 'content': req.message}]}, config)
+    agent, thread_id, config = _start_turn(req, request)
+    _claim(thread_id)
+    try:  # mọi bước sau khi giữ thread nằm trong try: lỗi gì cũng nhả
+        n_before = _n_messages(agent, config)
+        res = _answer_spam(agent, config, req.message) or \
+            agent.invoke({'messages': [{'role': 'user', 'content': req.message}]}, config)
     except LLM_ERRORS as e:
         raise HTTPException(*_llm_failure(e))
+    finally:
+        _release(thread_id)
     return _response(thread_id, res, n_before)
 
 
@@ -236,10 +332,28 @@ def _sse(event: dict) -> str:
     return f'data: {json.dumps(event, ensure_ascii=False)}\n\n'
 
 
-def _stream_events(agent, message: str, thread_id: str, config: dict, n_before: int):
+def _stream_events(agent, message: str, thread_id: str, config: dict):
+    # Giữ thread ngay trong generator: generator bị bỏ trước khi chạy (khách ngắt kết nối sớm) thì cũng chưa giữ gì,
+    # không bị khóa 5 phút. Đang có lượt khác -> sự kiện error status 409 (giao diện hiện detail)
+    try:
+        _claim(thread_id)
+    except HTTPException as e:
+        yield _sse({'type': 'error', 'status': e.status_code, 'detail': e.detail})
+        return
+    try:
+        yield from _turn_events(agent, message, thread_id, config)
+    finally:
+        _release(thread_id)  # cả khi khách đóng tab giữa chừng (generator bị close)
+
+
+def _turn_events(agent, message: str, thread_id: str, config: dict):
     yield _sse({'type': 'start', 'thread_id': thread_id})
     status = None  # dòng trạng thái đã gửi gần nhất, tránh gửi trùng
     try:
+        n_before = _n_messages(agent, config)
+        if (values := _answer_spam(agent, config, message)) is not None:
+            yield _sse({'type': 'done', **_response(thread_id, values, n_before).model_dump()})
+            return
         stream = agent.stream({'messages': [{'role': 'user', 'content': message}]}, config,
                               stream_mode=['messages', 'updates'])
         for mode, data in stream:
@@ -281,9 +395,9 @@ def chat_stream(req: ChatRequest, request: Request):
     """Như /chat nhưng trả Server-Sent Events để giao diện hiện chữ ngay khi LLM sinh ra.
     Mỗi sự kiện là 1 dòng `data: {json}`: start {thread_id}; status {text} khi chạy tool; token {text};
     reset (bỏ phần chữ model viết trước khi gọi tool); done {giống response của /chat}; error {status, detail}."""
-    agent, thread_id, config, n_before = _start_turn(req, request)
+    agent, thread_id, config = _start_turn(req, request)
     # X-Accel-Buffering: tắt buffer nếu đặt sau nginx, để chữ tới trình duyệt ngay
-    return StreamingResponse(_stream_events(agent, req.message, thread_id, config, n_before),
+    return StreamingResponse(_stream_events(agent, req.message, thread_id, config),
                              media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
@@ -339,3 +453,35 @@ def order_cancelled(thread_id: str, req: OrderCancelled, request: Request):
         {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(req.answer)],
          'cart': [], 'order_form': False, 'cross_sell': None, 'wanted': None},
         as_node=AS_NODE)
+
+
+@app.get('/policies')
+def list_policies() -> dict[str, str | None]:
+    """{slug: hash} các tài liệu chính sách đang có trong Qdrant; be so với bảng policies để biết cần đẩy lại gì."""
+    return policy_hashes()
+
+
+@app.put('/policies/{slug}')
+def put_policy(req: PolicyIn, slug: str = Path(pattern=SLUG)):
+    """Thêm/sửa 1 tài liệu: chunk + embed, thay chunk cũ. Chạy đồng bộ (vài giây mỗi tài liệu trên CPU)."""
+    try:
+        n = upsert_policy(slug, req.content_md, req.prompt)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    log.info('Đã cập nhật chính sách %s: %d đoạn', slug, n)
+    return {'slug': slug, 'chunks': n}
+
+
+@app.post('/policies/{slug}/check')
+def check_policy_draft(req: PolicyCheck, slug: str = Path(pattern=SLUG)):
+    """Thử bản nháp với các câu hỏi mẫu, không ghi vào Qdrant: {passed, results: [{question, retrieved, missing, passed}]}."""
+    try:
+        return check_policy(slug, req.content_md, [q.model_dump() for q in req.questions])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.delete('/policies/{slug}', status_code=204)
+def remove_policy(slug: str = Path(pattern=SLUG)):
+    delete_policy(slug)
+    log.info('Đã xóa chính sách %s', slug)
