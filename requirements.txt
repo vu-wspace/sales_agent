@@ -1,7 +1,8 @@
-# Danh sách thư viện cho người dùng pip (cả 3 package: common, agent, be). Nguồn chính là pyproject.toml của
-# packages/common, services/agent, services/be + uv.lock của từng service (máy dev: `uv sync` ở thư mục gốc);
-# sửa thư viện ở các pyproject.toml rồi cập nhật file này cho khớp.
+# Danh sách thư viện cho người dùng pip (cả 4 package: common, agent, be, zalo). Nguồn chính là pyproject.toml của
+# packages/common, services/agent, services/be, services/zalo + uv.lock của từng service (máy dev: `uv sync` ở thư
+# mục gốc); sửa thư viện ở các pyproject.toml rồi cập nhật file này cho khớp (tests/test_requirements.py kiểm tra).
 #   pip install -r requirements.txt
+# Chỉ cài 1 service: pip install -e ./services/zalo (adapter Zalo chỉ cần fastapi, uvicorn, httpx)
 -e ./packages/common
 -e ./services/agent
 -e ./services/be
@@ -44,7 +45,7 @@ torch>=2.14.1
 sentence-transformers>=6.2.0
 pyvi>=0.1.1
 
-# Web app (agent, be) + be gọi agent qua HTTP
+# Web app (agent, be, adapter Zalo) + gọi nhau qua HTTP (be -> agent, agent -> be, zalo -> be, Zalo OA API)
 fastapi>=0.120.0
 uvicorn[standard]>=0.38.0
 httpx>=0.28
