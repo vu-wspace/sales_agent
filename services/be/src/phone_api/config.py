@@ -26,4 +26,7 @@ CATALOG_API_KEY = os.getenv('CATALOG_API_KEY', '')
 
 # Key cho /admin/policies (header "Authorization: Bearer <key>"). Để trống thì tắt các endpoint quản trị
 ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', '')
+# Adapter kênh nhắn tin tin cậy (Zalo, Messenger...): "tên:key" cách nhau bởi dấu phẩy. Request có key hợp lệ +
+# header X-End-User (id người dùng trên nền tảng) được giới hạn theo từng người dùng thay vì theo IP của adapter.
+BE_ADAPTER_KEYS = os.getenv('BE_ADAPTER_KEYS', '')
 CHAT_RATE_PER_MIN = int(os.getenv('CHAT_RATE_PER_MIN', '20'))  # số lượt chat, mở phiên, đặt hàng tối đa mỗi IP mỗi phút (0: tắt)

@@ -2825,6 +2825,23 @@ requires-dist = [
 ]
 
 [[package]]
+name = "phone-zalo"
+version = "0.1.0"
+source = { editable = "services/zalo" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.120.0" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
+]
+
+[[package]]
 name = "platformdirs"
 version = "4.14.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3749,6 +3766,7 @@ dependencies = [
     { name = "phone-agent" },
     { name = "phone-api" },
     { name = "phone-common" },
+    { name = "phone-zalo" },
 ]
 
 [package.dev-dependencies]
@@ -3763,6 +3781,7 @@ requires-dist = [
     { name = "phone-agent", editable = "services/agent" },
     { name = "phone-api", editable = "services/be" },
     { name = "phone-common", editable = "packages/common" },
+    { name = "phone-zalo", editable = "services/zalo" },
 ]
 
 [package.metadata.requires-dev]

@@ -130,6 +130,7 @@ services:
     env_file: .env    # PII_KEY, SMTP_*, MAIL_FROM, LLM key (lời cảm ơn sau đặt hàng), AGENT_API_KEY, ADMIN_API_KEY
     environment:
       AGENT_URL: http://agent:8001
+      BE_ADAPTER_KEYS: "${BE_ADAPTER_KEYS:-}"   # key adapter kênh nhắn tin, vd "zalo:<key>" (cùng key với ZALO_BE_ADAPTER_KEY)
       # Tin X-Forwarded-For từ mạng docker (nginx của fe) để giới hạn chat theo IP thật của khách
       FORWARDED_ALLOW_IPS: 172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/phone
@@ -160,6 +161,31 @@ services:
       - be
     restart: unless-stopped
 
+  # Adapter Zalo OA: Zalo gọi POST /webhook (cần HTTPS công khai: reverse proxy, hoặc cloudflared/ngrok khi thử),
+  # adapter gọi be bằng key adapter (be: BE_ADAPTER_KEYS="zalo:<key>", adapter: ZALO_BE_ADAPTER_KEY=<cùng key>).
+  # Không chạy mặc định: `docker compose --profile zalo up -d zalo` sau khi điền ZALO_* trong .env (xem README).
+  zalo:
+    build:
+      context: .
+      dockerfile: services/zalo/Dockerfile
+    image: phone-sales-zalo
+    container_name: phone_zalo
+    profiles: ["zalo"]
+    ports:
+      - "127.0.0.1:8003:8003"
+    environment:
+      BE_URL: http://be:8002
+      ZALO_BE_ADAPTER_KEY: "${ZALO_BE_ADAPTER_KEY:-}"
+      ZALO_APP_ID: "${ZALO_APP_ID:-}"
+      ZALO_APP_SECRET: "${ZALO_APP_SECRET:-}"
+      ZALO_OA_SECRET: "${ZALO_OA_SECRET:-}"
+      ZALO_REFRESH_TOKEN: "${ZALO_REFRESH_TOKEN:-}"
+    volumes:
+      - zalo_data:/data   # SQLite: người dùng Zalo -> cuộc trò chuyện, token Zalo (refresh token đổi mới sau mỗi lần dùng)
+    depends_on:
+      - be
+    restart: unless-stopped
+
   # Bắt email khi phát triển: mọi email gửi tới cổng 1025 được giữ lại, xem tại http://localhost:8025,
   # không đi ra Internet. Chạy thật thì bỏ service này và đặt SMTP_* trỏ tới nhà cung cấp email.
   mailpit:
@@ -179,3 +205,4 @@ volumes:
   qdrant_data:
   postgres_data:
   agent_db_data:
+  zalo_data:

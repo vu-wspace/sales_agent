@@ -24,3 +24,5 @@ certs/*.crt
 # Trang HTML đã tải khi cào dữ liệu (data_schema/scrape_phone.py)
 data_schema/.cache/
 graphify-out/
+
+services/zalo

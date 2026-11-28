@@ -678,6 +678,30 @@ def test_be_calls_versioned_agent_api():
     assert r.status_code == 200 and r.json()['answer']
 
 
+def test_be_adapter_key_limits_per_end_user_not_per_ip(client, monkeypatch):
+    monkeypatch.setattr(be, 'BE_ADAPTER_KEYS', 'zalo:ak-zalo')
+    monkeypatch.setattr(be, 'CHAT_RATE_PER_MIN', 2)
+    adapter = {'Authorization': 'Bearer ak-zalo'}
+
+    def chat(headers):
+        return client.post('/chat', json={'message': 'hi'}, headers=headers).status_code
+
+    # Mọi người dùng Zalo đi qua cùng 1 IP của adapter: mỗi người 1 hạn mức riêng
+    assert [chat({**adapter, 'X-End-User': '111'}) for _ in range(3)] == [200, 200, 429]
+    assert chat({**adapter, 'X-End-User': '222'}) == 200
+    assert [chat({}) for _ in range(2)] == [200, 200]          # khách web vẫn tính theo IP, không chung với adapter
+    assert chat({'Authorization': 'Bearer sai', 'X-End-User': '111'}) == 401
+    assert chat(adapter) == 400                                # adapter phải nói người dùng nào
+    assert chat({**adapter, 'X-End-User': 'a:b'}) == 400
+
+
+@pytest.mark.parametrize('spec', ['Zalo:k', 'zalo:', 'zalo', 'zalo:a:b', 'zalo:k,fb:k', 'zalo:a,zalo:b'])
+def test_bad_be_adapter_keys_are_rejected(spec):
+    with pytest.raises(ValueError):
+        be.parse_adapters(spec)
+    assert be.parse_adapters(' zalo:k1 , fb:k2 ,') == {'k1': 'zalo', 'k2': 'fb'}
+
+
 def test_agent_thread_state_for_integrators():
     # Hệ thống khác đọc giỏ hàng / bước bán hàng của 1 cuộc trò chuyện
     svc.app.state.agent = CartAgent(CART)

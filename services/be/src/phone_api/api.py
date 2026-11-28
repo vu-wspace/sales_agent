@@ -23,7 +23,7 @@ from phone_common.config import PII_KEY
 from pydantic import BaseModel, Field, field_validator
 
 from phone_api import catalog, mailer, orders, policies, promotions
-from phone_api.config import ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, CHAT_RATE_PER_MIN, SMTP_HOST
+from phone_api.config import ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, BE_ADAPTER_KEYS, CHAT_RATE_PER_MIN, SMTP_HOST
 from phone_api.policies import MAX_CONTENT, MAX_PROMPT, SLUG, policy_hash
 
 log = logging.getLogger('uvicorn.error')
@@ -193,6 +193,8 @@ async def lifespan(app: FastAPI):
         log.error('Chưa tạo được bảng chính sách (%s)', type(e).__name__)
     if not ADMIN_API_KEY:
         log.warning('Chưa đặt ADMIN_API_KEY: /admin/policies bị tắt')
+    if adapters := parse_adapters(BE_ADAPTER_KEYS):   # sai cú pháp thì dừng ngay lúc khởi động
+        log.info('Adapter kênh nhắn tin: %s', ', '.join(adapters.values()))
     headers = {'Authorization': f'Bearer {AGENT_API_KEY}'} if AGENT_API_KEY else {}
     # read 180s: 1 lượt chat có thể chạy vài tool + model dự phòng; connect 5s: agent tắt thì báo lỗi ngay
     # API có phiên bản của agent: mọi đường dẫn be gọi ('/chat', '/threads/...') thành '/v1/chat', '/v1/threads/...'
@@ -239,14 +241,46 @@ _hits: OrderedDict[str, deque] = OrderedDict()  # thứ tự: IP nhắn gần nh
 _hits_lock = threading.Lock()
 
 
+def parse_adapters(spec: str) -> dict[str, str]:
+    """BE_ADAPTER_KEYS "tên:key,..." -> {key: tên}. Sai cú pháp thì be không khởi động (không in lại nội dung mục)."""
+    adapters: dict[str, str] = {}
+    for n, item in enumerate((s.strip() for s in spec.split(',') if s.strip()), 1):
+        name, _, key = item.partition(':')
+        if not re.fullmatch(r'[a-z0-9_-]{1,30}', name) or not key or ':' in key or key in adapters \
+                or name in adapters.values():
+            raise ValueError(f'BE_ADAPTER_KEYS sai ở mục thứ {n}: cần "tên:key", tên chữ thường, không trùng')
+        adapters[key] = name
+    return adapters
+
+
+END_USER = r'[\w-]{1,100}'
+
+
+def caller(request: Request) -> str:
+    """Ai gửi request (để giới hạn tốc độ): IP của khách web, hoặc '<adapter>:<người dùng>' khi adapter tin cậy gửi
+    kèm key và X-End-User. Mọi người dùng Zalo đi qua cùng 1 IP của adapter, tính theo IP thì cả kênh chung 1 hạn mức."""
+    auth = request.headers.get('authorization')
+    if auth is None:
+        return request.client.host if request.client else 'unknown'
+    given = auth.removeprefix('Bearer ').encode()
+    name = next((n for k, n in parse_adapters(BE_ADAPTER_KEYS).items() if secrets.compare_digest(given, k.encode())),
+                None)
+    if name is None:
+        raise HTTPException(401, 'Sai key của adapter')
+    user = request.headers.get('x-end-user', '')
+    if not re.fullmatch(END_USER, user):
+        raise HTTPException(400, 'Adapter phải gửi header X-End-User (id người dùng trên nền tảng)')
+    return f'{name}:{user}'
+
+
 def limit_rate(request: Request) -> None:
+    who = caller(request)   # kiểm tra key adapter cả khi tắt giới hạn
     if CHAT_RATE_PER_MIN <= 0:
         return
-    ip = request.client.host if request.client else 'unknown'
     now = time.monotonic()
     with _hits_lock:
-        q = _hits.setdefault(ip, deque())
-        _hits.move_to_end(ip)
+        q = _hits.setdefault(who, deque())
+        _hits.move_to_end(who)
         while len(_hits) > MAX_IPS:
             _hits.popitem(last=False)
         while q and now - q[0] >= 60:

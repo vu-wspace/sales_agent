@@ -1,0 +1,18 @@
+[project]
+
+name = "phone-zalo"
+version = "0.1.0"
+description = "Adapter Zalo Official Account: nhận tin khách qua webhook, chat và đặt hàng qua be, gửi trả lời bằng Zalo OA API"
+requires-python = ">=3.12.15"
+dependencies = [
+    "fastapi>=0.120.0",
+    "uvicorn[standard]>=0.38.0",
+    "httpx>=0.28",
+]
+
+# Project uv độc lập với uv.lock riêng (services/zalo/uv.lock); không dùng phone-common: chỉ nói chuyện với be qua HTTP.
+
+[build-system]
+
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

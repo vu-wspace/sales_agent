@@ -5,6 +5,7 @@
 -e ./packages/common
 -e ./services/agent
 -e ./services/be
+-e ./services/zalo
 
 # torch bản CPU (không kéo bộ CUDA vài GB)
 --extra-index-url https://download.pytorch.org/whl/cpu

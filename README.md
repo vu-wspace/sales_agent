@@ -55,6 +55,7 @@ Lần build đầu mất khoảng 8 phút, chủ yếu để tải model embeddi
 | fe | `services/fe` | (nginx, không có Python) | 8000 | Giao diện chat; chuyển `/chat`, `/order`, `/session`, `/health` sang be |
 | be | `services/be` | `phone_api` | 8002 | Phiên chat, khách quen, đơn hàng, khuyến mãi, email; chuyển chat sang agent |
 | agent | `services/agent` | `phone_agent` | 8001 | LangGraph agent, tools, RAG; giữ lịch sử hội thoại và giỏ hàng theo `thread_id` |
+| zalo | `services/zalo` | `phone_zalo` | 8003 | Adapter Zalo OA (không bắt buộc): nhận tin qua webhook, chat và đặt hàng qua be |
 
 `be` sở hữu database PostgreSQL `phone`, gồm danh mục, tồn kho, khuyến mãi, khách hàng, đơn hàng và chính sách. Tool của `agent` đọc giá, tồn kho và khuyến mãi theo yêu cầu qua `GET /products`, `GET /products/{id}/variants` và `GET /promotions` của `be`. Các truy vấn tương thích phụ kiện cũng đi qua API của `be`. Backend tính lại giá và cập nhật tồn kho khi tạo đơn. Backend lưu bản gốc chính sách trong PostgreSQL và gửi webhook chứa `slug` khi xuất bản, rollback hoặc gỡ chính sách. Agent gọi lại API của backend để lấy bản hiện tại. Agent chia đoạn, tạo embedding và lưu vào Qdrant để tra cứu chính sách.
 
@@ -138,6 +139,8 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `AGENT_API_KEY` | (trống: không kiểm tra) | Key của be khi gọi agent (be tự gửi). Đặt key nào (cái này hoặc `AGENT_CLIENT_KEYS`) thì mọi endpoint của agent trừ `/health` đòi header `Authorization: Bearer <key>` |
 | `AGENT_CLIENT_KEYS` | (trống) | Key riêng cho từng hệ thống tích hợp: `tên:key[:giới hạn/phút]`, cách nhau bởi dấu phẩy, xem [API của agent](#api-của-agent) |
 | `AGENT_CLIENT_RATE_PER_MIN` | `60` | Giới hạn request/phút mặc định cho mỗi key trong `AGENT_CLIENT_KEYS` |
+| `BE_ADAPTER_KEYS` | (trống) | be: key của adapter kênh nhắn tin, `tên:key` cách nhau bởi dấu phẩy (vd `zalo:<key>`). Request kèm key + `X-End-User` được giới hạn tốc độ theo từng người dùng thay vì theo IP |
+| `ZALO_BE_ADAPTER_KEY`, `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_SECRET`, `ZALO_REFRESH_TOKEN` | (trống) | Adapter Zalo, xem [Kênh Zalo OA](#kênh-zalo-oa) |
 | `AGENT_DATABASE_URL` | (trống: giữ trong RAM) | Postgres riêng của agent: lịch sử hội thoại, giỏ hàng, lượt đang chạy. docker compose đặt sẵn `agent-db`; mật khẩu đổi bằng `AGENT_DB_PASSWORD` |
 | `ADMIN_API_KEY` | (trống: tắt `/admin`) | Key của be cho `/admin/policies` (header `Authorization: Bearer <key>`) |
 | `CHAT_RATE_PER_MIN` | `20` | be: mỗi IP tối đa ngần này lượt `/chat`, `/chat/stream`, `/session`, `/order*` mỗi phút, quá thì `429` (`0`: tắt) |
@@ -221,6 +224,39 @@ Tool của agent đọc dữ liệu cửa hàng qua các endpoint dưới đây 
 - Lỗi: `401` sai key; `503` database không sẵn sàng. Agent coi mọi lỗi (kể cả hết 5 giây chờ) là "chưa tra được dữ liệu" và báo khách thử lại, không đoán giá.
 - Quy tắc thay đổi giống API của agent: thêm trường, thêm endpoint thì được; đổi tên, bỏ, đổi ý nghĩa trường đang có trong bảng thì làm 2 bước (agent đọc được cả 2 dạng, rồi mới đổi be).
 - Test `test_agent_catalog_requests_reach_backend` (tests/test_tools.py) chạy tool của agent qua API thật của be để bắt lỗi lệch hợp đồng.
+
+### Kênh Zalo OA
+
+`services/zalo` là service riêng (cổng 8003, `uv.lock` riêng, không dùng `phone_common`). Nó chỉ nói chuyện với be qua HTTP, như một trang chat khác:
+
+```
+Khách nhắn Zalo OA ──► Zalo ──POST /webhook (có chữ ký)──► zalo adapter ──► be /session, /chat, /order… ──► agent
+                  ◄── Zalo OA API (tin tư vấn) ◄──────────────────┘
+```
+
+- **Cuộc trò chuyện**: mỗi người dùng Zalo có 1 `thread_id` do be cấp (`POST /session`, uuid không đoán được), adapter lưu trong SQLite của mình. Im quá 15 phút thì mở phiên mới; khách đã từng đặt hàng được chào theo tên (adapter giữ `customer_token`).
+- **Đặt hàng**: Zalo không có form. Agent báo `order_form` thì adapter gửi tổng tiền (`/order/quote`) và hỏi 3 dòng họ tên / số điện thoại / địa chỉ (thêm dòng `Mã: …` nếu có mã), rồi gọi `POST /order`. Tin chứa thông tin nhận hàng **không** gửi sang agent/LLM. Nhắn "hủy" để hủy (`/order/cancel`). Sai số điện thoại, mã hết hạn, hết hàng: adapter báo lý do và chờ khách sửa.
+- **Chuyển nhân viên**: agent trả `handoff` thì adapter ngừng tự trả lời 1 giờ (`HANDOFF_PAUSE_S`), nhân viên trả lời trực tiếp trong trang quản lý Zalo OA.
+- **Giới hạn tốc độ**: adapter gửi key adapter + `X-End-User: <id người dùng Zalo>`, be giới hạn `CHAT_RATE_PER_MIN` cho từng người dùng (không tính chung cả kênh theo IP của adapter).
+- Tin không phải chữ (ảnh, sticker, file) được trả lời là chỉ đọc được chữ. Zalo gửi lại cùng sự kiện thì bỏ qua (theo `msg_id`). Webhook trả 200 ngay, xử lý sau; tin của cùng 1 người xử lý lần lượt.
+
+Cài đặt:
+
+1. Tạo Official Account và ứng dụng trên [developers.zalo.me](https://developers.zalo.me), liên kết OA với ứng dụng, xin quyền gửi tin tư vấn.
+2. Lấy refresh token ban đầu qua OAuth của OA (làm 1 lần). Từ đó adapter tự đổi access token và lưu refresh token mới vào `/data` (refresh token cũ hết dùng được sau mỗi lần đổi, nên đừng xóa volume `zalo_data`).
+3. Sinh 1 key adapter (`python -c "import secrets; print(secrets.token_urlsafe(32))"`), điền `.env`:
+   ```
+   BE_ADAPTER_KEYS=zalo:<key>
+   ZALO_BE_ADAPTER_KEY=<key>
+   ZALO_APP_ID=…
+   ZALO_APP_SECRET=…        # secret key của ứng dụng
+   ZALO_OA_SECRET=…         # "OA Secret Key" ở mục Webhook
+   ZALO_REFRESH_TOKEN=…
+   ```
+4. `docker compose up -d be && docker compose --profile zalo up -d zalo`.
+5. Mở `/webhook` ra Internet bằng HTTPS (reverse proxy; khi thử dùng `cloudflared tunnel --url http://localhost:8003`), khai URL `https://…/webhook` trong mục Webhook của ứng dụng, bật sự kiện `user_send_text` (và các sự kiện tin nhắn khác nếu muốn trả lời "chỉ đọc được chữ").
+
+Giới hạn: adapter chạy 1 process (SQLite, khóa theo từng khách nằm trong process). Đường dẫn và tên trường của Zalo OA API (chữ ký webhook, `/v3.0/oa/message/cs`, đổi token `/v4/oa/access_token`) viết theo tài liệu Zalo OA v3; kiểm tra lại với ứng dụng thật khi cấu hình. Tin tư vấn chỉ gửi được trong khoảng thời gian Zalo cho phép sau khi khách nhắn.
 
 ### `POST /session`
 
@@ -772,7 +808,9 @@ sales_agent/
 │   │       ├── mailer.py       # Email xác nhận đơn hàng
 │   │       ├── policies.py     # Nháp, kiểm tra, xuất bản, lịch sử, hash gửi agent, dữ liệu mẫu
 │   │       └── templates/      # Template email (order_confirmation.html)
-│   └── fe/                     # nginx (cổng 8000): static/index.html, order_form.html, nginx.conf.template
+│   ├── fe/                     # nginx (cổng 8000): static/index.html, order_form.html, nginx.conf.template
+│   └── zalo/                   # Adapter Zalo OA (cổng 8003), Dockerfile, pyproject.toml, uv.lock riêng
+│       └── src/phone_zalo/     # app.py (webhook, chat, đặt hàng), zalo.py (Zalo OA API), store.py (SQLite)
 ├── tests/                      # Unit test
 ├── evals/                      # Bộ câu hỏi, script đánh giá, user simulator (simulate.py, simulate_batch.py, personas.jsonl, scenarios.jsonl)
 ├── certs/                      # CA nội bộ cho mạng có SSL inspection (không commit)
