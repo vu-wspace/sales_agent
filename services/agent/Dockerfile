@@ -36,7 +36,6 @@ ENV HF_HUB_OFFLINE=1
 
 COPY packages/common ./packages/common
 COPY services/agent ./services/agent
-COPY data_schema/policies ./data_schema/policies
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package phone-agent

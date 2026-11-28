@@ -214,9 +214,9 @@ VARIANTS = {
 
 @pytest.fixture
 def fake_catalog(monkeypatch):
-    def query(sql, params=()):
-        return VARIANTS[params[0]] if 'FROM variants' in sql else CATALOG
-    monkeypatch.setattr(tools, '_query', query)
+    def query(endpoint, **params):
+        return VARIANTS[endpoint.split('/')[2]] if endpoint.endswith('/variants') else CATALOG
+    monkeypatch.setattr(tools, '_catalog', query)
 
 
 def call(tool, state, **args):

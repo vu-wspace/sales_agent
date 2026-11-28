@@ -2734,11 +2734,11 @@ name = "phone-agent"
 version = "0.1.0"
 source = { editable = "services/agent" }
 dependencies = [
+    { name = "httpx" },
     { name = "fastapi" },
     { name = "langchain", extra = ["mcp"] },
     { name = "langchain-qdrant" },
     { name = "phone-common" },
-    { name = "psycopg", extra = ["binary"] },
     { name = "pyvi" },
     { name = "qdrant-client" },
     { name = "sentence-transformers" },
@@ -2750,11 +2750,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
     { name = "fastapi", specifier = ">=0.120.0" },
     { name = "langchain", extras = ["mcp"], specifier = ">=1.4.7" },
     { name = "langchain-qdrant", specifier = ">=1.1.0" },
     { name = "phone-common", editable = "packages/common" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pyvi", specifier = ">=0.1.1" },
     { name = "qdrant-client", specifier = ">=1.20.0" },
     { name = "sentence-transformers", specifier = ">=6.2.0" },

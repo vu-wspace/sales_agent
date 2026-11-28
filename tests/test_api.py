@@ -260,14 +260,10 @@ def test_qdrant_client_is_reused():
     assert get_client() is get_client()
 
 
-@pytest.mark.parametrize('auto_ingest, stored, expected', [(True, 0, 34), (True, 60, 60), (False, 0, 0)])
-def test_prepare_vector_db_seeds_only_when_empty_and_enabled(monkeypatch, auto_ingest, stored, expected):
-    # Chính sách do be đẩy sang; agent chỉ nạp dữ liệu mẫu khi bật AUTO_INGEST và Qdrant rỗng (không đè bản be đã sửa)
-    monkeypatch.setattr(svc, 'AUTO_INGEST', auto_ingest)
+def test_prepare_vector_db_counts_indexed_documents(monkeypatch):
     monkeypatch.setattr(svc, 'get_vector_store', lambda: 'db')
-    monkeypatch.setattr(svc, 'count_documents', lambda: stored)
-    monkeypatch.setattr(svc, 'ingest_seed', lambda: 34)
-    assert svc.prepare_vector_db() == expected
+    monkeypatch.setattr(svc, 'count_documents', lambda: 60)
+    assert svc.prepare_vector_db() == 60
 
 
 def test_prepare_vector_db_retries_then_raises(monkeypatch):

@@ -1,16 +1,16 @@
 # Chính sách cửa hàng: be giữ bản gốc trong Postgres, agent chỉ chunk + embed + lưu Qdrant.
 # Quy trình (api.py: /admin/policies): sửa bản nháp -> kiểm tra bằng câu hỏi mẫu (agent thử bản nháp, không ghi
-# Qdrant) -> xuất bản (thêm 1 version vào lịch sử) -> đẩy sang agent. Khách chỉ thấy bản đã xuất bản.
-# Agent tắt lúc xuất bản thì sync() đối chiếu hash và đẩy bù (be chạy sync khi khởi động và mỗi POLICY_SYNC_S giây).
+# Qdrant) -> xuất bản (thêm 1 version vào lịch sử) -> báo agent tải bản mới.
 import logging
 
 import httpx
 import psycopg
+from phone_common.config import ROOT
+from phone_common.policies import load_seed, policy_hash
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from phone_common.config import DATABASE_URL, ROOT
-from phone_common.policies import load_seed, policy_hash
+from phone_api.config import DATABASE_URL
 
 log = logging.getLogger('uvicorn.error')  # cùng logger với api.py để log đồng bộ hiện trong docker logs
 SCHEMA = ROOT / 'data_schema' / 'policies.sql'
@@ -32,7 +32,7 @@ def ensure_table() -> int:
         conn.execute(SCHEMA.read_text(encoding='utf-8'))
         if not conn.execute('SELECT 1 FROM policy_checks LIMIT 1').fetchone():
             _insert_checks(conn, [(d['slug'], c) for d in seed for c in d['checks']])
-        if conn.execute('SELECT 1 FROM policies LIMIT 1').fetchone():
+        if conn.execute('SELECT 1 FROM policy_versions LIMIT 1').fetchone():
             return 0
         for d in seed:
             _publish(conn, d['slug'], d['content_md'], d['prompt'], None, 'dữ liệu mẫu')
@@ -186,29 +186,3 @@ def rollback(slug: str, version: int, by: str | None = None, note: str | None = 
         doc = _publish(conn, slug, old['content_md'], old['prompt'], by, note or f'quay lại version {version}')
     log.info('Quay lại chính sách %s version %d -> version mới %d', slug, version, doc['version'])
     return doc
-
-
-# ---------------------------------------------------------------- đồng bộ sang agent
-
-def push(http: httpx.Client, doc: dict) -> None:
-    """Đẩy 1 tài liệu sang agent (chunk + embed). Lỗi thì raise httpx.HTTPError."""
-    http.put(f"/policies/{doc['slug']}", json={'content_md': doc['content_md'], 'prompt': doc['prompt']},
-             timeout=300).raise_for_status()
-
-
-def sync(http: httpx.Client) -> dict:
-    """Đưa Qdrant của agent về đúng bản đã xuất bản: đẩy tài liệu agent chưa có hoặc khác hash, xóa tài liệu đã bỏ.
-    Agent không kết nối được thì raise httpx.HTTPError (lần sync sau thử lại)."""
-    docs = {d['slug']: d for d in list_all()}
-    r = http.get('/policies')
-    r.raise_for_status()
-    remote = r.json()
-    pushed = [s for s, d in docs.items() if remote.get(s) != policy_hash(d['content_md'], d['prompt'])]
-    for slug in pushed:
-        push(http, docs[slug])
-    removed = [s for s in remote if s not in docs]
-    for slug in removed:
-        http.delete(f'/policies/{slug}').raise_for_status()
-    if pushed or removed:
-        log.info('Đồng bộ chính sách sang agent: đẩy %s, xóa %s', pushed, removed)
-    return {'pushed': pushed, 'removed': removed}

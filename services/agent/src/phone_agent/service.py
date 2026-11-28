@@ -9,7 +9,7 @@ import secrets
 import threading
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import groq
 from fastapi import Depends, FastAPI, HTTPException, Path, Request
@@ -19,17 +19,17 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
 from openrouter import errors as openrouter_errors
+from phone_common import pii
+from phone_common.config import AGENT_API_KEY, AGENT_IMPL
+from phone_common.llm import is_rate_limited
+from phone_common.policies import MAX_CONTENT, SLUG
+from phone_common.textnorm import normalize_user_text
 from pydantic import BaseModel, Field, field_validator
 
+from phone_agent import policy_sync
 from phone_agent.agent import build_agent
 from phone_agent.graph import build_graph
-from phone_agent.vector_db import (check_policy, count_documents, delete_policy, get_vector_store, ingest_seed,
-                                   policy_hashes, upsert_policy)
-from phone_common import pii
-from phone_common.config import AGENT_API_KEY, AGENT_IMPL, AUTO_INGEST
-from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
-from phone_common.llm import is_rate_limited
-from phone_common.textnorm import normalize_user_text
+from phone_agent.vector_db import check_policy, count_documents, get_vector_store
 
 log = logging.getLogger('uvicorn.error')
 
@@ -116,19 +116,22 @@ def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
     for attempt in range(1, retries + 1):
         try:
             get_vector_store()  # tạo collection nếu chưa có
-            n = count_documents()
-            # Chính sách do be đẩy sang (PUT /policies/{slug}). AUTO_INGEST: chạy agent không có be thì nạp dữ liệu mẫu
-            # khi Qdrant rỗng; không nạp đè khi đã có dữ liệu, để không xóa bản be đã sửa
-            if AUTO_INGEST and n == 0:
-                log.info('Qdrant chưa có chính sách, đang nạp dữ liệu mẫu (data_schema/policies)...')
-                n = ingest_seed()
-            return n
+            return count_documents()
         except Exception as e:
             if attempt == retries:
                 raise
             log.warning('Chưa kết nối được Qdrant (%s), thử lại sau %ss (%d/%d)',
                         type(e).__name__, delay, attempt, retries)
             time.sleep(delay)
+
+
+async def _reconcile_loop():
+    while True:
+        try:
+            await asyncio.to_thread(policy_sync.reconcile)
+        except Exception:
+            log.exception('Chưa đối soát được chính sách từ be')
+        await asyncio.sleep(policy_sync.RECONCILE_SECONDS)
 
 
 @asynccontextmanager
@@ -144,8 +147,16 @@ async def lifespan(app: FastAPI):
     app.state.agent = build(checkpointer=InMemorySaver())
     log.info('Dùng agent: %s', AGENT_IMPL)
     expiring = asyncio.create_task(_expire_loop(app))
-    yield
-    expiring.cancel()
+    reconciling = asyncio.create_task(_reconcile_loop())
+    try:
+        yield
+    finally:
+        reconciling.cancel()
+        expiring.cancel()
+        with suppress(asyncio.CancelledError):
+            await reconciling
+        with suppress(asyncio.CancelledError):
+            await expiring
 
 
 def check_api_key(request: Request) -> None:
@@ -201,9 +212,8 @@ class NewThread(BaseModel):
     end_thread_id: str | None = Field(default=None, max_length=100)  # cuộc trò chuyện cũ cần xóa
 
 
-class PolicyIn(BaseModel):
-    content_md: str = Field(min_length=1, max_length=MAX_CONTENT)  # markdown: # tiêu đề, ## mục, ### mục con
-    prompt: str | None = Field(default=None, max_length=MAX_PROMPT)  # hướng dẫn trả lời riêng, kèm kết quả search_policy
+class PolicyUpdated(BaseModel):
+    slug: str = Field(pattern=SLUG, max_length=255)
 
 
 class CheckQuestion(BaseModel):
@@ -455,21 +465,22 @@ def order_cancelled(thread_id: str, req: OrderCancelled, request: Request):
         as_node=AS_NODE)
 
 
-@app.get('/policies')
-def list_policies() -> dict[str, str | None]:
-    """{slug: hash} các tài liệu chính sách đang có trong Qdrant; be so với bảng policies để biết cần đẩy lại gì."""
-    return policy_hashes()
-
-
-@app.put('/policies/{slug}')
-def put_policy(req: PolicyIn, slug: str = Path(pattern=SLUG)):
-    """Thêm/sửa 1 tài liệu: chunk + embed, thay chunk cũ. Chạy đồng bộ (vài giây mỗi tài liệu trên CPU)."""
+@app.post('/webhooks/policy-updated', status_code=204)
+async def policy_updated(event: PolicyUpdated):
     try:
-        n = upsert_policy(slug, req.content_md, req.prompt)
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-    log.info('Đã cập nhật chính sách %s: %d đoạn', slug, n)
-    return {'slug': slug, 'chunks': n}
+        await asyncio.to_thread(policy_sync.refresh, event.slug)
+    except Exception as exc:
+        log.exception('Chưa cập nhật được chính sách %s', event.slug)
+        raise HTTPException(503, 'Policy refresh failed') from exc
+
+
+@app.post('/webhooks/policy-reconcile')
+async def reconcile_policies():
+    try:
+        return await asyncio.to_thread(policy_sync.reconcile)
+    except Exception as exc:
+        log.exception('Chưa đối soát được chính sách từ be')
+        raise HTTPException(503, 'Policy reconciliation failed') from exc
 
 
 @app.post('/policies/{slug}/check')
@@ -479,9 +490,3 @@ def check_policy_draft(req: PolicyCheck, slug: str = Path(pattern=SLUG)):
         return check_policy(slug, req.content_md, [q.model_dump() for q in req.questions])
     except ValueError as e:
         raise HTTPException(422, str(e))
-
-
-@app.delete('/policies/{slug}', status_code=204)
-def remove_policy(slug: str = Path(pattern=SLUG)):
-    delete_policy(slug)
-    log.info('Đã xóa chính sách %s', slug)

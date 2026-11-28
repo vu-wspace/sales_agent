@@ -78,7 +78,7 @@ PHONES = [
 
 @pytest.fixture
 def phones_db(monkeypatch):
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): PHONES)
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: PHONES)
 
 
 def cheaper(state=None, **args):

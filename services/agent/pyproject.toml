@@ -12,7 +12,7 @@ dependencies = [
     "torch>=2.14.1",
     "pyvi>=0.1.1",
     "tavily-python>=0.8.5",
-    "psycopg[binary]>=3.2",
+    "httpx>=0.28",
     "fastapi>=0.120.0",
     "uvicorn[standard]>=0.38.0",
 ]

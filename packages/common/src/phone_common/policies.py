@@ -1,4 +1,4 @@
-# Chính sách cửa hàng: bản gốc nằm ở be (bảng policies trong Postgres), be đẩy sang agent để chunk + embed vào Qdrant.
+# Chính sách cửa hàng: bản gốc nằm ở be (bảng policies trong Postgres), agent tải bản đã xuất bản để chunk + embed vào Qdrant.
 # Module này dùng chung cho 2 bên: cách tính hash để be biết agent đã có đúng bản chưa, và dữ liệu mẫu ban đầu.
 import hashlib
 import json
@@ -13,14 +13,13 @@ MAX_PROMPT = 4_000
 
 
 def policy_hash(content_md: str, prompt: str | None) -> str:
-    """Hash của 1 tài liệu (nội dung + prompt). be so hash này với hash agent trả về để biết cần đẩy lại không."""
+    """Hash của 1 tài liệu (nội dung + prompt). Agent dùng hash để biết có cần tạo lại embedding."""
     return hashlib.sha256(f'{content_md}\0{prompt or ""}'.encode('utf-8')).hexdigest()
 
 
 def load_seed(policy_dir=POLICY_DIR) -> list[dict]:
     """Dữ liệu mẫu: data_schema/policies/*.md + prompt riêng (prompts.json) + câu hỏi kiểm tra (checks.json, lấy từ
-    các câu policy của evals/dataset.jsonl). be nạp vào database khi bảng rỗng; agent nạp thẳng vào Qdrant khi chạy
-    không có be (AUTO_INGEST, python -m phone_agent.vector_db, eval)."""
+    các câu policy của evals/dataset.jsonl). BE nạp vào database khi bảng rỗng."""
     prompts = json.loads((policy_dir / 'prompts.json').read_text(encoding='utf-8'))
     checks = json.loads((policy_dir / 'checks.json').read_text(encoding='utf-8'))
     files = sorted(policy_dir.glob('*.md'))

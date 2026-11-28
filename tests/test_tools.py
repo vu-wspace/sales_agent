@@ -1,7 +1,6 @@
 import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
-
 from phone_agent import tools
 
 PHONES = [
@@ -73,18 +72,18 @@ def test_price_and_stock_format():
 def fake_db(monkeypatch):
     calls = []
 
-    def query(sql, params=()):
-        calls.append((sql, params))
-        if 'array_agg' in sql:  # search_products
+    def query(endpoint, **params):
+        calls.append((endpoint, params))
+        if params.get('view') == 'summary':  # search_products
             return [
                 {'product_id': 'samsung-galaxy-a57-5g', 'name': 'Galaxy A57 5G', 'brand': 'Samsung',
                  'min_price': 12490000, 'max_price': 16490280, 'stock': 40, 'storages': ['256GB - RAM 8GB', '128GB']},
                 {'product_id': 'samsung-galaxy-s26', 'name': 'Galaxy S26', 'brand': 'Samsung',
                  'min_price': 29990001, 'max_price': 35990000, 'stock': 0, 'storages': ['512GB', '256GB']},
             ]
-        if 'FROM compatibility' in sql:
+        if endpoint == '/internal/catalog/accessories':
             return [{'name': 'Ốp Lưng Trong Suốt Galaxy S26', 'kind': 'case', 'price': 490320, 'stock': 12}]
-        if 'FROM variants' in sql:
+        if endpoint.endswith('/variants'):
             return [
                 {'variant_id': 'B', 'color': 'Đen', 'storage': '512GB', 'price': 35990000, 'stock': 0},
                 {'variant_id': 'A', 'color': 'Đen', 'storage': '256GB', 'price': 29990001, 'stock': 9},
@@ -92,7 +91,7 @@ def fake_db(monkeypatch):
         return [{**p, 'description': 'Mô tả', 'attributes': {
             'ram_by_storage': {'256GB': '12GB'}, 'specs': {'Chip': 'Snapdragon'}, 'estimated_price_skus': ['B']}}
             for p in PHONES]
-    monkeypatch.setattr(tools, '_query', query)
+    monkeypatch.setattr(tools, '_catalog', query)
     return calls
 
 
@@ -131,9 +130,9 @@ def test_product_details(fake_db):
 def test_product_details_says_when_specs_missing(monkeypatch, fake_db):
     # Dòng Galaxy S/Z không có thông số: tool phải nói rõ, không thì model tự bịa chip, pin...
     assert tools.NO_SPECS not in tools.get_product_details.invoke({'product': 'galaxy s26'})
-    fake = tools._query
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): [
-        {**p, 'attributes': {}} if 'attributes' in p else p for p in fake(sql, params)])
+    fake = tools._catalog
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: [
+        {**p, 'attributes': {}} if 'attributes' in p else p for p in fake(endpoint, **params)])
     out = tools.get_product_details.invoke({'product': 'galaxy s26'})
     assert tools.NO_SPECS in out and 'Chip' not in out
 
@@ -146,9 +145,9 @@ def test_product_details_filters_storage(fake_db):
 def test_product_details_lists_bigger_storage_for_upsell(monkeypatch, fake_db):
     # 512GB hết hàng thì không gợi ý; còn hàng thì ghi giá và số tiền chênh so với bản khách chọn
     assert 'Dung lượng lớn hơn' not in tools.get_product_details.invoke({'product': 'galaxy s26', 'storage': '256gb'})
-    fake = tools._query
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): [
-        {**v, 'stock': 4} if v.get('variant_id') == 'B' else v for v in fake(sql, params)])
+    fake = tools._catalog
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: [
+        {**v, 'stock': 4} if v.get('variant_id') == 'B' else v for v in fake(endpoint, **params)])
     out = tools.get_product_details.invoke({'product': 'galaxy s26', 'storage': '256gb'})
     assert out.endswith('Dung lượng lớn hơn còn hàng: 512GB từ 35.990.000đ (thêm 5.999.999đ)')
     assert 'Dung lượng lớn hơn' not in tools.get_product_details.invoke({'product': 'galaxy s26'})  # chưa chọn bản
@@ -162,7 +161,7 @@ def test_product_details_ambiguous_asks_back(fake_db):
 def test_find_accessories(fake_db):
     out = tools.find_accessories.invoke({'phone': 's26', 'accessory_type': 'ốp lưng'})
     assert out == 'Phụ kiện tương thích với Galaxy S26:\n- Ốp Lưng Trong Suốt Galaxy S26: 490.320đ | còn hàng'
-    assert fake_db[-1][1] == ('samsung-galaxy-s26', ['case'], ['case'])
+    assert fake_db[-1] == ('/internal/catalog/accessories', {'phone_id': 'samsung-galaxy-s26', 'kinds': ['case']})
 
 
 ACCESSORY_ROWS = [
@@ -181,12 +180,12 @@ IPHONE_BOX = {'specs': {'Trong Hộp Sản Phẩm': 'iPhone với iOS 27 Cáp S�
 def fake_accessories(monkeypatch):
     phones = [{**p, 'attributes': IPHONE_BOX if p['brand'] == 'Apple' else {}} for p in PHONES]
 
-    def query(sql, params=()):
-        if 'compatibility' not in sql:
+    def query(endpoint, **params):
+        if endpoint != '/internal/catalog/accessories':
             return phones
-        kinds = params[1]
+        kinds = params['kinds']
         return [dict(r) for r in ACCESSORY_ROWS if kinds is None or r['kind'] in kinds]
-    monkeypatch.setattr(tools, '_query', query)
+    monkeypatch.setattr(tools, '_catalog', query)
 
 
 def test_in_box_reads_apple_specs_and_samsung_default():
@@ -224,7 +223,7 @@ def test_find_charger_and_cable_genuine_first_with_box_contents(fake_accessories
 
 def test_find_accessories_pages_of_five(monkeypatch):
     rows = [{'name': f'Ốp {i}', 'kind': 'case', 'price': 100000 * i, 'stock': 10} for i in range(1, 9)]
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else PHONES)
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: rows if endpoint == '/internal/catalog/accessories' else PHONES)
     page1 = tools.find_accessories.invoke({'phone': 's26'})
     assert page1.count('\n- ') == 5 and page1.endswith('(còn 3 phụ kiện khác, xem tiếp bằng page=2)')
     page2 = tools.find_accessories.invoke({'phone': 's26', 'page': 2})
@@ -244,7 +243,7 @@ def test_find_accessories_unknown_type(fake_db):
 def test_db_tools_handle_backend_error(monkeypatch, tool, args):
     def boom(*a, **k):
         raise ConnectionError('postgres down')
-    monkeypatch.setattr(tools, '_query', boom)
+    monkeypatch.setattr(tools, '_catalog', boom)
     assert tool.invoke(args).startswith('Lỗi hệ thống khi tra cứu kho hàng (ConnectionError)')
 
 
@@ -324,7 +323,7 @@ def test_find_accessories_genuine_only(monkeypatch):
             {'name': 'Bộ Sạc Gắn Tường Belkin (42W)', 'brand': 'Apple', 'kind': 'charger', 'price': 951000, 'stock': 10},
             {'name': 'Bộ Tiếp Hợp Nguồn 35W', 'brand': 'Apple', 'kind': 'charger', 'price': 1471000, 'stock': 10}]
     phone = {'product_id': 'samsung-galaxy-s26', 'name': 'Galaxy S26', 'brand': 'Samsung', 'attributes': {}}
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: rows if endpoint == '/internal/catalog/accessories' else [phone])
     out = tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc', 'genuine_only': True})
     assert '60W' in out and 'Belkin' not in out and '35W' not in out and 'Hãng khác' not in out
     assert 'Belkin' in tools.find_accessories.invoke({'phone': 'galaxy s26', 'accessory_type': 'củ sạc'})
@@ -337,7 +336,7 @@ def test_find_accessories_genuine_only_keeps_kind_without_genuine(monkeypatch):
             {'name': 'Miếng Dán Màn Hình Belkin UltraGlass 2 cho iPhone 17', 'brand': 'Apple', 'kind': 'screen-protector',
              'price': 1177000, 'stock': 10}]
     phone = {'product_id': 'apple-iphone-17', 'name': 'iPhone 17', 'brand': 'Apple', 'attributes': {}}
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: rows if endpoint == '/internal/catalog/accessories' else [phone])
     out = tools.find_accessories.invoke({'phone': 'iphone 17', 'accessory_type': 'ốp lưng, cường lực', 'genuine_only': True})
     assert 'Ốp Lưng Trong Suốt MagSafe' in out and 'Beats' not in out   # có ốp chính hãng: bỏ ốp Beats
     assert 'Belkin UltraGlass 2' in out                                 # cường lực chỉ có Belkin: giữ
@@ -374,7 +373,7 @@ def test_find_chargers_puts_fast_enough_first(monkeypatch):
              'attributes': {'specs': IPHONE17_SPECS}}
     rows = [{'name': 'Bộ Tiếp Hợp Nguồn Cổng Kép 35W', 'brand': 'Apple', 'kind': 'charger', 'price': 500_000, 'stock': 5},
             {'name': 'Bộ Tiếp Hợp Nguồn Động 40W', 'brand': 'Apple', 'kind': 'charger', 'price': 999_000, 'stock': 5}]
-    monkeypatch.setattr(tools, '_query', lambda sql, params=(): rows if 'compatibility' in sql else [phone])
+    monkeypatch.setattr(tools, '_catalog', lambda endpoint, **params: rows if endpoint == '/internal/catalog/accessories' else [phone])
     out = tools.find_accessories.invoke({'phone': 'iphone 17', 'accessory_type': 'củ sạc'}).splitlines()
     assert out[0].startswith('Công suất sạc của iPhone 17 (theo thông số)')
     assert '40W' in out[2] and 'đủ công suất sạc nhanh' in out[2]       # đủ công suất xếp trước, dù đắt hơn
@@ -399,16 +398,16 @@ FITS = {'iphone-17': {'belkin-17'}, 'iphone-18-pro-max': {'belkin-max'}}
 
 @pytest.fixture
 def belkin_db(monkeypatch):
-    def query(sql, params=()):
-        if 'FROM compatibility' in sql:
-            phones, accs = params
+    def query(endpoint, **params):
+        if endpoint == '/internal/catalog/compatible':
+            phones, accs = params['phone_ids'], params['accessory_ids']
             return [{'accessory_id': a} for p in phones for a in FITS.get(p, ()) if a in accs]
-        if 'FROM variants' in sql:
-            return [{'variant_id': f'V-{params[0]}', 'color': None, 'storage': None, 'price': 1177000, 'stock': 5}]
-        if "category = 'phone'" in sql:
+        if endpoint.endswith('/variants'):
+            return [{'variant_id': f"V-{endpoint.split('/')[2]}", 'color': None, 'storage': None, 'price': 1177000, 'stock': 5}]
+        if params.get('category') == 'phone':
             return [p for p in CATALOG if p['category'] == 'phone']
         return CATALOG
-    monkeypatch.setattr(tools, '_query', query)
+    monkeypatch.setattr(tools, '_catalog', query)
 
 
 def _add(args, state):
@@ -435,3 +434,56 @@ def test_add_to_cart_picks_accessory_for_customer_phone(belkin_db, args, state, 
 
 def test_add_to_cart_still_asks_when_phone_unknown(belkin_db):
     assert _add({'product': 'Miếng Dán Màn Hình Belkin UltraGlass 2'}, {'cart': [], 'messages': []}).startswith('Có nhiều')
+
+
+def test_agent_catalog_requests_reach_backend(monkeypatch):
+    from urllib.parse import urlsplit
+
+    from fastapi.testclient import TestClient
+    from phone_agent import backend
+    from phone_api import catalog
+    from phone_api.api import app
+
+    monkeypatch.setattr(catalog, 'CATALOG_API_KEY', 'catalog-test-key')
+    monkeypatch.setattr(backend, 'CATALOG_API_KEY', 'catalog-test-key')
+    monkeypatch.setattr(backend, 'BE_URL', 'http://backend:8002/')
+    calls = []
+
+    def read_rows(sql, params):
+        calls.append(params)
+        if 'FROM compatibility' in sql:
+            return [{'accessory_id': 'case-1'}]
+        return [{'product_id': 'phone-1', 'name': 'Test Phone', 'brand': 'Test',
+                 'min_price': 1_000_000, 'max_price': 1_000_000, 'stock': 5, 'storages': ['128GB']}]
+
+    client = TestClient(app)
+    monkeypatch.setattr(catalog, '_read_rows', read_rows)
+
+    def get(url, *, params, headers, timeout, trust_env):
+        assert urlsplit(url).netloc == 'backend:8002'
+        assert timeout == 5 and not trust_env
+        return client.get(urlsplit(url).path, params=params, headers=headers)
+
+    monkeypatch.setattr(backend.httpx, 'get', get)
+    assert client.get('/products?view=summary').status_code == 401
+    assert 'Test Phone' in tools.search_products.invoke({'brand': 'Test'})
+    assert tools._catalog('/internal/catalog/compatible', phone_ids=['phone-1', 'phone-2'], accessory_ids=['case-1']) == [
+        {'accessory_id': 'case-1'},
+    ]
+    assert calls == [('phone', 'Test', 'Test'), (['phone-1', 'phone-2'], ['case-1'])]
+
+
+def test_backend_catalog_database_failure(monkeypatch):
+    import psycopg
+    from fastapi.testclient import TestClient
+    from phone_api import catalog
+    from phone_api.api import app
+
+    def unavailable():
+        raise psycopg.OperationalError('connection failed')
+
+    monkeypatch.setattr(catalog, 'CATALOG_API_KEY', '')
+    monkeypatch.setattr(catalog.orders, '_connect', unavailable)
+    response = TestClient(app).get('/products?view=summary')
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Catalog database unavailable'

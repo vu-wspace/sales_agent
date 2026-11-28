@@ -11,21 +11,26 @@ import time
 import uuid
 from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Literal
 
 import httpx
 import psycopg
-from datetime import datetime
-
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
+from phone_common import pii, promotions
+from phone_common.config import (
+    ADMIN_API_KEY,
+    AGENT_API_KEY,
+    AGENT_URL,
+    CHAT_RATE_PER_MIN,
+    PII_KEY,
+    SMTP_HOST,
+)
+from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG, policy_hash
 from pydantic import BaseModel, Field, field_validator
 
-from phone_api import mailer, orders, policies
-from phone_common import pii, promotions
-from phone_common.config import (ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, CHAT_RATE_PER_MIN, PII_KEY, POLICY_SYNC_S,
-                                 SMTP_HOST)
-from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG
+from phone_api import catalog, mailer, orders, policies
 
 log = logging.getLogger('uvicorn.error')
 
@@ -172,19 +177,6 @@ class RollbackIn(PublishIn):
     version: int = Field(ge=1)
 
 
-async def _policy_sync_loop(app: FastAPI):
-    # Đẩy bù chính sách sửa lúc agent tắt, và lấp Qdrant mới (lần đầu chạy, volume bị xóa)
-    while True:
-        try:
-            await asyncio.to_thread(policies.sync, app.state.agent_http)
-            delay = POLICY_SYNC_S
-        except (httpx.HTTPError, psycopg.Error) as e:
-            # Lúc mới deploy agent khởi động chậm hơn be (nạp model embedding): thử lại sớm thay vì chờ cả vòng
-            delay = min(30, POLICY_SYNC_S)
-            log.warning('Chưa đồng bộ được chính sách sang agent (%s), thử lại sau %ss', type(e).__name__, delay)
-        await asyncio.sleep(delay)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pii.install_log_filter()  # che số điện thoại, email trong log (handler của uvicorn đã có lúc này)
@@ -210,13 +202,12 @@ async def lifespan(app: FastAPI):
     # read 180s: 1 lượt chat có thể chạy vài tool + model dự phòng; connect 5s: agent tắt thì báo lỗi ngay
     app.state.agent_http = httpx.Client(base_url=AGENT_URL, headers=headers, timeout=httpx.Timeout(180, connect=5))
     log.info('Agent: %s', AGENT_URL)
-    syncing = asyncio.create_task(_policy_sync_loop(app))
     yield
-    syncing.cancel()
     app.state.agent_http.close()
 
 
 app = FastAPI(title='Phone Shop API', version='0.1.0', lifespan=lifespan)
+app.include_router(catalog.router)
 
 
 def _detail(r: httpx.Response):
@@ -436,12 +427,24 @@ def _found(doc, what: str):
     return doc
 
 
-def _push(request: Request, doc: dict) -> dict:
+@app.get('/policies', dependencies=[Depends(catalog.require_catalog_key)])
+async def policy_manifest() -> dict[str, str]:
+    docs = await asyncio.to_thread(_db, policies.list_all)
+    return {doc['slug']: policy_hash(doc['content_md'], doc['prompt']) for doc in docs}
+
+
+@app.get('/policies/{slug}', response_model=PolicyOut, dependencies=[Depends(catalog.require_catalog_key)])
+async def published_policy(slug: str = SlugPath):
+    return _found(await asyncio.to_thread(_db, policies.get, slug), f'chính sách {slug}')
+
+
+def _notify(request: Request, doc: dict) -> dict:
     try:
-        policies.push(request.app.state.agent_http, doc)
+        request.app.state.agent_http.post('/webhooks/policy-updated', json={'slug': doc['slug']},
+                                          timeout=300).raise_for_status()
         return {**doc, 'synced': True}
     except httpx.HTTPError as e:
-        log.warning('Đã xuất bản %s nhưng chưa đẩy được sang agent (%s), sync sau sẽ đẩy bù', doc['slug'], type(e).__name__)
+        log.warning('Chưa thông báo được chính sách %s cho agent (%s)', doc['slug'], type(e).__name__)
         return {**doc, 'synced': False}
 
 
@@ -461,6 +464,7 @@ def admin_get_draft(slug: str = SlugPath):
     return _found(_db(policies.get_draft, slug), f'bản nháp {slug}')
 
 
+@app.put('/policies/{slug}', response_model=DraftOut, dependencies=admin)
 @app.put('/admin/policies/{slug}/draft', response_model=DraftOut, dependencies=admin)
 def admin_save_draft(req: PolicyIn, slug: str = SlugPath):
     """Lưu bản nháp (thêm tài liệu mới cũng bắt đầu từ đây). Chưa đổi gì với khách; sửa nháp thì phải kiểm lại."""
@@ -499,7 +503,7 @@ def admin_check_draft(request: Request, slug: str = SlugPath):
 def admin_publish(request: Request, req: PublishIn | None = None, slug: str = SlugPath):
     """Xuất bản bản nháp đã đạt kiểm tra: thành version mới, ghi lịch sử, đẩy sang agent."""
     req = req or PublishIn()
-    return _push(request, _db(policies.publish, slug, req.by, req.note))
+    return _notify(request, _db(policies.publish, slug, req.by, req.note))
 
 
 @app.get('/admin/policies/{slug}/versions', dependencies=admin)
@@ -516,7 +520,7 @@ def admin_get_version(version: int, slug: str = SlugPath):
 @app.post('/admin/policies/{slug}/rollback', response_model=PolicyOut, dependencies=admin)
 def admin_rollback(req: RollbackIn, request: Request, slug: str = SlugPath):
     """Quay lại 1 version cũ ngay (thành version mới, không kiểm tra lại): dùng khi bản vừa xuất bản bị lỗi."""
-    return _push(request, _db(policies.rollback, slug, req.version, req.by, req.note))
+    return _notify(request, _db(policies.rollback, slug, req.version, req.by, req.note))
 
 
 @app.delete('/admin/policies/{slug}', response_model=PolicyOut, dependencies=admin)
@@ -524,19 +528,15 @@ def admin_delete_policy(request: Request, slug: str = SlugPath):
     """Gỡ tài liệu khỏi agent (khách không còn thấy). Lịch sử và câu hỏi kiểm tra giữ lại."""
     doc = _found(_db(policies.get, slug), f'chính sách {slug}')
     _db(policies.delete, slug)
-    try:
-        request.app.state.agent_http.delete(f'/policies/{slug}').raise_for_status()
-        synced = True
-    except httpx.HTTPError as e:
-        log.warning('Đã xóa chính sách %s nhưng chưa xóa được trên agent (%s)', slug, type(e).__name__)
-        synced = False
-    return {**doc, 'synced': synced}
+    return _notify(request, doc)
 
 
 @app.post('/admin/policies/sync', dependencies=admin)
 def admin_sync_policies(request: Request):
-    """Đồng bộ ngay (không chờ vòng POLICY_SYNC_S): {pushed: [slug], removed: [slug]}."""
+    """Đồng bộ ngay (không chờ lần đối soát theo giờ): {pushed: [slug], removed: [slug]}."""
     try:
-        return _db(policies.sync, request.app.state.agent_http)
+        response = request.app.state.agent_http.post('/webhooks/policy-reconcile', timeout=300)
+        response.raise_for_status()
+        return response.json()
     except httpx.HTTPError as e:
         raise HTTPException(503, f'Chưa đồng bộ được sang agent ({type(e).__name__})')

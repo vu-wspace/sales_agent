@@ -35,7 +35,7 @@ Yêu cầu: Docker, các API key trong [Cấu hình](#cấu-hình) và 9Router c
 
 ```bash
 cp .env.example .env            # điền API key
-docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + Mailpit + agent + be (đồng bộ chính sách sang agent) + fe
+docker compose up -d --build    # Postgres (tự nạp dữ liệu) + Qdrant + Mailpit + agent (tải chính sách đã xuất bản từ be) + be + fe
 ```
 
 | Địa chỉ | Nội dung |
@@ -56,11 +56,11 @@ Lần build đầu mất khoảng 8 phút, chủ yếu để tải model embeddi
 | be | `services/be` | `phone_api` | 8002 | Phiên chat, khách quen, đơn hàng, khuyến mãi, email; chuyển chat sang agent |
 | agent | `services/agent` | `phone_agent` | 8001 | LangGraph agent, tools, RAG; giữ lịch sử hội thoại và giỏ hàng theo `thread_id` |
 
-`be` và `agent` giao tiếp qua HTTP và cùng kết nối trực tiếp tới PostgreSQL, database `phone`. Agent đọc danh mục, tồn kho và khuyến mãi. Backend đọc các dữ liệu này để tính giá, lưu thông tin khách và đơn hàng, rồi cập nhật tồn kho khi đặt hàng. Hai service vì vậy cùng phụ thuộc vào schema PostgreSQL. Backend lưu bản gốc chính sách trong PostgreSQL và đồng bộ bản đã xuất bản sang agent qua HTTP. Agent chia đoạn, tạo embedding và lưu vào Qdrant để tra cứu chính sách.
+`be` sở hữu database PostgreSQL `phone`, gồm danh mục, tồn kho, khuyến mãi, khách hàng, đơn hàng và chính sách. Tool của `agent` đọc giá, tồn kho và khuyến mãi theo yêu cầu qua `GET /products`, `GET /products/{id}/variants` và `GET /promotions` của `be`. Các truy vấn tương thích phụ kiện cũng đi qua API của `be`. Backend tính lại giá và cập nhật tồn kho khi tạo đơn. Backend lưu bản gốc chính sách trong PostgreSQL và gửi webhook chứa `slug` khi xuất bản, rollback hoặc gỡ chính sách. Agent gọi lại API của backend để lấy bản hiện tại. Agent chia đoạn, tạo embedding và lưu vào Qdrant để tra cứu chính sách.
 
 Phần dùng chung (config, LLM và chuỗi dự phòng, PII, khuyến mãi, chuẩn hóa chữ) nằm ở `packages/common` (`phone_common`). Ba package Python là một [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/), dùng chung `uv.lock`; mỗi image chỉ cài thư viện của service mình.
 
-- **Agent tích hợp được vào hệ thống khác**: web khác, Zalo, Messenger... gọi thẳng HTTP API của agent ([API của agent](#api-của-agent)), không cần be. Mở agent ra ngoài mạng nội bộ thì đặt `AGENT_API_KEY`.
+- **Agent tích hợp được vào hệ thống khác**: web khác, Zalo, Messenger... gọi thẳng HTTP API của agent ([API của agent](#api-của-agent)), mà không cần đi qua giao diện web. Các tool dùng dữ liệu cửa hàng vẫn cần kết nối tới be qua `BE_URL`. Mở agent ra ngoài mạng nội bộ thì đặt `AGENT_API_KEY`.
 - **be chạy được khi agent tắt**: `/health` báo `"agent": "down"`, `/session` vẫn chào khách, `/order/cancel` vẫn trả lời; `/chat`, `/chat/stream`, `/order/quote`, `/order` trả `503` (giỏ hàng nằm ở agent nên không có giỏ để tính giá, tạo đơn). Bật agent lên là be tự dùng lại, không cần khởi động lại.
 
 ### Chạy trên máy
@@ -70,7 +70,6 @@ Postgres, Qdrant, Mailpit chạy bằng Docker, code chạy trên máy:
 ```bash
 uv sync --all-packages                                  # cài cả 3 package (common, agent, be) + thư viện dev
 docker compose up -d postgres qdrant mailpit
-uv run python -m phone_agent.vector_db                  # (tùy chọn) nạp chính sách mẫu khi chạy agent không có be; có be thì be tự đẩy
 uv run uvicorn phone_agent.service:app --port 8001      # agent
 uv run uvicorn phone_api.api:app --port 8002            # be (AGENT_URL mặc định http://localhost:8001)
 BE_URL=http://host.docker.internal:8002 docker compose up -d --no-deps fe   # giao diện tại http://localhost:8000
@@ -127,15 +126,15 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `GROQ_API_KEY` | (bắt buộc) | LLM dự phòng ([console.groq.com](https://console.groq.com)) |
 | `TAVILY_API_KEY` | (bắt buộc) | Tool `web_search` ([tavily.com](https://tavily.com)) |
 | `POSTGRES_PASSWORD` | `postgres` | Mật khẩu Postgres, chỉ có hiệu lực khi tạo volume lần đầu |
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5433/phone` | Database khi chạy trên máy |
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5433/phone` | DSN PostgreSQL của be khi chạy trên máy |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant khi chạy trên máy |
 | `AGENT_IMPL` | `graph` | Agent service dùng `graph.py` (có trạng thái, giỏ hàng) hay `agent.py` |
 | `AGENT_URL` | `http://localhost:8001` | be gọi agent ở địa chỉ này |
+| `BE_URL` | `http://localhost:8002` | agent gọi API danh mục của be ở địa chỉ này |
+| `CATALOG_API_KEY` | (trống) | Khóa tùy chọn cho API đọc danh mục và chính sách, đặt cùng giá trị ở be và agent |
 | `AGENT_API_KEY` | (trống: không kiểm tra) | Đặt thì mọi endpoint của agent trừ `/health` đòi header `Authorization: Bearer <key>`; be tự gửi key này. Bắt buộc khi mở agent cho hệ thống khác |
-| `AUTO_INGEST` | `false` | Agent tự nạp dữ liệu mẫu `data_schema/policies` khi Qdrant rỗng. Chỉ dùng khi chạy agent không có be (có be thì be đẩy chính sách sang) |
 | `ADMIN_API_KEY` | (trống: tắt `/admin`) | Key của be cho `/admin/policies` (header `Authorization: Bearer <key>`) |
 | `CHAT_RATE_PER_MIN` | `20` | be: mỗi IP tối đa ngần này lượt `/chat`, `/chat/stream`, `/session`, `/order*` mỗi phút, quá thì `429` (`0`: tắt) |
-| `POLICY_SYNC_S` | `300` | be đối chiếu chính sách với agent mỗi ngần này giây (lỗi thì thử lại sau 30 giây) |
 | `PII_KEY` | (bắt buộc để đặt hàng) | Khóa Fernet mã hóa số điện thoại, email của khách trong database, xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii). Tạo: `uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Sao lưu khóa**: mất khóa là không đọc lại được dữ liệu đã mã hóa |
 | `SMTP_HOST` | (trống: không gửi email) | Máy chủ SMTP gửi email xác nhận đơn. Chạy trên máy với Mailpit: `localhost` |
 | `SMTP_PORT` | `1025` | Cổng SMTP (Mailpit 1025; Gmail 587) |
@@ -144,7 +143,7 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `MAIL_FROM` | `PhoneShop Demo <no-reply@phoneshop.example>` | Người gửi; phần tên cũng là tên cửa hàng trong email. Không dùng tên miền `.local` (thư viện kiểm tra email từ chối) |
 | `LANGSMITH_*` | tắt | Trace LangSmith (tùy chọn) |
 
-Trong Docker, Compose đặt cùng `DATABASE_URL` trỏ tới `postgres:5432/phone` cho `be` và `agent`. Compose đặt `QDRANT_URL` cho `agent`, `AGENT_URL` và `SMTP_HOST=mailpit` cho `be`, và `ROUTER9_BASE_URL` trỏ tới `host.docker.internal` (9Router chạy trên máy host).
+Trong Docker, Compose đặt `DATABASE_URL` cho `be` trỏ tới `postgres:5432/phone` trên mạng database riêng. Compose đặt `BE_URL=http://be:8002` và `QDRANT_URL` cho `agent`, `AGENT_URL` và `SMTP_HOST=mailpit` cho `be`, và `ROUTER9_BASE_URL` trỏ tới `host.docker.internal` (9Router chạy trên máy host).
 
 ## API
 
@@ -174,9 +173,8 @@ Cổng 8001. be là một client của API này; hệ thống khác tích hợp 
 | `DELETE` | `/threads/{id}` | Xóa lịch sử, giỏ hàng |
 | `POST` | `/threads/{id}/order-placed` | `{order_id, answer}`: ghi đơn đã đặt vào lịch sử, làm trống giỏ |
 | `POST` | `/threads/{id}/order-cancelled` | `{answer}`: ghi việc hủy form vào lịch sử, làm trống giỏ |
-| `GET` | `/policies` | `{slug: hash}` các tài liệu chính sách đang có |
-| `PUT` | `/policies/{slug}` | `{content_md, prompt}`: chunk + embed 1 tài liệu, thay chunk cũ của nó |
-| `DELETE` | `/policies/{slug}` | Xóa chunk của 1 tài liệu |
+| `POST` | `/webhooks/policy-updated` | BE gửi `{slug}`; Agent tải bản hiện tại từ BE và cập nhật Qdrant |
+| `POST` | `/webhooks/policy-reconcile` | Yêu cầu Agent đối soát toàn bộ chính sách ngay |
 | `POST` | `/policies/{slug}/check` | `{content_md, questions}`: thử bản nháp với câu hỏi mẫu, không ghi Qdrant |
 | `GET` | `/health` | Trạng thái Qdrant và số đoạn chính sách (không cần key) |
 
@@ -541,13 +539,13 @@ Số điện thoại, email của khách (`pii.py`) được xử lý ở 4 ch�
 
 | Tool | Nguồn | Dùng khi |
 |---|---|---|
-| `search_products` | Postgres | Tìm máy theo dòng, hãng, ngân sách |
-| `get_product_details` | Postgres | Giá, tồn kho từng phiên bản, thông số của 1 máy |
-| `find_accessories` | Postgres | Phụ kiện tương thích, 5 món mỗi trang |
-| `add_to_cart`, `remove_from_cart` | Postgres + state | Khách chốt mua hoặc đổi ý (chỉ `graph.py`); phụ kiện kèm `for_phone` để chọn đúng bản cho máy |
+| `search_products` | API danh mục của be | Tìm máy theo dòng, hãng, ngân sách |
+| `get_product_details` | API danh mục của be | Giá, tồn kho từng phiên bản, thông số của 1 máy |
+| `find_accessories` | API danh mục của be | Phụ kiện tương thích, 5 món mỗi trang |
+| `add_to_cart`, `remove_from_cart` | API danh mục của be + state | Khách chốt mua hoặc đổi ý (chỉ `graph.py`); phụ kiện kèm `for_phone` để chọn đúng bản cho máy |
 | `show_order_form` | State | Khách xác nhận đặt hàng: hiện form đặt hàng (chỉ `graph.py`) |
-| `get_promotions` | Postgres | Khách hỏi khuyến mãi, mã giảm giá hoặc đang do dự: khuyến mãi đang chạy, lọc theo sản phẩm |
-| `find_cheaper_alternatives` | Postgres + state | Khách chê đắt, do dự: máy khác rẻ hơn trong khoảng % cho trước, còn hàng (chỉ `graph.py`) |
+| `get_promotions` | API danh mục của be | Khách hỏi khuyến mãi, mã giảm giá hoặc đang do dự: khuyến mãi đang chạy, lọc theo sản phẩm |
+| `find_cheaper_alternatives` | API danh mục của be + state | Khách chê đắt, do dự: máy khác rẻ hơn trong khoảng % cho trước, còn hàng (chỉ `graph.py`) |
 | `search_policy` | Qdrant | Đổi trả, giao hàng, trả góp, bảo hành, lỗi máy |
 | `web_search` | Tavily | Đánh giá, tin tức ngoài dữ liệu nội bộ |
 
@@ -572,8 +570,10 @@ flowchart LR
     admin(["Quản trị"]) -- "1. PUT .../draft" --> draft[("policy_drafts")]
     admin -- "2. POST .../draft/check" --> be["be"] -- "thử bản nháp<br/>(không ghi Qdrant)" --> agent["agent"]
     admin -- "3. POST .../publish<br/>(chỉ khi đạt)" --> be -- "version mới" --> pg[("policies +<br/>policy_versions")]
-    be -- "PUT /policies/{slug}" --> agent -- "chunk + embed,<br/>thay chunk cũ của slug" --> qdrant[("Qdrant")]
-    be -. "mỗi 5 phút: GET /policies (hash),<br/>đẩy bù / xóa phần lệch" .-> agent
+    be -- "POST /webhooks/policy-updated<br/>(slug)" --> agent
+    agent -- "GET /policies/{slug}" --> be
+    agent -- "chunk + embed hoặc xóa" --> qdrant[("Qdrant")]
+    agent -. "khi khởi động và mỗi giờ:<br/>GET /policies (hash)" .-> be
 ```
 
 Bản gốc nằm ở be (Postgres, `data_schema/policies.sql`); khách chỉ thấy bản đã xuất bản:
@@ -585,7 +585,7 @@ Bản gốc nằm ở be (Postgres, `data_schema/policies.sql`); khách chỉ th
 | `policy_versions` | Lịch sử: mỗi lần xuất bản hoặc quay lại thêm 1 dòng (nội dung, prompt, người, lý do, thời điểm), không sửa/xóa |
 | `policy_checks` | Câu hỏi kiểm tra của từng tài liệu: `question`, `must_contain` |
 
-Lần đầu be chạy, bảng rỗng thì nạp 5 tài liệu mẫu (`data_schema/policies/*.md`), prompt (`prompts.json`) và 19 câu hỏi kiểm tra (`checks.json`, lấy từ các câu policy của `evals/dataset.jsonl`) thành version 1. Sau đó sửa qua API, không sửa file.
+Lần đầu be chạy, nếu chưa có lịch sử chính sách thì nạp 5 tài liệu mẫu (`data_schema/policies/*.md`), prompt (`prompts.json`) và 19 câu hỏi kiểm tra (`checks.json`, lấy từ các câu policy của `evals/dataset.jsonl`) thành version 1. Sau đó sửa qua API, không sửa file.
 
 **Kiểm tra bản nháp** (agent, `vector_db.check_policy`): embed bản nháp trong bộ nhớ, trộn với các tài liệu khác đang có trong Qdrant, rồi với mỗi câu hỏi chạy đúng bộ lọc của `search_policy` (top 3, ngưỡng 0,25, margin 0,08). Một câu đạt khi kết quả có đoạn của tài liệu này và các đoạn đó chứa đủ `must_contain` (mỗi nhóm cần 1 cách viết). Không gọi LLM, không ghi Qdrant, vài giây mỗi tài liệu.
 
@@ -603,7 +603,7 @@ Endpoint của be, cần `ADMIN_API_KEY` (để trống thì các endpoint này 
 | `GET`, `PUT`, `DELETE` | `/admin/policies/{slug}/draft` | Bản nháp `{content_md, prompt}`; thêm tài liệu mới cũng bắt đầu từ đây |
 | `GET`, `PUT` | `/admin/policies/{slug}/checks` | Câu hỏi kiểm tra `[{question, must_contain}]` (thay cả bộ) |
 | `POST` | `/admin/policies/{slug}/draft/check` | Kiểm tra bản nháp: `{passed, results: [{question, retrieved, missing, passed}]}` |
-| `POST` | `/admin/policies/{slug}/publish` | `{by, note}` (không bắt buộc): xuất bản nháp đã đạt thành version mới, đẩy sang agent. `synced: false` là agent đang tắt, vòng đồng bộ sẽ đẩy bù |
+| `POST` | `/admin/policies/{slug}/publish` | `{by, note}` (không bắt buộc): xuất bản nháp đã đạt thành version mới và báo agent qua webhook. `synced: false` nghĩa là Agent chưa xác nhận xử lý, lần đối soát sau sẽ cập nhật bù |
 | `GET` | `/admin/policies/{slug}/versions` | Lịch sử: version, người, lý do, thời điểm (mới nhất trước) |
 | `GET` | `/admin/policies/{slug}/versions/{version}` | Nội dung 1 version cũ |
 | `POST` | `/admin/policies/{slug}/rollback` | `{version, by, note}`: quay lại version cũ ngay |
@@ -619,10 +619,10 @@ curl -X POST localhost:8002/admin/policies/doi-tra.md/rollback -H "$A" -H "$J" -
 ```
 
 - `content_md` là markdown: `#` tiêu đề, `##`/`###` mục (tách chunk theo heading), tối đa 100.000 ký tự; `prompt` tối đa 4.000 ký tự, nói phạm vi, ý bắt buộc, điều không được nói, khi nào chuyển nhân viên.
-- Đồng bộ sang agent dựa trên hash (nội dung + prompt) agent lưu cùng chunk: be chỉ đẩy tài liệu lệch hash, nên agent khởi động lại hay volume Qdrant bị xóa thì tự được lấp lại; tài liệu không đổi thì không embed lại. Agent embed trước rồi mới xóa chunk cũ của tài liệu đó: embed lỗi thì bản cũ vẫn còn.
+- Webhook chỉ gửi `slug`. Agent tải bản đã xuất bản từ `GET /policies/{slug}`; nếu BE trả `404`, Agent xóa các chunk của tài liệu. Khi khởi động và mỗi giờ, Agent gọi `GET /policies` để đối chiếu hash nội dung và prompt. Chỉ tài liệu thay đổi mới được embed lại; nếu bỏ lỡ webhook hoặc Qdrant bị xóa, lần đối soát sẽ tải bù.
 - Dữ liệu mẫu hiện có 2 câu kiểm tra **không đạt** ngay với nội dung đang dùng, vì đoạn `search_policy` lấy ra không chứa ý cần có (bot đang trả lời đúng nhờ prompt nhắc): "root máy còn bảo hành không" (`bao-hanh-samsung.md`, thiếu "Knox") và "đặt online có tốn tiền ship không" (`giao-hang.md`, thiếu "miễn phí"). Muốn xuất bản 2 tài liệu này thì thêm mục hỏi/đáp trả lời thẳng 2 câu đó vào nội dung (khuyến nghị), hoặc sửa `must_contain` của 2 câu.
 - Chưa có tài khoản quản trị riêng: 1 `ADMIN_API_KEY` chung, người sửa tự ghi `by`. Chưa có giao diện quản trị, mới có API.
-- Agent dùng cho hệ thống khác cũng nhận chính sách qua `PUT /policies/{slug}`, `DELETE /policies/{slug}`, `GET /policies`, `POST /policies/{slug}/check` ([API của agent](#api-của-agent)).
+- Trên BE, `GET /policies/{slug}` trả bản đã xuất bản. `PUT /policies/{slug}` yêu cầu `ADMIN_API_KEY` và lưu bản nháp như `PUT /admin/policies/{slug}/draft`. Kiểm tra và xuất bản qua API quản trị để áp dụng cho khách.
 
 ### Chuỗi LLM dự phòng
 
@@ -789,7 +789,7 @@ Không gọi LLM, mạng, database hay máy chủ email thật (dùng model, d�
 ### Tầng 2: Đánh giá thành phần
 
 ```bash
-docker compose up -d postgres qdrant
+docker compose up -d postgres qdrant be
 uv run python evals/run_eval.py --retrieval-only            # chỉ chấm truy xuất chính sách
 uv run python evals/run_eval.py --target graph              # chấm graph.py (mặc định agent.py)
 uv run python evals/run_eval.py --only product,acc-01       # lọc theo nhóm hoặc id
@@ -1063,10 +1063,10 @@ Chỉ số là tỷ lệ đòn thành công theo nhóm, xếp theo mức nghiêm
 
 | Triệu chứng | Cách xử lý |
 |---|---|
-| "Lỗi hệ thống khi tra cứu kho hàng" | Kiểm tra Postgres đang chạy; trên máy dùng cổng **5433** |
+| "Lỗi hệ thống khi tra cứu kho hàng" | Kiểm tra `BE_URL` của agent, `CATALOG_API_KEY` của hai service và kết nối PostgreSQL của be |
 | Giá, sản phẩm chưa đổi sau khi cào lại | `docker compose run --rm db-seed` |
 | `password authentication failed` sau khi đổi mật khẩu | Mật khẩu chỉ đặt lúc tạo volume: `docker compose down -v` rồi chạy lại |
-| `search_policy` không tìm thấy gì | `POST /admin/policies/sync` ở be (hoặc chờ vòng đồng bộ); chạy agent không có be: `uv run python -m phone_agent.vector_db` |
+| `search_policy` không tìm thấy gì | Kiểm tra `BE_URL` và `CATALOG_API_KEY`, rồi gọi `POST /admin/policies/sync` để Agent đối soát ngay |
 | `/chat` trả 429 hoặc 502 | Mọi LLM đều hết quota hoặc lỗi; xem `docker compose logs agent \| grep LLM` |
 | `/health` trả 503 | Kiểm tra Qdrant và `QDRANT_URL` |
 | Sửa code nhưng web app không đổi | `docker compose up -d --build agent be fe` (service nào sửa thì build service đó) |

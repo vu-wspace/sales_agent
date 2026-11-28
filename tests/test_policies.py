@@ -10,13 +10,13 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.embeddings import Embeddings
-from qdrant_client import QdrantClient
-
+from phone_agent import policy_sync, vector_db
 from phone_agent import service as svc
-from phone_agent import vector_db
 from phone_api import api as be
-from phone_common.config import DATABASE_URL, VECTOR_SIZE
+from phone_api.config import DATABASE_URL
+from phone_common.config import VECTOR_SIZE
 from phone_common.policies import load_seed, policy_hash
+from qdrant_client import QdrantClient
 
 DOC = '# Đổi trả\n\n## Lỗi nhà sản xuất\nĐổi mới trong 30 ngày.\n\n## Đổi ý\nCòn seal trong 7 ngày, phí 10%.\n'
 SHORT = '# Đổi trả\n\n## Lỗi nhà sản xuất\nĐổi mới trong 15 ngày.\n'
@@ -69,10 +69,24 @@ def test_upsert_empty_document_keeps_old_chunks(qdrant):
     assert vector_db.count_documents() == 2
 
 
-def test_ingest_seed_loads_all_files_and_drops_unknown(qdrant):
+def test_reconcile_loads_new_documents_and_removes_deleted(qdrant, monkeypatch):
+    docs = {d['slug']: d for d in load_seed()}
+    manifest = {slug: policy_hash(doc['content_md'], doc['prompt']) for slug, doc in docs.items()}
+
+    def get(path):
+        if path == '/policies':
+            return manifest
+        slug = path.removeprefix('/policies/')
+        if slug in docs:
+            return docs[slug]
+        response = httpx.Response(404, request=httpx.Request('GET', f'http://be{path}'))
+        response.raise_for_status()
+
+    monkeypatch.setattr(policy_sync.backend, 'get', get)
     vector_db.upsert_policy('cu.md', DOC)
-    vector_db.ingest_seed()
-    assert set(vector_db.policy_hashes()) == {d['slug'] for d in load_seed()}
+    assert policy_sync.reconcile() == {'pushed': list(docs), 'removed': ['cu.md']}
+    assert vector_db.policy_hashes() == manifest
+    assert policy_sync.reconcile() == {'pushed': [], 'removed': []}
 
 
 def test_check_policy_tries_draft_without_writing(qdrant):
@@ -145,15 +159,34 @@ def stack(monkeypatch, pg_url):
     monkeypatch.setattr(be.policies, 'DATABASE_URL', pg_url)
     assert be.policies.ensure_table() == 5          # bảng rỗng: nạp 5 tài liệu mẫu
     store = FakeStore()
-    monkeypatch.setattr(svc, 'upsert_policy', store.upsert)
-    monkeypatch.setattr(svc, 'delete_policy', lambda slug: store.docs.pop(slug, None))
-    monkeypatch.setattr(svc, 'policy_hashes', store.hashes)
+    monkeypatch.setattr(vector_db, 'upsert_policy', store.upsert)
+    monkeypatch.setattr(vector_db, 'delete_policy', lambda slug: store.docs.pop(slug, None))
+    monkeypatch.setattr(vector_db, 'policy_hashes', store.hashes)
     monkeypatch.setattr(svc, 'check_policy', store.check)
     monkeypatch.setattr(be, 'ADMIN_API_KEY', 'admin-key')
-    be.app.state.agent_http = TestClient(svc.app)
+    agent = TestClient(svc.app)
     client = TestClient(be.app)
-    assert client.post('/admin/policies/sync', headers=ADMIN).json()['pushed'] == [d['slug'] for d in load_seed()]
-    return store, client
+    monkeypatch.setattr(be.catalog, 'CATALOG_API_KEY', '')
+
+    def transport(target):
+        def send(request):
+            response = target.request(request.method, request.url.raw_path.decode(), content=request.content,
+                                      headers=dict(request.headers))
+            return httpx.Response(response.status_code, content=response.content, headers=dict(response.headers))
+        return httpx.MockTransport(send)
+
+    with (httpx.Client(transport=transport(agent), base_url='http://agent') as agent_http,
+          httpx.Client(transport=transport(client), base_url='http://be') as backend_http):
+        monkeypatch.setattr(be.app.state, 'agent_http', agent_http, raising=False)
+
+        def get(path):
+            response = backend_http.get(path)
+            response.raise_for_status()
+            return response.json()
+
+        monkeypatch.setattr(policy_sync.backend, 'get', get)
+        assert client.post('/admin/policies/sync', headers=ADMIN).json()['pushed'] == [d['slug'] for d in load_seed()]
+        yield store, client
 
 
 def test_seed_is_version_1_with_history_and_checks(stack):
@@ -174,7 +207,9 @@ def test_draft_check_publish_flow(stack):
     # Đổi 30 ngày -> 15 ngày: nháp chưa tới tay khách
     changed = live['content_md'].replace('30 ngày', '15 ngày')
     new_prompt = live['prompt'].replace('30 ngày', '15 ngày')   # prompt cũng nêu mốc ngày: sửa cả hai
-    client.put('/admin/policies/doi-tra.md/draft', json={'content_md': changed, 'prompt': new_prompt}, headers=ADMIN)
+    assert client.put('/policies/doi-tra.md', json={'content_md': changed, 'prompt': new_prompt},
+                      headers=ADMIN).status_code == 200
+    assert client.get('/policies/doi-tra.md').json()['content_md'] == live['content_md']
     assert store.docs['doi-tra.md'][0] == live['content_md']
     r = client.post('/admin/policies/doi-tra.md/publish', headers=ADMIN)
     assert r.status_code == 409 and 'chưa được kiểm tra' in r.json()['detail']
@@ -288,15 +323,45 @@ def test_draft_validation(monkeypatch, slug, body):
 
 def test_agent_policy_endpoints_need_agent_key(monkeypatch):
     store = FakeStore()
-    monkeypatch.setattr(svc, 'upsert_policy', store.upsert)
+    monkeypatch.setattr(vector_db, 'upsert_policy', store.upsert)
     monkeypatch.setattr(svc, 'check_policy', store.check)
     monkeypatch.setattr(svc, 'AGENT_API_KEY', 'agent-key')
     agent = TestClient(svc.app)
     key = {'Authorization': 'Bearer agent-key'}
-    assert agent.put('/policies/doi-tra.md', json={'content_md': DOC}).status_code == 401
-    assert agent.put('/policies/doi-tra.md', json={'content_md': DOC}, headers=key).json() == {'slug': 'doi-tra.md',
-                                                                                              'chunks': 1}
-    assert agent.put('/policies/doi-tra.md', json={'content_md': ' '}, headers=key).status_code == 422
+    def get(path):
+        assert path == '/policies/doi-tra.md'
+        return {'content_md': DOC, 'prompt': None}
+
+    monkeypatch.setattr(policy_sync.backend, 'get', get)
+    monkeypatch.setattr(vector_db, 'policy_hashes', store.hashes)
+    event = {'slug': 'doi-tra.md'}
+    assert agent.post('/webhooks/policy-updated', json=event).status_code == 401
+    assert agent.post('/webhooks/policy-updated', json=event, headers=key).status_code == 204
+    assert store.docs['doi-tra.md'] == (DOC, None)
+    assert agent.post('/webhooks/policy-updated', json={'slug': '../bad'}, headers=key).status_code == 422
     r = agent.post('/policies/doi-tra.md/check', headers=key,
                    json={'content_md': DOC, 'questions': [{'question': 'bao lâu', 'must_contain': [['30 ngày']]}]})
     assert r.json()['passed'] is True
+
+
+def test_policy_reconciliation_runs_at_startup_and_hourly(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    calls = []
+
+    async def to_thread(fn):
+        assert fn is policy_sync.reconcile
+        calls.append('reconcile')
+        if calls.count('reconcile') == 1:
+            raise httpx.ConnectError('BE is still starting')
+
+    async def sleep(seconds):
+        calls.append(seconds)
+        if calls.count(seconds) == 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(svc, 'asyncio', SimpleNamespace(to_thread=to_thread, sleep=sleep))
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(svc._reconcile_loop())
+    assert calls == ['reconcile', 3600, 'reconcile', 3600]

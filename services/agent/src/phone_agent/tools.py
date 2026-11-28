@@ -1,21 +1,28 @@
 import re
-import psycopg
+from functools import lru_cache
+from typing import Annotated, Any
+from urllib.parse import quote
+
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import InjectedToolCallId
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
-from psycopg.rows import dict_row
-from typing import Annotated, Any
 from phone_common import promotions
-from phone_agent.conversation import (_current_turn, added_to_cart_this_turn, cart_update, cross_sell_step,
-                                    wants_order_now)
-from phone_common.config import DATABASE_URL, POLICY_TOP_K
-from phone_agent.prompts import POLICY_GUIDE
+from phone_common.config import POLICY_TOP_K
 from phone_common.textnorm import strip_accents
-from phone_agent.vector_db import get_vector_store, relevant_hits
 from tavily import TavilyClient
-from functools import lru_cache
+
+from phone_agent.backend import get as _catalog
+from phone_agent.conversation import (
+    _current_turn,
+    added_to_cart_this_turn,
+    cart_update,
+    cross_sell_step,
+    wants_order_now,
+)
+from phone_agent.prompts import POLICY_GUIDE
+from phone_agent.vector_db import get_vector_store, relevant_hits
 
 tavily_client = TavilyClient()
 
@@ -77,10 +84,6 @@ def _tokens(text: str) -> set[str]:
     words = ' '.join(ALIASES.get(w, w) for w in _norm_text(text).split())
     words = re.sub(r'\b(\d+)(pro|max|plus|ultra|fe)\b', r'\1 \2', words)  # "17pro" -> "17 pro"
     return {w for w in words.split() if w not in STOP_WORDS and not re.fullmatch(r'\d+(gb|tb)', w)}
-
-def _query(sql: str, params: tuple = ()) -> list[dict]:
-    with psycopg.connect(DATABASE_URL, connect_timeout=5, row_factory=dict_row) as conn:
-        return conn.execute(sql, params).fetchall()
 
 def _match(products: list[dict], name: str, prefer_exact: bool = True) -> list[dict]:
     # Mọi từ khách gõ phải có trong tên sản phẩm. prefer_exact: có tên trùng khớp hoàn toàn thì chỉ lấy tên đó
@@ -144,13 +147,7 @@ def search_products(query: str = '', brand: str = '', max_price: int = 0, catego
     category: 'phone' (điện thoại) hoặc 'accessory' (phụ kiện).
     Dùng khi khách hỏi có bán máy nào, máy nào trong tầm giá, so sánh giá các dòng."""
     try:
-        rows = _query(
-            """SELECT p.product_id, p.name, p.brand, min(v.price) AS min_price, max(v.price) AS max_price,
-                      sum(v.stock) AS stock, array_agg(DISTINCT v.storage) AS storages
-               FROM products p JOIN variants v USING (product_id)
-               WHERE p.category = %s AND (%s = '' OR p.brand ILIKE %s)
-               GROUP BY p.product_id, p.name, p.brand ORDER BY min(v.price)""",
-            (category, brand.strip(), brand.strip()))
+        rows = _catalog('/products', view='summary', category=category, brand=brand.strip())
     except Exception as e:
         return DB_ERROR.format(type(e).__name__)
     if query.strip():
@@ -193,15 +190,14 @@ def get_product_details(product: str, storage: str = '', color: str = '') -> str
     storage (vd '256GB') và color (vd 'Đen') để lọc phiên bản, có thể để trống.
     Dùng khi khách hỏi giá chính xác, còn màu/dung lượng nào, thông số máy."""
     try:
-        products = _query("SELECT product_id, name, brand, description, attributes FROM products WHERE category = 'phone'")
+        products = _catalog('/products', category='phone')
         hits = _match(products, product)
         if len(hits) != 1:
             names = ', '.join(p['name'] for p in hits[:MAX_LINES])
             return (f"Có nhiều máy khớp '{product}': {names}. Hỏi lại khách muốn xem máy nào." if hits else
                     f"Không tìm thấy điện thoại '{product}'. Dùng search_products để xem danh sách máy đang bán.")
         p = hits[0]
-        variants = _query('SELECT variant_id, color, storage, price, stock FROM variants '
-                          'WHERE product_id = %s', (p['product_id'],))
+        variants = _catalog(f"/products/{quote(p['product_id'], safe='')}/variants")
         variants.sort(key=lambda v: (_storage_key(v['storage'] or ''), v['price'], v['color'] or ''))
     except Exception as e:
         return DB_ERROR.format(type(e).__name__)
@@ -263,19 +259,13 @@ def find_accessories(phone: str, accessory_type: str = '', page: int = 1, genuin
     if None in kinds:
         return f"Không rõ loại phụ kiện '{accessory_type}'. Các loại có: ốp lưng, miếng dán, sạc, cáp, sạc dự phòng, S Pen, ví, giá đỡ."
     try:
-        phones = _query("SELECT product_id, name, brand, attributes FROM products WHERE category = 'phone'")
+        phones = _catalog('/products', category='phone')
         hits = _match(phones, phone)
         if len(hits) != 1:
             names = ', '.join(p['name'] for p in hits[:MAX_LINES])
             return (f"Có nhiều máy khớp '{phone}': {names}. Hỏi lại khách dùng máy nào." if hits else
                     f"Không tìm thấy điện thoại '{phone}' trong danh sách máy cửa hàng đang bán.")
-        rows = _query(
-            """SELECT a.name, a.brand, a.attributes->>'accessory_type' AS kind, v.price, v.stock
-               FROM compatibility c JOIN products a ON a.product_id = c.accessory_id
-               JOIN variants v ON v.product_id = a.product_id
-               WHERE c.phone_id = %s AND (%s::text[] IS NULL OR a.attributes->>'accessory_type' = ANY(%s))
-               ORDER BY v.stock = 0, v.price""",
-            (hits[0]['product_id'], kinds or None, kinds or None))
+        rows = _catalog('/internal/catalog/accessories', phone_id=hits[0]['product_id'], kinds=kinds or None)
     except Exception as e:
         return DB_ERROR.format(type(e).__name__)
     p = hits[0]
@@ -379,8 +369,7 @@ def find_cheaper_alternatives(product: str, state: Annotated[dict, InjectedState
 
     low_pct, high_pct = sorted((max(min_drop_pct, 0.0), min(max_drop_pct, 0.9)))
     try:
-        phones = _query("""SELECT p.product_id, p.name, p.brand, v.storage, v.color, v.price, v.stock
-                           FROM products p JOIN variants v USING (product_id) WHERE p.category = 'phone'""")
+        phones = _catalog('/products', view='phone-variants')
     except Exception as e:
         return reply(DB_ERROR.format(type(e).__name__))
     products = list({r['product_id']: {'product_id': r['product_id'], 'name': r['name']} for r in phones}.values())
@@ -435,11 +424,10 @@ def get_promotions(product: str = '') -> str:
     product: tên sản phẩm khách đang xem để chỉ lấy khuyến mãi áp dụng cho sản phẩm đó (để trống = tất cả).
     Dùng khi khách hỏi khuyến mãi, ưu đãi, mã giảm giá, hoặc khi đang do dự. Chỉ nêu khuyến mãi có trong kết quả."""
     try:
-        with psycopg.connect(DATABASE_URL, connect_timeout=5, row_factory=dict_row) as conn:
-            promos = promotions.active(conn)
+        promos = _catalog('/promotions')
         item = None
         if product.strip():
-            hits = _match(_query('SELECT product_id, name, brand, category FROM products'), product)
+            hits = _match(_catalog('/products'), product)
             if len(hits) != 1:
                 names = ', '.join(p['name'] for p in hits[:MAX_LINES])
                 return (f"Có nhiều sản phẩm khớp '{product}': {names}. Hỏi lại khách." if hits else
@@ -454,7 +442,7 @@ def get_promotions(product: str = '') -> str:
         return (f'Hiện không có chương trình khuyến mãi nào đang áp dụng{target}. Không nêu khuyến mãi, giảm giá, '
                 'quà tặng nào khác.')
     return (f'Khuyến mãi đang áp dụng{target} (khách nhập mã ở form đặt hàng; hệ thống kiểm tra điều kiện và số lần '
-            'dùng khi đặt):\n' + '\n'.join('- ' + promotions.describe(p) for p in promos))
+            'dùng khi đặt):\n' + '\n'.join('- ' + p['summary'] for p in promos))
 
 def _genuine(acc: dict, phone_brand: str) -> bool:
     # Chính hãng = cùng hãng với máy; cửa hàng Apple bán cả Beats, mophie, Belkin, Anker nhưng đó là hãng khác
@@ -544,13 +532,12 @@ def _narrow_to_phone(hits: list[dict], phones: list[str]) -> list[dict]:
     giữ món tương thích với máy khách đang mua. Không lọc được (không rõ máy, không món nào hợp) thì giữ nguyên."""
     if len(hits) < 2 or not phones or any(h['category'] == 'phone' for h in hits):
         return hits
-    catalog = _query("SELECT product_id, name FROM products WHERE category = 'phone'")
+    catalog = _catalog('/products', category='phone')
     phone_ids = {p['product_id'] for n in phones for p in _match(catalog, n) if len(_match(catalog, n)) == 1}
     if not phone_ids:
         return hits
-    fits = {r['accessory_id'] for r in _query(
-        'SELECT accessory_id FROM compatibility WHERE phone_id = ANY(%s) AND accessory_id = ANY(%s)',
-        (list(phone_ids), [h['product_id'] for h in hits]))}
+    compatible = _catalog('/internal/catalog/compatible', phone_ids=sorted(phone_ids), accessory_ids=[h['product_id'] for h in hits])
+    fits = {row['accessory_id'] for row in compatible}
     return [h for h in hits if h['product_id'] in fits] or hits
 
 @tool
@@ -564,15 +551,14 @@ def add_to_cart(product: str, state: Annotated[dict, InjectedState], tool_call_i
     if quantity < 1:
         return _cart_reply(tool_call_id, 'Số lượng phải từ 1 trở lên.')
     try:
-        products = _query('SELECT product_id, name, brand, category, attributes FROM products')
+        products = _catalog('/products')
         hits = _narrow_to_phone(_match(products, product), _context_phones(state, for_phone))
         if len(hits) != 1:
             names = ', '.join(p['name'] for p in hits[:MAX_LINES])
             return _cart_reply(tool_call_id, f"Có nhiều sản phẩm khớp '{product}': {names}. Hỏi lại khách." if hits
                                else f"Không tìm thấy sản phẩm '{product}'.")
         p = hits[0]
-        variants = _query('SELECT variant_id, color, storage, price, stock FROM variants WHERE product_id = %s',
-                          (p['product_id'],))
+        variants = _catalog(f"/products/{quote(p['product_id'], safe='')}/variants")
     except Exception as e:
         return _cart_reply(tool_call_id, DB_ERROR.format(type(e).__name__))
     variants = _filter_storage(variants, storage)
