@@ -126,12 +126,17 @@ def prepare_vector_db(retries: int = 30, delay: float = 2.0) -> int:
 
 
 async def _reconcile_loop():
+    # Thành công: chờ RECONCILE_SECONDS. Lỗi (be chưa lên lúc deploy, tài liệu lỗi): 30s, 60s... tới RECONCILE_SECONDS,
+    # để Qdrant không trống cả giờ chỉ vì agent khởi động trước be
+    retry = policy_sync.RETRY_SECONDS
     while True:
         try:
-            await asyncio.to_thread(policy_sync.reconcile)
+            ok = not (await asyncio.to_thread(policy_sync.reconcile))['failed']
         except Exception:
             log.exception('Chưa đối soát được chính sách từ be')
-        await asyncio.sleep(policy_sync.RECONCILE_SECONDS)
+            ok = False
+        await asyncio.sleep(policy_sync.RECONCILE_SECONDS if ok else retry)
+        retry = policy_sync.RETRY_SECONDS if ok else min(retry * 2, policy_sync.RECONCILE_SECONDS)
 
 
 @asynccontextmanager

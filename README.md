@@ -126,7 +126,7 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `GROQ_API_KEY` | (bắt buộc) | LLM dự phòng ([console.groq.com](https://console.groq.com)) |
 | `TAVILY_API_KEY` | (bắt buộc) | Tool `web_search` ([tavily.com](https://tavily.com)) |
 | `POSTGRES_PASSWORD` | `postgres` | Mật khẩu Postgres, chỉ có hiệu lực khi tạo volume lần đầu |
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5433/phone` | DSN PostgreSQL của be khi chạy trên máy |
+| `DATABASE_URL` | `postgresql://postgres:postgres@127.0.0.1:5433/phone` | DSN PostgreSQL của be khi chạy trên máy |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant khi chạy trên máy |
 | `AGENT_IMPL` | `graph` | Agent service dùng `graph.py` (có trạng thái, giỏ hàng) hay `agent.py` |
 | `AGENT_URL` | `http://localhost:8001` | be gọi agent ở địa chỉ này |
@@ -608,7 +608,7 @@ Endpoint của be, cần `ADMIN_API_KEY` (để trống thì các endpoint này 
 | `GET` | `/admin/policies/{slug}/versions/{version}` | Nội dung 1 version cũ |
 | `POST` | `/admin/policies/{slug}/rollback` | `{version, by, note}`: quay lại version cũ ngay |
 | `DELETE` | `/admin/policies/{slug}` | Gỡ khỏi agent (khách không còn thấy); lịch sử, câu hỏi kiểm tra giữ lại |
-| `POST` | `/admin/policies/sync` | Đồng bộ ngay: `{pushed: [...], removed: [...]}` |
+| `POST` | `/admin/policies/sync` | Đồng bộ ngay: `{pushed: [...], removed: [...], failed: [...]}`; tài liệu nào lỗi thì nằm trong `failed`, các tài liệu khác vẫn được cập nhật |
 
 ```bash
 A="Authorization: Bearer $ADMIN_API_KEY"; J='Content-Type: application/json'
@@ -619,7 +619,7 @@ curl -X POST localhost:8002/admin/policies/doi-tra.md/rollback -H "$A" -H "$J" -
 ```
 
 - `content_md` là markdown: `#` tiêu đề, `##`/`###` mục (tách chunk theo heading), tối đa 100.000 ký tự; `prompt` tối đa 4.000 ký tự, nói phạm vi, ý bắt buộc, điều không được nói, khi nào chuyển nhân viên.
-- Webhook chỉ gửi `slug`. Agent tải bản đã xuất bản từ `GET /policies/{slug}`; nếu BE trả `404`, Agent xóa các chunk của tài liệu. Khi khởi động và mỗi giờ, Agent gọi `GET /policies` để đối chiếu hash nội dung và prompt. Chỉ tài liệu thay đổi mới được embed lại; nếu bỏ lỡ webhook hoặc Qdrant bị xóa, lần đối soát sẽ tải bù.
+- Webhook chỉ gửi `slug`. Agent tải bản đã xuất bản từ `GET /policies/{slug}`; nếu BE trả `404`, Agent xóa các chunk của tài liệu. Khi khởi động và mỗi giờ, Agent gọi `GET /policies` để đối chiếu hash nội dung và prompt. Chỉ tài liệu thay đổi mới được embed lại; nếu bỏ lỡ webhook hoặc Qdrant bị xóa, lần đối soát sẽ tải bù. Đối soát lỗi (be chưa chạy lúc deploy, một tài liệu lỗi) thì agent thử lại sau 30 giây, rồi 60 giây…, tối đa 1 giờ; một tài liệu lỗi không chặn các tài liệu khác.
 - Dữ liệu mẫu hiện có 2 câu kiểm tra **không đạt** ngay với nội dung đang dùng, vì đoạn `search_policy` lấy ra không chứa ý cần có (bot đang trả lời đúng nhờ prompt nhắc): "root máy còn bảo hành không" (`bao-hanh-samsung.md`, thiếu "Knox") và "đặt online có tốn tiền ship không" (`giao-hang.md`, thiếu "miễn phí"). Muốn xuất bản 2 tài liệu này thì thêm mục hỏi/đáp trả lời thẳng 2 câu đó vào nội dung (khuyến nghị), hoặc sửa `must_contain` của 2 câu.
 - Chưa có tài khoản quản trị riêng: 1 `ADMIN_API_KEY` chung, người sửa tự ghi `by`. Chưa có giao diện quản trị, mới có API.
 - Trên BE, `GET /policies/{slug}` trả bản đã xuất bản. `PUT /policies/{slug}` yêu cầu `ADMIN_API_KEY` và lưu bản nháp như `PUT /admin/policies/{slug}/draft`. Kiểm tra và xuất bản qua API quản trị để áp dụng cho khách.

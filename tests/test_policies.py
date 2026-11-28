@@ -84,9 +84,30 @@ def test_reconcile_loads_new_documents_and_removes_deleted(qdrant, monkeypatch):
 
     monkeypatch.setattr(policy_sync.backend, 'get', get)
     vector_db.upsert_policy('cu.md', DOC)
-    assert policy_sync.reconcile() == {'pushed': list(docs), 'removed': ['cu.md']}
+    assert policy_sync.reconcile() == {'pushed': list(docs), 'removed': ['cu.md'], 'failed': []}
     assert vector_db.policy_hashes() == manifest
-    assert policy_sync.reconcile() == {'pushed': [], 'removed': []}
+    assert policy_sync.reconcile() == {'pushed': [], 'removed': [], 'failed': []}
+
+
+def test_reconcile_one_bad_document_does_not_block_others(qdrant, monkeypatch):
+    docs = {d['slug']: d for d in load_seed()}
+    bad = next(iter(docs))
+
+    def get(path):
+        if path == '/policies':
+            return {slug: policy_hash(doc['content_md'], doc['prompt']) for slug, doc in docs.items()}
+        slug = path.removeprefix('/policies/')
+        if slug == bad:
+            raise httpx.ConnectError('be lỗi đúng lúc này')
+        if slug in docs:
+            return docs[slug]
+        httpx.Response(404, request=httpx.Request('GET', f'http://be{path}')).raise_for_status()
+
+    monkeypatch.setattr(policy_sync.backend, 'get', get)
+    vector_db.upsert_policy('cu.md', DOC)   # tạo collection; be không còn tài liệu này -> phải bị gỡ
+    result = policy_sync.reconcile()
+    assert result['failed'] == [bad] and result['removed'] == ['cu.md']
+    assert sorted(result['pushed']) == sorted(set(docs) - {bad})
 
 
 def test_check_policy_tries_draft_without_writing(qdrant):
@@ -125,7 +146,7 @@ def pg_url():
     except psycopg.OperationalError:
         pytest.skip('Không có Postgres (docker compose up -d postgres)')
     yield re.sub(r'/[^/]*$', f'/{name}', DATABASE_URL)
-    with psycopg.connect(admin_url, autocommit=True) as conn:
+    with psycopg.connect(admin_url, autocommit=True, connect_timeout=5) as conn:
         conn.execute(f'DROP DATABASE {name} WITH (FORCE)')
 
 
@@ -287,9 +308,10 @@ def test_publish_when_agent_down_then_sync(stack):
     # Agent bật lại: sync đẩy tài liệu lệch hash, xóa tài liệu agent có mà be đã bỏ
     be.app.state.agent_http = real_http
     store.docs['cu.md'] = ('# Cũ', None)
-    assert client.post('/admin/policies/sync', headers=ADMIN).json() == {'pushed': ['giao-hang.md'], 'removed': ['cu.md']}
+    assert client.post('/admin/policies/sync', headers=ADMIN).json() == {'pushed': ['giao-hang.md'], 'removed': ['cu.md'],
+                                                                          'failed': []}
     assert store.docs['giao-hang.md'] == (SHIP, None)
-    assert client.post('/admin/policies/sync', headers=ADMIN).json() == {'pushed': [], 'removed': []}
+    assert client.post('/admin/policies/sync', headers=ADMIN).json() == {'pushed': [], 'removed': [], 'failed': []}
 
 
 def test_delete_policy_keeps_history(stack):
@@ -344,24 +366,29 @@ def test_agent_policy_endpoints_need_agent_key(monkeypatch):
     assert r.json()['passed'] is True
 
 
-def test_policy_reconciliation_runs_at_startup_and_hourly(monkeypatch):
+def test_policy_reconciliation_retries_fast_on_error_then_hourly(monkeypatch):
     import asyncio
     from types import SimpleNamespace
 
     calls = []
+    results = [httpx.ConnectError('be đang khởi động'), {'failed': ['doi-tra.md']},
+               {'failed': []}, httpx.ConnectError('be restart')]
 
     async def to_thread(fn):
         assert fn is policy_sync.reconcile
         calls.append('reconcile')
-        if calls.count('reconcile') == 1:
-            raise httpx.ConnectError('BE is still starting')
+        r = results.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
 
     async def sleep(seconds):
         calls.append(seconds)
-        if calls.count(seconds) == 2:
+        if not results:
             raise asyncio.CancelledError
 
     monkeypatch.setattr(svc, 'asyncio', SimpleNamespace(to_thread=to_thread, sleep=sleep))
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(svc._reconcile_loop())
-    assert calls == ['reconcile', 3600, 'reconcile', 3600]
+    # lỗi: 30s rồi gấp đôi; thành công: 1 giờ và đặt lại mức thử lại về 30s
+    assert calls == ['reconcile', 30, 'reconcile', 60, 'reconcile', 3600, 'reconcile', 30]

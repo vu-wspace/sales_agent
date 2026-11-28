@@ -533,7 +533,7 @@ def admin_delete_policy(request: Request, slug: str = SlugPath):
 
 @app.post('/admin/policies/sync', dependencies=admin)
 def admin_sync_policies(request: Request):
-    """Đồng bộ ngay (không chờ lần đối soát theo giờ): {pushed: [slug], removed: [slug]}."""
+    """Đồng bộ ngay (không chờ lần đối soát theo giờ): {pushed: [slug], removed: [slug], failed: [slug]}."""
     try:
         response = request.app.state.agent_http.post('/webhooks/policy-reconcile', timeout=300)
         response.raise_for_status()

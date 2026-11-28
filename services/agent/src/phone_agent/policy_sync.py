@@ -8,6 +8,7 @@ from phone_agent import backend, vector_db
 
 log = logging.getLogger(__name__)
 RECONCILE_SECONDS = 3600
+RETRY_SECONDS = 30   # đối soát lỗi (be chưa lên, 1 tài liệu lỗi): thử lại sớm, gấp đôi dần tới RECONCILE_SECONDS
 _lock = Lock()
 
 
@@ -39,11 +40,16 @@ def reconcile() -> dict[str, list[str]]:
     with _lock:
         published = backend.get('/policies')
         local = vector_db.policy_hashes()
-        changes: dict[str, list[str]] = {'pushed': [], 'removed': []}
+        changes: dict[str, list[str]] = {'pushed': [], 'removed': [], 'failed': []}
         for slug in dict.fromkeys([*published, *local]):
             if slug not in published or local.get(slug) != published[slug]:
                 # Confirm removals with a fresh GET too, in case BE published after listing.
-                result = _refresh(slug, slug in local, local.get(slug))
+                try:
+                    result = _refresh(slug, slug in local, local.get(slug))
+                except Exception:
+                    # 1 tài liệu lỗi không chặn các tài liệu còn lại; vòng đối soát thấy 'failed' thì thử lại sớm
+                    log.exception('Chưa cập nhật được chính sách %s', slug)
+                    result = 'failed'
                 if result:
                     changes[result].append(slug)
         return changes
