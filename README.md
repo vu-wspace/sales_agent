@@ -177,7 +177,7 @@ Cổng 8001, mọi endpoint dưới `/v1` (OpenAPI tại `/docs`). be là một 
 | `POST` | `/v1/threads` | Mở cuộc trò chuyện: `{thread_id?, end_thread_id?, greeting?, customer?}`; `greeting`, `customer` ghi sẵn lời chào và hồ sơ khách quen vào state |
 | `GET` | `/v1/threads/{id}` | `{thread_id, stage, cart, order_form, orders}`: be đọc giỏ ở đây để tính giá, tạo đơn |
 | `DELETE` | `/v1/threads/{id}` | Xóa lịch sử, giỏ hàng |
-| `DELETE` | `/v1/threads` | Xóa **mọi** cuộc trò chuyện của nguồn đang gọi (theo key): ngừng tích hợp, xóa dữ liệu theo yêu cầu. `{deleted}` |
+| `DELETE` | `/v1/threads` | Chỉ hệ thống tích hợp (`AGENT_CLIENT_KEYS`): xóa **mọi** cuộc trò chuyện của nguồn đang gọi, kể cả checkpoint đang ghi dở: ngừng tích hợp, xóa dữ liệu theo yêu cầu. `{deleted}` |
 | `POST` | `/v1/threads/{id}/order-placed` | `{order_id, answer}`: ghi đơn đã đặt vào lịch sử, làm trống giỏ |
 | `POST` | `/v1/threads/{id}/order-cancelled` | `{answer}`: ghi việc hủy form vào lịch sử, làm trống giỏ |
 | `POST` | `/v1/webhooks/policy-updated` | Chỉ be: gửi `{slug}`; Agent tải bản hiện tại từ BE và cập nhật Qdrant |
@@ -190,11 +190,13 @@ Không có endpoint ghi state tùy ý: giá trong giỏ được dùng để t�
 **Key và nguồn gọi.** Mỗi hệ thống gọi agent có 1 key riêng, gửi kèm `Authorization: Bearer <key>`:
 
 - `AGENT_API_KEY`: key của be (nguồn `be`, không giới hạn tốc độ vì be đã giới hạn theo IP của khách).
-- `AGENT_CLIENT_KEYS`: các hệ thống tích hợp khác, dạng `tên:key[:giới hạn/phút]` cách nhau bởi dấu phẩy, vd `zalo:k3y-zalo:120,crm:k3y-crm`. Không ghi giới hạn thì dùng `AGENT_CLIENT_RATE_PER_MIN` (mặc định 60). Tên chữ thường; key không chứa `:` hoặc `,`. Sai cú pháp thì agent không khởi động.
+- `AGENT_CLIENT_KEYS`: các hệ thống tích hợp khác, dạng `tên:key[:giới hạn/phút]` cách nhau bởi dấu phẩy, vd `zalo:<chuỗi ngẫu nhiên 32+ ký tự>:120`. Không ghi giới hạn thì dùng `AGENT_CLIENT_RATE_PER_MIN` (mặc định 60); giới hạn phải >= 1 (muốn chặn 1 bên thì xóa key của bên đó). Tên chữ thường, không dùng `be` (dành cho be); key không chứa `:` hoặc `,`. Có `AGENT_CLIENT_KEYS` thì bắt buộc đặt `AGENT_API_KEY`. Sai thì agent không khởi động.
+- Key sinh ngẫu nhiên, đủ dài (`python -c "import secrets; print(secrets.token_urlsafe(32))"`): agent không giới hạn số lần thử key sai.
 - Thu hồi 1 bên: xóa mục của bên đó rồi khởi động lại agent; các bên khác không bị ảnh hưởng.
 - Log ghi nguồn của mỗi request (`client=zalo`). Quá giới hạn thì trả `429` kèm `Retry-After: 60`; bộ đếm theo phút nằm trong `agent-db` nên đúng cả khi chạy nhiều replica.
 - Webhook và kiểm tra chính sách chỉ nhận key của be (`403` với key khác).
-- **Hội thoại tách theo nguồn**: agent lưu thread dưới id `<nguồn>:<thread_id>`. Bên gọi vẫn dùng `thread_id` của mình (vd id người dùng Zalo), nhưng 2 hệ thống dùng trùng id cũng không thấy, không ghi đè hội thoại của nhau. Không đặt key nào (chỉ chạy trong mạng nội bộ) thì không có tiền tố.
+- **Hội thoại tách theo nguồn**: agent lưu thread của hệ thống tích hợp dưới id `<nguồn>:<thread_id>`. Bên gọi vẫn dùng `thread_id` của mình (vd id người dùng Zalo), nhưng 2 hệ thống dùng trùng id cũng không thấy, không ghi đè hội thoại của nhau. Thread của be (và khi không đặt key) giữ nguyên id, nên bật key không làm mất hội thoại đang mở. `thread_id` chỉ gồm chữ, số, `_`, `-` (tối đa 100 ký tự), không giả được tiền tố của nguồn khác.
+- **Thứ tự deploy**: deploy agent trước be. be mới gọi `/v1`, agent cũ chưa có `/v1` nên chat sẽ trả 404; agent mới vẫn nhận đường dẫn cũ của be cũ.
 
 **Quy tắc thay đổi API `/v1`** (đã có bên thứ ba dùng thì không sửa response tùy ý):
 

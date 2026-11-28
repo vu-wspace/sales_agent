@@ -95,6 +95,26 @@ def test_rate_count_and_threads_by_source_are_shared(agent_db):
     assert sorted(store.threads_with_prefix('zalo:')) == ['zalo:a', 'zalo:b']   # '_' không phải ký tự đại diện
 
 
+def test_deleted_thread_written_mid_turn_is_still_cleaned_up(agent_db):
+    g = _graph(store.open_checkpointer(agent_db))
+    config = {'configurable': {'thread_id': 'zalo:u1'}}
+    svc._claim('zalo:u1')
+    svc._delete_thread(g, 'zalo:u1')               # bên tích hợp xóa dữ liệu khi lượt đang chạy
+    g.invoke({'log': ['khách']}, config)            # lượt vẫn ghi checkpoint sau khi đã xóa
+    assert store.threads_with_prefix('zalo:') == ['zalo:u1']   # DELETE /v1/threads vẫn thấy (đọc cả checkpoints)
+    svc._release('zalo:u1')                         # upsert: có lại dòng agent_threads -> hết hạn sẽ xóa
+    with store.pool.connection() as conn:
+        assert conn.execute("SELECT busy_since FROM agent_threads WHERE thread_id = 'zalo:u1'").fetchone() == \
+            {'busy_since': None}
+
+    # Lỗi giữa 2 bước xóa để lại checkpoint không có dòng agent_threads: lần dọn sau trả về để xóa nốt
+    g.invoke({'log': ['khách']}, {'configurable': {'thread_id': 'crm:u2'}})
+    store.forget('crm:u2')
+    assert 'crm:u2' in svc.expire_threads(g)
+    assert g.get_state({'configurable': {'thread_id': 'crm:u2'}}).values == {}
+    assert 'crm:u2' not in svc.expire_threads(g)
+
+
 def test_policy_sync_lock_is_reentrant_per_call(agent_db):
     store.open_checkpointer(agent_db)
     for _ in range(2):                              # khóa được nhả sau mỗi lần

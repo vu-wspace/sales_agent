@@ -29,7 +29,8 @@ CATALOG_API_KEY = os.getenv('CATALOG_API_KEY', '')
 # Key gọi agent (header "Authorization: Bearer <key>", mọi endpoint trừ /health). Mỗi bên gọi 1 key riêng:
 #   AGENT_API_KEY: key của be (tên nguồn 'be', không giới hạn tốc độ: be đã giới hạn theo IP của khách).
 #   AGENT_CLIENT_KEYS: hệ thống tích hợp khác, "tên:key[:giới hạn/phút]" cách nhau bởi dấu phẩy,
-#     vd "zalo:k3y-zalo:120,crm:k3y-crm". Thu hồi 1 bên: xóa mục của bên đó rồi khởi động lại agent.
+#     vd "zalo:<key ngẫu nhiên 32+ ký tự>:120". Tên "be" dành riêng; giới hạn >= 1; cần đặt cả AGENT_API_KEY.
+#     Thu hồi 1 bên: xóa mục của bên đó rồi khởi động lại agent.
 # Không đặt key nào: ai gọi tới cổng agent cũng dùng được, chỉ để agent trong mạng nội bộ.
 AGENT_API_KEY = os.getenv('AGENT_API_KEY', '')
 AGENT_CLIENT_KEYS = os.getenv('AGENT_CLIENT_KEYS', '')

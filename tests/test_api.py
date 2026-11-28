@@ -588,10 +588,88 @@ def test_integrators_have_own_keys_threads_and_limits(monkeypatch):
     assert api.post('/v1/chat', json={'message': 'hi'}, headers={'Authorization': 'Bearer sai'}).status_code == 401
 
 
-@pytest.mark.parametrize('spec', ['Zalo:k', 'zalo:', 'zalo:k:nhieu', 'zalo:k,crm:k', 'zalo:a,zalo:b', 'zalo:k:1:2'])
+@pytest.mark.parametrize('spec', ['Zalo:k', 'zalo:', 'zalo', 'zalo:k:nhieu', 'zalo:k,crm:k', 'zalo:a,zalo:b',
+                                  'zalo:k:1:2', 'be:x', 'zalo:k:0', 'zalo:bk'])
 def test_bad_client_keys_are_rejected(spec):
-    with pytest.raises(ValueError):
-        svc.parse_clients('', spec, 60)
+    with pytest.raises(ValueError) as e:
+        svc.parse_clients('bk', spec, 60)
+    assert spec.split(',')[-1] not in str(e.value)   # không in lại nội dung mục (viết ngược thì đó là key)
+
+
+def test_client_keys_parse_and_need_be_key():
+    assert svc.parse_clients('bk', ' zalo:z:120 , crm:c ,', 60) == [
+        svc.Client('be', 'bk', 0), svc.Client('zalo', 'z', 120), svc.Client('crm', 'c', 60)]
+    assert svc.parse_clients('', '', 60) == []
+    with pytest.raises(ValueError, match='AGENT_API_KEY'):    # be sẽ bị 401 nếu chỉ bật key cho bên khác
+        svc.parse_clients('', 'zalo:z', 60)
+    with pytest.raises(ValueError, match='>= 1'):
+        svc.parse_clients('bk', 'zalo:z', 0)
+
+
+@pytest.fixture
+def keyed(monkeypatch):
+    monkeypatch.setattr(svc, 'AGENT_API_KEY', 'be-key')
+    monkeypatch.setattr(svc, 'AGENT_CLIENT_KEYS', 'zalo:z-key,crm:c-key')
+    monkeypatch.setattr(svc, '_last_seen', {})
+    svc._hits.clear()
+    return TestClient(svc.app), *({'Authorization': f'Bearer {k}'} for k in ('z-key', 'c-key', 'be-key'))
+
+
+def test_chat_and_stream_use_namespaced_threads(keyed):
+    api, zalo, crm, be_key = keyed
+    agent = svc.app.state.agent
+    r = api.post('/v1/chat', json={'message': 'xin chào', 'thread_id': 'u1'}, headers=zalo)
+    assert r.json()['thread_id'] == 'u1' and 'zalo:u1' in agent.threads and 'u1' not in agent.threads
+    assert svc._busy == {} and 'zalo:u1' in svc._last_seen
+    assert ':' not in api.post('/v1/chat', json={'message': 'hi'}, headers=zalo).json()['thread_id']
+
+    events = sse_events(api.post('/v1/chat/stream', json={'message': 'giá', 'thread_id': 'u1'}, headers=zalo))
+    assert events[0] == {'type': 'start', 'thread_id': 'u1'} and events[-1]['thread_id'] == 'u1'
+    assert len(agent.threads['zalo:u1']) == 8
+
+    # Lượt của zalo đang chạy: zalo bị 409, crm dùng cùng id 'u1' vẫn chat được
+    svc._busy['zalo:u1'] = __import__('time').monotonic()
+    blocked = sse_events(api.post('/v1/chat/stream', json={'message': 'nữa', 'thread_id': 'u1'}, headers=zalo))
+    assert blocked[-1]['type'] == 'error' and blocked[-1]['status'] == 409
+    assert api.post('/v1/chat', json={'message': 'hi', 'thread_id': 'u1'}, headers=crm).status_code == 200
+
+    # be giữ id không tiền tố: bật key không làm mất hội thoại web đang mở
+    api.post('/v1/chat', json={'message': 'hi', 'thread_id': 'web1'}, headers=be_key)
+    assert 'web1' in agent.threads
+
+
+def test_sources_cannot_touch_each_others_threads(keyed):
+    api, zalo, crm, be_key = keyed
+    agent = svc.app.state.agent = StateAgent()
+    api.post('/v1/threads', json={'thread_id': 'u1', 'greeting': 'Zalo'}, headers=zalo)
+    api.post('/v1/threads', json={'thread_id': 'u1', 'greeting': 'CRM'}, headers=crm)
+    # crm dùng end_thread_id / đường dẫn của id 'u1': chỉ chạm tới crm:u1
+    api.post('/v1/threads', json={'thread_id': 'u2', 'end_thread_id': 'u1'}, headers=crm)
+    api.post('/v1/threads/u1/order-placed', json={'order_id': 'DH1', 'answer': 'ok'}, headers=crm)
+    api.post('/v1/threads/u1/order-cancelled', json={'answer': 'hủy'}, headers=crm)
+    api.delete('/v1/threads/u1', headers=crm)
+    assert agent.states['zalo:u1']['messages'][0].text == 'Zalo' and 'orders' not in agent.states['zalo:u1']
+    # id có ':' (giả tiền tố) bị từ chối ở mọi chỗ
+    assert api.get('/v1/threads/zalo:u1', headers=crm).status_code == 422
+    assert api.post('/v1/threads', json={'end_thread_id': 'zalo:u1'}, headers=crm).status_code == 422
+    assert api.post('/v1/chat', json={'message': 'hi', 'thread_id': 'zalo:u1'}, headers=crm).status_code == 422
+    assert api.get('/v1/threads/' + 'x' * 101, headers=crm).status_code == 422
+    # be không xóa hàng loạt được (sẽ xóa hội thoại của mọi khách web)
+    assert api.delete('/v1/threads', headers=be_key).status_code == 400
+
+
+def test_rate_counter_failure_returns_503(keyed, monkeypatch):
+    import psycopg
+    api, zalo, crm, be_key = keyed
+    monkeypatch.setattr(svc.store, 'pool', object())
+
+    def down(client):
+        raise psycopg.OperationalError('agent-db tắt')
+
+    monkeypatch.setattr(svc.store, 'hit', down)
+    monkeypatch.setattr(svc.store, 'touch', lambda t: None)
+    assert api.get('/v1/threads/u1', headers=zalo).status_code == 503
+    assert api.get('/v1/threads/u1', headers=be_key).status_code == 200   # be không giới hạn: không cần bộ đếm
 
 
 def test_be_calls_versioned_agent_api():

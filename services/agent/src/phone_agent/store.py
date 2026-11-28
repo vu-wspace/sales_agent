@@ -60,8 +60,10 @@ def claim(thread_id: str, timeout_s: int) -> bool:
 
 
 def release(thread_id: str) -> None:
+    # Upsert: thread bị xóa giữa lượt (lượt vẫn ghi checkpoint) thì có lại dòng, lần hết hạn sau xóa hết
     with pool.connection() as conn:
-        conn.execute('UPDATE agent_threads SET busy_since = NULL WHERE thread_id = %s', (thread_id,))
+        conn.execute('INSERT INTO agent_threads (thread_id) VALUES (%s) '
+                     'ON CONFLICT (thread_id) DO UPDATE SET busy_since = NULL', (thread_id,))
 
 
 def forget(thread_id: str) -> None:
@@ -77,13 +79,21 @@ def expired(ttl_s: int, turn_timeout_s: int) -> list[str]:
                WHERE last_seen < now() - make_interval(secs => %s)
                  AND (busy_since IS NULL OR busy_since < now() - make_interval(secs => %s))
                RETURNING thread_id""", (ttl_s, turn_timeout_s)).fetchall()
-    return [r['thread_id'] for r in rows]
+        # Checkpoint không còn dòng agent_threads (lỗi giữa 2 bước xóa): trả về để xóa nốt, không giữ dữ liệu mãi.
+        # Thread mới luôn có dòng trước checkpoint đầu tiên (touch/claim chạy trước khi ghi state).
+        orphans = conn.execute(
+            """SELECT DISTINCT c.thread_id FROM checkpoints c
+               WHERE NOT EXISTS (SELECT 1 FROM agent_threads t WHERE t.thread_id = c.thread_id)""").fetchall()
+    return list(dict.fromkeys([r['thread_id'] for r in rows] + [r['thread_id'] for r in orphans]))
 
 
 def threads_with_prefix(prefix: str) -> list[str]:
     with pool.connection() as conn:
-        rows = conn.execute('SELECT thread_id FROM agent_threads WHERE left(thread_id, length(%s)) = %s',
-                            (prefix, prefix)).fetchall()
+        # Cả bảng checkpoints: dữ liệu hội thoại nằm ở đó, không để sót thread mất dòng agent_threads
+        rows = conn.execute(
+            """SELECT thread_id FROM agent_threads WHERE left(thread_id, length(%s)) = %s
+               UNION SELECT thread_id FROM checkpoints WHERE left(thread_id, length(%s)) = %s""",
+            (prefix, prefix, prefix, prefix)).fetchall()
     return [r['thread_id'] for r in rows]
 
 

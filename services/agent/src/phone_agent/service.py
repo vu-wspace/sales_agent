@@ -10,9 +10,11 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
+from typing import Annotated
 from dataclasses import dataclass
 
 import groq
+import psycopg
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.exceptions import ModelError
@@ -41,6 +43,8 @@ log = logging.getLogger('uvicorn.error')
 # Lỗi của LLM/agent được trả thành 429 (quá tải) hoặc 502; lỗi khác là lỗi code -> 500
 LLM_ERRORS = (groq.APIError, openrouter_errors.OpenRouterError, openrouter_errors.NoResponseError,
               ModelError, GraphRecursionError)
+# thread_id do bên gọi đặt: như be (chữ, số, _, -), không có ':' để không giả được tiền tố nguồn
+THREAD_ID = r'^[\w-]+$'
 RATE_LIMIT_DETAIL = 'Dạ, hệ thống đang quá tải, anh/chị thử lại sau ít phút giúp em nha.'
 
 # Dòng trạng thái hiện trên giao diện khi agent đang chạy tool (/chat/stream)
@@ -106,13 +110,14 @@ def _touch(thread_id: str) -> None:
 
 
 def _delete_thread(agent, thread_id: str) -> None:
+    # Xóa checkpoint trước: lỗi giữa chừng thì dòng agent_threads còn, lần dọn sau xóa lại được
+    checkpointer = getattr(agent, 'checkpointer', None)
+    if checkpointer is not None:
+        checkpointer.delete_thread(thread_id)
     if store.pool is not None:
         store.forget(thread_id)
     else:
         _last_seen.pop(thread_id, None)
-    checkpointer = getattr(agent, 'checkpointer', None)
-    if checkpointer is not None:
-        checkpointer.delete_thread(thread_id)
 
 
 def expire_threads(agent, now: float | None = None) -> list[str]:
@@ -210,12 +215,21 @@ class Client:
 def parse_clients(be_key: str, spec: str, default_rate: int) -> list[Client]:
     """be (AGENT_API_KEY, không giới hạn) + các hệ thống tích hợp (AGENT_CLIENT_KEYS: "tên:key[:giới hạn/phút]", ...)."""
     clients = [Client('be', be_key, 0)] if be_key else []
-    for item in filter(None, (s.strip() for s in spec.split(','))):
-        name, key, *rate = item.split(':')
-        if (not re.fullmatch(r'[a-z0-9_-]{1,30}', name) or not key or len(rate) > 1
-                or (rate and not rate[0].isdigit()) or any(c.name == name or c.key == key for c in clients)):
-            raise ValueError(f'AGENT_CLIENT_KEYS sai ở mục "{name}": cần "tên:key[:giới hạn/phút]", '
-                             'tên chữ thường, không trùng tên hoặc key với bên khác')
+    items = [s.strip() for s in spec.split(',') if s.strip()]
+    if items and not be_key:
+        # be không gửi key thì mọi lượt chat của khách web bị 401 ngay khi bật key cho bên khác
+        raise ValueError('Có AGENT_CLIENT_KEYS thì phải đặt cả AGENT_API_KEY (key của be)')
+    if items and default_rate < 1:
+        raise ValueError('AGENT_CLIENT_RATE_PER_MIN phải >= 1')
+    for n, item in enumerate(items, 1):
+        name, key, *rate = item.split(':') + ([] if ':' in item else [''])
+        # 'be' dành riêng cho be (được gọi webhook chính sách); giới hạn 0 dễ bị hiểu nhầm là chặn nên không cho phép
+        if (not re.fullmatch(r'[a-z0-9_-]{1,30}', name) or name == 'be' or not key or len(rate) > 1
+                or (rate and not (rate[0].isdigit() and int(rate[0]) >= 1))
+                or any(c.name == name or c.key == key for c in clients)):
+            # Không in lại nội dung mục: viết ngược "key:tên" thì key lộ ra log
+            raise ValueError(f'AGENT_CLIENT_KEYS sai ở mục thứ {n}: cần "tên:key[:giới hạn/phút]", tên chữ thường '
+                             '(không dùng "be"), giới hạn >= 1, không trùng tên hoặc key với bên khác')
         clients.append(Client(name, key, int(rate[0]) if rate else default_rate))
     return clients
 
@@ -267,7 +281,12 @@ def check_api_key(request: Request) -> None:
         raise HTTPException(401, 'Sai hoặc thiếu API key của agent')
     request.state.client = client
     log.info('%s %s client=%s', request.method, request.url.path, client.name)
-    if _over_limit(client):
+    try:
+        over = _over_limit(client)
+    except psycopg.Error as e:
+        log.error('Không đếm được request của %s (%s)', client.name, type(e).__name__)
+        raise HTTPException(503, 'Agent tạm thời không kiểm tra được giới hạn request, thử lại sau')
+    if over:
         raise HTTPException(429, f'Quá {client.rate_per_min} request/phút cho key "{client.name}"',
                             headers={'Retry-After': '60'})
 
@@ -280,20 +299,22 @@ def be_only(request: Request) -> None:
 
 
 def _tid(request: Request, thread_id: str) -> str:
-    """thread_id lưu trong agent = '<nguồn>:<thread_id>' khi có key: mỗi hệ thống chỉ thấy, ghi, xóa hội thoại của
-    mình, và xóa được toàn bộ dữ liệu theo nguồn. Không có key (mạng nội bộ): giữ nguyên."""
+    """thread_id lưu trong agent = '<nguồn>:<thread_id>' với hệ thống tích hợp: mỗi bên chỉ thấy, ghi, xóa hội thoại
+    của mình, và xóa được toàn bộ dữ liệu theo nguồn. be (và khi không đặt key) giữ nguyên id: hội thoại đang mở không
+    mất khi bật key. Không va chạm vì thread_id không được chứa ':' (THREAD_ID)."""
     client = request.state.client
-    return f'{client.name}:{thread_id}' if client else thread_id
+    return f'{client.name}:{thread_id}' if client and client.name != 'be' else thread_id
 
 
 app = FastAPI(title='Phone Sales Agent', version='1.0.0', lifespan=lifespan, dependencies=[Depends(check_api_key)])
 # Mọi endpoint khai báo trên router, gắn ở cuối file dưới /v1 (và đường dẫn cũ không có /v1 để tương thích)
 router = APIRouter()
+ThreadId = Annotated[str, Path(max_length=100, pattern=THREAD_ID)]
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
-    thread_id: str | None = Field(default=None, max_length=100)
+    thread_id: str | None = Field(default=None, max_length=100, pattern=THREAD_ID)
 
     @field_validator('message')
     @classmethod
@@ -327,10 +348,10 @@ class ThreadState(BaseModel):
 
 
 class NewThread(BaseModel):
-    thread_id: str | None = Field(default=None, max_length=100)
+    thread_id: str | None = Field(default=None, max_length=100, pattern=THREAD_ID)
     greeting: str | None = Field(default=None, max_length=2000)  # lời chào ghi vào lịch sử như agent đã nói
     customer: dict | None = None                                  # hồ sơ khách quen (chỉ dùng khi AGENT_IMPL=graph)
-    end_thread_id: str | None = Field(default=None, max_length=100)  # cuộc trò chuyện cũ cần xóa
+    end_thread_id: str | None = Field(default=None, max_length=100, pattern=THREAD_ID)  # cuộc trò chuyện cũ cần xóa
 
 
 class PolicyUpdated(BaseModel):
@@ -438,7 +459,7 @@ def _n_messages(agent, config: dict) -> int:
     return len(agent.get_state(config).values.get('messages', []))
 
 
-def _response(thread_id: str, values: dict, n_before: int) -> ChatResponse:
+def _response(thread_id: ThreadId, values: dict, n_before: int) -> ChatResponse:
     new_messages = values['messages'][n_before:]
     tools = [tc['name'] for m in new_messages for tc in (getattr(m, 'tool_calls', None) or [])]
     return ChatResponse(thread_id=thread_id, answer=values['messages'][-1].text, tools=tools,
@@ -554,7 +575,7 @@ def new_thread(req: NewThread, request: Request):
 
 
 @router.get('/threads/{thread_id}', response_model=ThreadState)
-def get_thread(thread_id: str, request: Request):
+def get_thread(thread_id: ThreadId, request: Request):
     """Giỏ hàng, bước bán hàng của cuộc trò chuyện (be đọc giỏ ở đây để tính giá, tạo đơn)."""
     key = _tid(request, thread_id)
     _touch(key)
@@ -564,7 +585,7 @@ def get_thread(thread_id: str, request: Request):
 
 
 @router.delete('/threads/{thread_id}', status_code=204)
-def delete_thread(thread_id: str, request: Request):
+def delete_thread(thread_id: ThreadId, request: Request):
     _delete_thread(request.app.state.agent, _tid(request, thread_id))
 
 
@@ -573,7 +594,8 @@ def delete_source_threads(request: Request):
     """Xóa mọi hội thoại của nguồn đang gọi (theo key): ngừng tích hợp, hoặc xóa dữ liệu theo yêu cầu. {deleted: số thread}"""
     prefix = _tid(request, '')
     if not prefix:
-        raise HTTPException(400, 'Chỉ dùng được khi agent bật API key (mỗi nguồn 1 key)')
+        raise HTTPException(400, 'Chỉ dành cho hệ thống tích hợp có key riêng (AGENT_CLIENT_KEYS); '
+                                 'be xóa từng thread bằng DELETE /v1/threads/{id}')
     ids = store.threads_with_prefix(prefix) if store.pool is not None else \
         [t for t in list(_last_seen) if t.startswith(prefix)]
     for thread_id in ids:
@@ -582,7 +604,7 @@ def delete_source_threads(request: Request):
 
 
 @router.post('/threads/{thread_id}/order-placed', status_code=204)
-def order_placed(thread_id: str, req: OrderPlaced, request: Request):
+def order_placed(thread_id: ThreadId, req: OrderPlaced, request: Request):
     """Đơn đã lưu: ghi vào lịch sử để lượt sau agent biết, làm trống giỏ để khách mua tiếp không bị cộng dồn."""
     key = _tid(request, thread_id)
     _touch(key)
@@ -594,7 +616,7 @@ def order_placed(thread_id: str, req: OrderPlaced, request: Request):
 
 
 @router.post('/threads/{thread_id}/order-cancelled', status_code=204)
-def order_cancelled(thread_id: str, req: OrderCancelled, request: Request):
+def order_cancelled(thread_id: ThreadId, req: OrderCancelled, request: Request):
     """Khách hủy form đặt hàng: ghi câu trả lời cố định, làm trống giỏ để agent không mời chốt đơn / bán kèm tiếp."""
     key = _tid(request, thread_id)
     _touch(key)
