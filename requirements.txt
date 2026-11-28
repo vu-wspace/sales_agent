@@ -1,5 +1,5 @@
 # Danh sách thư viện cho người dùng pip (cả 3 package: common, agent, be). Nguồn chính là pyproject.toml của
-# packages/common, services/agent, services/be + uv.lock (cài bằng `uv sync --all-packages`);
+# packages/common, services/agent, services/be + uv.lock của từng service (máy dev: `uv sync` ở thư mục gốc);
 # sửa thư viện ở các pyproject.toml rồi cập nhật file này cho khớp.
 #   pip install -r requirements.txt
 -e ./packages/common
@@ -24,8 +24,9 @@ langchain-nvidia-ai-endpoints>=1.5.0
 # Tool tìm kiếm web
 tavily-python>=0.8.5
 
-# Database sản phẩm (Postgres)
-psycopg[binary]>=3.2
+# Postgres: database của be (sản phẩm, đơn hàng) và database riêng của agent (hội thoại, giỏ hàng)
+psycopg[binary,pool]>=3.2
+langgraph-checkpoint-postgres>=3.2.1
 
 # Gửi email xác nhận đơn hàng (mailer.py, kèm jinja2 cho template)
 fastapi-mail>=1.6.8

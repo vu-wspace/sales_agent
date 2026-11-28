@@ -6,13 +6,13 @@ from textwrap import dedent
 
 import psycopg
 from langchain_core.messages import HumanMessage, SystemMessage
-from phone_common import llm, pii, promotions
-from phone_common.config import ROOT
+from phone_common import llm, pii
 from phone_common.fallback import FallbackMiddleware
 from phone_common.textnorm import clean_answer, keep_name
 from psycopg.rows import dict_row
 
-from phone_api.config import DATABASE_URL
+from phone_api import promotions
+from phone_api.config import DATABASE_URL, ROOT
 
 log = logging.getLogger(__name__)
 SCHEMA = ROOT / 'data_schema' / 'orders.sql'

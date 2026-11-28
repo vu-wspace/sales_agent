@@ -4,8 +4,7 @@ from email.header import decode_header, make_header
 
 import pytest
 
-from phone_common import config
-from phone_api import mailer
+from phone_api import config, mailer
 
 ORDER = {
     'order_id': 'DH00000001', 'name': 'Nguyễn <b>Văn</b> A', 'phone': '0912345678', 'email': 'khach@example.com',

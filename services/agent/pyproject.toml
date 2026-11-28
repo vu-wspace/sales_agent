@@ -13,9 +13,26 @@ dependencies = [
     "pyvi>=0.1.1",
     "tavily-python>=0.8.5",
     "httpx>=0.28",
+    "langgraph-checkpoint-postgres>=3.2.1",
+    "psycopg[binary,pool]>=3.2",
     "fastapi>=0.120.0",
     "uvicorn[standard]>=0.38.0",
 ]
+
+# Project uv độc lập với uv.lock riêng (services/agent/uv.lock): nâng thư viện của agent không đổi lock của be.
+# phone-common chỉ là thư viện tiện ích, cài từ đường dẫn.
+[tool.uv.sources]
+
+phone-common = { path = "../../packages/common", editable = true }
+torch = [{ index = "pytorch-cpu" }]
+
+# torch bản CPU (không kéo CUDA ~ vài GB khi build Docker trên Linux)
+[[tool.uv.index]]
+
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]

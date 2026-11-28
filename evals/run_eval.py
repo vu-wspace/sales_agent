@@ -30,7 +30,7 @@ from pathlib import Path  # noqa: E402
 import pandas as pd  # noqa: E402
 from langchain_core.messages import ToolMessage  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
-from phone_common.config import COLLECTION, POLICY_DIR  # noqa: E402
+from phone_agent.config import COLLECTION, POLICY_DIR  # noqa: E402
 from phone_common.llm import google_llm  # noqa: E402
 from phone_agent.vector_db import count_documents, get_client, get_retriever  # noqa: E402
 

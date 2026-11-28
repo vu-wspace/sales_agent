@@ -8,8 +8,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import InjectedToolCallId
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
-from phone_common import promotions
-from phone_common.config import POLICY_TOP_K
+from phone_agent.config import POLICY_TOP_K
 from phone_common.textnorm import strip_accents
 from tavily import TavilyClient
 
@@ -424,7 +423,6 @@ def get_promotions(product: str = '') -> str:
     product: tên sản phẩm khách đang xem để chỉ lấy khuyến mãi áp dụng cho sản phẩm đó (để trống = tất cả).
     Dùng khi khách hỏi khuyến mãi, ưu đãi, mã giảm giá, hoặc khi đang do dự. Chỉ nêu khuyến mãi có trong kết quả."""
     try:
-        promos = _catalog('/promotions')
         item = None
         if product.strip():
             hits = _match(_catalog('/products'), product)
@@ -433,10 +431,10 @@ def get_promotions(product: str = '') -> str:
                 return (f"Có nhiều sản phẩm khớp '{product}': {names}. Hỏi lại khách." if hits else
                         f"Không tìm thấy sản phẩm '{product}'.")
             item = hits[0]
+        # be lọc theo phạm vi khuyến mãi (hãng, loại, sản phẩm): agent không cần biết luật áp dụng
+        promos = _catalog('/promotions', product_id=item['product_id'] if item else None)
     except Exception as e:
         return DB_ERROR.format(type(e).__name__)
-    if item:
-        promos = [p for p in promos if promotions.applies_to(p, item)]
     target = f" cho {item['name']}" if item else ''
     if not promos:
         return (f'Hiện không có chương trình khuyến mãi nào đang áp dụng{target}. Không nêu khuyến mãi, giảm giá, '

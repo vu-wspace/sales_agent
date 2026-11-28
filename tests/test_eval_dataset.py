@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from phone_common.config import POLICY_DIR
+from phone_agent.config import POLICY_DIR
 from phone_agent.data_prep import load_policy_chunks
 from phone_agent.tools import TOOLS
 

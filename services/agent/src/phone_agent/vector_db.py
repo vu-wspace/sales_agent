@@ -4,7 +4,7 @@ from functools import lru_cache
 import phone_common  # noqa: F401 - phải import đầu tiên khi chạy file trực tiếp (xem __init__.py)
 from langchain_core.embeddings import Embeddings
 from langchain_qdrant import QdrantVectorStore
-from phone_common.config import (
+from phone_agent.config import (
     COLLECTION,
     EMBEDDING_MODEL,
     POLICY_MIN_SCORE,
@@ -13,7 +13,6 @@ from phone_common.config import (
     QDRANT_URL,
     VECTOR_SIZE,
 )
-from phone_common.policies import policy_hash
 from pyvi import ViTokenizer
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -72,16 +71,16 @@ def chunk_ids(chunks) -> list[str]:
     # id tính từ cả nội dung chunk: cùng nội dung thì cùng id
     return [str(uuid.uuid5(uuid.NAMESPACE_URL, f'{c.source}#{i}#{c.page_content}')) for i, c in enumerate(chunks)]
 
-def _of(slug: str) -> FilterSelector:
-    return FilterSelector(filter=Filter(must=[FieldCondition(key='metadata.source', match=MatchValue(value=slug))]))
+def _source_filter(slug: str) -> Filter:
+    return Filter(must=[FieldCondition(key='metadata.source', match=MatchValue(value=slug))])
 
-def upsert_policy(slug: str, content_md: str, prompt: str | None = None) -> int:
-    """Chunk + embed 1 tài liệu chính sách, thay toàn bộ chunk cũ của nó. prompt (hướng dẫn trả lời riêng) và hash
-    lưu trong payload từng chunk để search_policy trả prompt và agent đối soát với hash của be."""
+def upsert_policy(slug: str, content_md: str, prompt: str | None, doc_hash: str) -> int:
+    """Chunk + embed 1 tài liệu chính sách, thay toàn bộ chunk cũ của nó. prompt (hướng dẫn trả lời riêng) và doc_hash
+    (phiên bản do be gửi) lưu trong payload từng chunk để search_policy trả prompt và agent đối soát với be."""
     chunks = split_markdown(content_md, slug)
     if not chunks:
         raise ValueError(f'Tài liệu {slug} không có nội dung')
-    meta = {'source': slug, 'prompt': prompt, 'doc_hash': policy_hash(content_md, prompt)}
+    meta = {'source': slug, 'prompt': prompt, 'doc_hash': doc_hash}
     texts = [c.page_content for c in chunks]
     get_vector_store()  # tạo collection nếu chưa có
     # Ghi chunk mới trước. Nếu upsert lỗi thì vẫn giữ được các chunk cũ.
@@ -92,25 +91,28 @@ def upsert_policy(slug: str, content_md: str, prompt: str | None = None) -> int:
               for i, v, t, c in zip(chunk_ids(chunks), vectors, texts, chunks)]
     client = get_client()
     client.upsert(COLLECTION, points=points, wait=True)
-    obsolete = Filter(must=_of(slug).filter.must, must_not=[HasIdCondition(has_id=[p.id for p in points])])
+    obsolete = _source_filter(slug)
+    obsolete.must_not = [HasIdCondition(has_id=[p.id for p in points])]
     client.delete(COLLECTION, points_selector=FilterSelector(filter=obsolete), wait=True)
     return len(points)
 
 def delete_policy(slug: str) -> None:
-    get_client().delete(COLLECTION, points_selector=_of(slug))
+    get_client().delete(COLLECTION, points_selector=FilterSelector(filter=_source_filter(slug)))
 
-def policy_hashes() -> dict[str, str | None]:
+def policy_hashes(slug: str | None = None) -> dict[str, str | None]:
     """{slug: hash} của các tài liệu đang có trong Qdrant (mỗi chunk mang hash của tài liệu)."""
     hashes, offset = {}, None
+    client = get_client()
+    source_filter = _source_filter(slug) if slug is not None else None
     while True:
-        points, offset = get_client().scroll(COLLECTION, limit=256, offset=offset, with_vectors=False,
-                                             with_payload=['metadata.source', 'metadata.doc_hash'])
+        points, offset = client.scroll(COLLECTION, scroll_filter=source_filter, limit=256, offset=offset,
+                                       with_vectors=False, with_payload=['metadata.source', 'metadata.doc_hash'])
         for p in points:
             m = (p.payload or {}).get('metadata') or {}
-            slug, digest = m.get('source'), m.get('doc_hash')
-            if slug:
+            source, digest = m.get('source'), m.get('doc_hash')
+            if source:
                 # A failed cleanup can leave both generations. Reconcile the whole document next time.
-                hashes[slug] = digest if hashes.get(slug, digest) == digest else None
+                hashes[source] = digest if hashes.get(source, digest) == digest else None
         if offset is None:
             return hashes
 

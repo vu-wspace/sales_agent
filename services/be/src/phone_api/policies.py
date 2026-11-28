@@ -1,20 +1,49 @@
 # Chính sách cửa hàng: be giữ bản gốc trong Postgres, agent chỉ chunk + embed + lưu Qdrant.
 # Quy trình (api.py: /admin/policies): sửa bản nháp -> kiểm tra bằng câu hỏi mẫu (agent thử bản nháp, không ghi
 # Qdrant) -> xuất bản (thêm 1 version vào lịch sử) -> báo agent tải bản mới.
+#
+# Hợp đồng với agent (README, mục "API chính sách giữa be và agent"): be gửi kèm `hash` của mỗi tài liệu đã xuất bản
+# (GET /policies, GET /policies/{slug}); agent lưu nguyên hash đó và chỉ so sánh, không tự tính. Đổi cách tính hash
+# ở đây không cần deploy lại agent (lần đối soát sau agent thấy hash khác thì tải lại tài liệu).
+import hashlib
+import json
 import logging
+import re
 
 import httpx
 import psycopg
-from phone_common.config import ROOT
-from phone_common.policies import load_seed, policy_hash
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from phone_api.config import DATABASE_URL
+from phone_api.config import DATABASE_URL, POLICY_DIR, ROOT
 
 log = logging.getLogger('uvicorn.error')  # cùng logger với api.py để log đồng bộ hiện trong docker logs
 SCHEMA = ROOT / 'data_schema' / 'policies.sql'
 PUBLISHED = 'slug, content_md, prompt, version, updated_at'
+
+# slug = tên tài liệu, cũng là `source` của chunk trong Qdrant và tên nhóm trong kết quả search_policy (vd 'doi-tra.md')
+SLUG = r'^[a-z0-9][a-z0-9-]*\.md$'
+MAX_CONTENT = 100_000   # ký tự markdown mỗi tài liệu (agent nhận tối đa 100_000, xem phone_agent/service.py)
+MAX_PROMPT = 4_000
+
+
+def policy_hash(content_md: str, prompt: str | None) -> str:
+    """Phiên bản của 1 tài liệu (nội dung + prompt), gửi cho agent để biết có cần tạo lại embedding."""
+    return hashlib.sha256(f'{content_md}\0{prompt or ""}'.encode('utf-8')).hexdigest()
+
+
+def load_seed(policy_dir=POLICY_DIR) -> list[dict]:
+    """Dữ liệu mẫu: data_schema/policies/*.md + prompt riêng (prompts.json) + câu hỏi kiểm tra (checks.json, lấy từ
+    các câu policy của evals/dataset.jsonl). Nạp vào database khi bảng rỗng."""
+    prompts = json.loads((policy_dir / 'prompts.json').read_text(encoding='utf-8'))
+    checks = json.loads((policy_dir / 'checks.json').read_text(encoding='utf-8'))
+    files = sorted(policy_dir.glob('*.md'))
+    if not files:
+        raise FileNotFoundError(f'Không có file chính sách .md trong {policy_dir}')
+    docs = [{'slug': f.name, 'content_md': f.read_text(encoding='utf-8'), 'prompt': prompts.get(f.name),
+             'checks': checks.get(f.name, [])} for f in files]
+    assert all(re.fullmatch(SLUG, d['slug']) for d in docs), 'Tên file chính sách phải dạng chữ-thường-gạch-ngang.md'
+    return docs
 
 
 class PolicyError(Exception):

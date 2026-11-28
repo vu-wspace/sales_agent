@@ -299,7 +299,7 @@ def test_search_policy_off_topic_returns_not_found(monkeypatch):
 
 
 def test_every_seed_policy_has_a_prompt():
-    from phone_common.policies import load_seed
+    from phone_api.policies import load_seed
     seed = load_seed()
     assert len(seed) == 5 and all(d['prompt'] for d in seed)
 
@@ -437,16 +437,16 @@ def test_add_to_cart_still_asks_when_phone_unknown(belkin_db):
 
 
 def test_agent_catalog_requests_reach_backend(monkeypatch):
-    from urllib.parse import urlsplit
+    import importlib
 
+    import httpx
     from fastapi.testclient import TestClient
     from phone_agent import backend
     from phone_api import catalog
     from phone_api.api import app
+    from phone_agent import config
 
     monkeypatch.setattr(catalog, 'CATALOG_API_KEY', 'catalog-test-key')
-    monkeypatch.setattr(backend, 'CATALOG_API_KEY', 'catalog-test-key')
-    monkeypatch.setattr(backend, 'BE_URL', 'http://backend:8002/')
     calls = []
 
     def read_rows(sql, params):
@@ -459,17 +459,27 @@ def test_agent_catalog_requests_reach_backend(monkeypatch):
     client = TestClient(app)
     monkeypatch.setattr(catalog, '_read_rows', read_rows)
 
-    def get(url, *, params, headers, timeout, trust_env):
-        assert urlsplit(url).netloc == 'backend:8002'
-        assert timeout == 5 and not trust_env
-        return client.get(urlsplit(url).path, params=params, headers=headers)
+    def send(request):
+        assert request.url.netloc == b'backend:8002'
+        assert request.extensions['timeout']['read'] == 5
+        response = client.get(request.url.raw_path.decode(), headers=dict(request.headers))
+        return httpx.Response(response.status_code, content=response.content)
 
-    monkeypatch.setattr(backend.httpx, 'get', get)
-    assert client.get('/products?view=summary').status_code == 401
-    assert 'Test Phone' in tools.search_products.invoke({'brand': 'Test'})
-    assert tools._catalog('/internal/catalog/compatible', phone_ids=['phone-1', 'phone-2'], accessory_ids=['case-1']) == [
-        {'accessory_id': 'case-1'},
-    ]
+    # Build the real module client from test config, then replace only its network transport.
+    try:
+        with monkeypatch.context() as m:
+            m.setattr(config, 'BE_URL', 'http://backend:8002/')
+            m.setattr(config, 'CATALOG_API_KEY', 'catalog-test-key')
+            importlib.reload(backend)
+        assert backend._client.trust_env is False
+        backend._client._transport = httpx.MockTransport(send)
+        assert client.get('/products?view=summary').status_code == 401
+        assert 'Test Phone' in tools.search_products.invoke({'brand': 'Test'})
+        assert tools._catalog('/internal/catalog/compatible', phone_ids=['phone-1', 'phone-2'],
+                              accessory_ids=['case-1']) == [{'accessory_id': 'case-1'}]
+    finally:
+        backend._client.close()
+        importlib.reload(backend)
     assert calls == [('phone', 'Test', 'Test'), (['phone-1', 'phone-2'], ['case-1'])]
 
 

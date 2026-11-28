@@ -2,7 +2,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from phone_common.config import CHUNK_MAX_CHARS, POLICY_DIR
+from phone_agent.config import CHUNK_MAX_CHARS, POLICY_DIR
 
 @dataclass
 class Chunk:

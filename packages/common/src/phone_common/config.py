@@ -1,30 +1,7 @@
 import os
-from pathlib import Path
 
-# Thư mục gốc repo (data_schema/...). Package cài dạng editable nên tính từ vị trí file: packages/common/src/phone_common/config.py
-ROOT = Path(__file__).resolve().parents[4]
-POLICY_DIR = ROOT / 'data_schema' / 'policies'   # chính sách đổi trả, giao hàng, trả góp, bảo hành (.md) -> nạp vào Qdrant
-CHUNK_MAX_CHARS = 900                            # model bkai cắt ở 256 token, chunk dài hơn sẽ mất phần cuối khi embed
-
-# Database sản phẩm (products, variants, compatibility). Mặc định trỏ tới container phone_db (cổng 5433)
-
-# Vector DB
-QDRANT_URL = os.getenv('QDRANT_URL', 'http://localhost:6333')
-COLLECTION = 'phone_policies'
-EMBEDDING_MODEL = 'bkai-foundation-models/vietnamese-bi-encoder'
-VECTOR_SIZE = 768
-
-# Lọc kết quả search_policy (điểm cosine, đo trên 19 câu policy của bộ eval 28/10/2026): câu đúng chủ đề có
-# top 1 >= 0.30, câu lạc đề (bitcoin, thơ, thời tiết) 0.10-0.21. Đoạn kém đoạn tốt nhất quá MARGIN thì bỏ để
-# tránh lan man. k=3, margin=0.08: vẫn ra đúng file 19/19, trung bình 2.2 đoạn / 1.3 file mỗi câu
-# (margin 0.15 thì 2.4 đoạn / 1.3 file; k=4 thì kéo thêm file không liên quan).
-POLICY_TOP_K = 3
-POLICY_MIN_SCORE = 0.25
-POLICY_SCORE_MARGIN = 0.08
-
-# Agent service dùng bản nào: 'graph' (graph.py, có trạng thái hội thoại + giỏ hàng) hoặc 'agent' (agent.py)
-AGENT_IMPL = os.getenv('AGENT_IMPL', 'graph').lower()
-
+# Chỉ cấu hình của các tiện ích dùng chung (llm.py, pii.py). Cấu hình riêng của từng service nằm ở
+# phone_agent/config.py và phone_api/config.py.
 
 # Khóa mã hóa số điện thoại, email của khách trong database (Fernet, base64 32 byte). Tạo khóa:
 #   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -35,26 +12,3 @@ PII_KEY = os.getenv('PII_KEY', '')
 ROUTER9_BASE_URL = os.getenv('ROUTER9_BASE_URL', 'http://localhost:20128/v1')
 ROUTER9_API_KEY = os.getenv('ROUTER9_API_KEY', '')
 ROUTER9_MODEL = os.getenv('ROUTER9_MODEL', 'agy/gemini-3.8-flash-medium')
-
-# Email xác nhận đơn hàng (mailer.py). Chạy trên máy dùng Mailpit trong docker-compose (SMTP localhost:1025, xem email
-# tại http://localhost:8025, không gửi ra Internet). Chạy thật thì đổi sang Gmail (App Password), SES, SendGrid...
-# SMTP_HOST để trống = tắt gửi email (đơn ghi email_status = 'skipped').
-SMTP_HOST = os.getenv('SMTP_HOST', '')
-SMTP_PORT = int(os.getenv('SMTP_PORT', '1025'))
-SMTP_USER = os.getenv('SMTP_USER', '')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
-SMTP_STARTTLS = os.getenv('SMTP_STARTTLS', 'false').lower() == 'true'
-SMTP_SSL = os.getenv('SMTP_SSL', 'false').lower() == 'true'          # cổng 465
-MAIL_FROM = os.getenv('MAIL_FROM', 'PhoneShop Demo <no-reply@phoneshop.example>')
-
-# Agent chạy thành service riêng (services/agent, phone_agent.service). be gọi agent qua AGENT_URL.
-# AGENT_API_KEY: đặt thì mọi endpoint của agent (trừ /health) đòi header "Authorization: Bearer <key>" -
-# bắt buộc khi mở agent cho hệ thống khác tích hợp; để trống chỉ dùng trong mạng nội bộ (docker compose).
-AGENT_URL = os.getenv('AGENT_URL', 'http://localhost:8001')
-BE_URL = os.getenv('BE_URL', 'http://localhost:8002')
-CATALOG_API_KEY = os.getenv('CATALOG_API_KEY', '')
-AGENT_API_KEY = os.getenv('AGENT_API_KEY', '')
-
-# be: key cho /admin/policies (header "Authorization: Bearer <key>"). Để trống thì tắt các endpoint quản trị
-ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', '')
-CHAT_RATE_PER_MIN = int(os.getenv('CHAT_RATE_PER_MIN', '20'))  # be: số lượt chat, mở phiên, đặt hàng tối đa mỗi IP mỗi phút (0: tắt)

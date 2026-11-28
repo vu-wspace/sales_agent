@@ -1,17 +1,24 @@
-# uv workspace: 3 package Python, mỗi service cài riêng thư viện của mình
-#   packages/common  (phone-common): config, LLM + fallback, PII, khuyến mãi, chuẩn hóa chữ - agent và be dùng chung
-#   services/agent   (phone-agent):  LangGraph agent + HTTP API (cổng 8001), Qdrant, embedding (torch)
-#   services/be      (phone-api):    đơn hàng, phiên chat, email; gọi agent qua HTTP (cổng 8002), không kéo torch
+# 3 package Python, mỗi service là 1 project uv độc lập với uv.lock riêng (services/agent/uv.lock, services/be/uv.lock):
+#   packages/common  (phone-common): tiện ích dùng chung - LLM + fallback, mã hóa/che PII, chuẩn hóa chữ tiếng Việt
+#   services/agent   (phone-agent):  LangGraph agent + HTTP API (cổng 8001), Qdrant, embedding (torch), Postgres riêng
+#   services/be      (phone-api):    đơn hàng, khuyến mãi, chính sách, phiên chat, email; gọi agent qua HTTP (cổng 8002)
 #   services/fe      : nginx phục vụ giao diện, chuyển /chat, /order, /session sang be (cổng 8000), không có Python
-# Cài tất cả để chạy test/eval trên máy: uv sync --all-packages
-[tool.uv.workspace]
-members = ["packages/common", "services/agent", "services/be"]
+# File này (và uv.lock ở gốc) chỉ để chạy test/eval trên máy: cài cả 3 package dạng editable. Docker không dùng.
+#   uv sync
+[project]
+name = "sales-agent-dev"
+version = "0.1.0"
+requires-python = ">=3.12.15"
+dependencies = ["phone-common", "phone-agent", "phone-api"]
+
+[tool.uv]
+package = false
 
 [tool.uv.sources]
-phone-common = { workspace = true }
-phone-agent = { workspace = true }
-phone-api = { workspace = true }
-# torch bản CPU (không kéo CUDA ~ vài GB khi build Docker trên Linux)
+phone-common = { path = "packages/common", editable = true }
+phone-agent = { path = "services/agent", editable = true }
+phone-api = { path = "services/be", editable = true }
+# torch bản CPU (không kéo CUDA ~ vài GB)
 torch = [{ index = "pytorch-cpu" }]
 
 [[tool.uv.index]]

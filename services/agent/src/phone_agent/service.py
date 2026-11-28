@@ -1,5 +1,5 @@
 # HTTP API của agent: be (services/be) gọi vào đây, hệ thống khác (web khác, Zalo, Messenger...) cũng tích hợp được.
-# Agent giữ lịch sử hội thoại + giỏ hàng theo thread_id (InMemorySaver). Bên ngoài chỉ đọc state và ghi qua vài
+# Agent giữ lịch sử hội thoại + giỏ hàng theo thread_id (Postgres riêng của agent, xem store.py). Bên ngoài chỉ đọc state và ghi qua vài
 # sự kiện cố định (đặt hàng, hủy, mở phiên): không có endpoint ghi state tùy ý vì giá trong giỏ được dùng để tạo đơn.
 import asyncio
 import json
@@ -16,18 +16,16 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.exceptions import ModelError
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
 from openrouter import errors as openrouter_errors
 from phone_common import pii
-from phone_common.config import AGENT_API_KEY, AGENT_IMPL
 from phone_common.llm import is_rate_limited
-from phone_common.policies import MAX_CONTENT, SLUG
 from phone_common.textnorm import normalize_user_text
 from pydantic import BaseModel, Field, field_validator
 
-from phone_agent import policy_sync
+from phone_agent import policy_sync, store
 from phone_agent.agent import build_agent
+from phone_agent.config import AGENT_API_KEY, AGENT_DATABASE_URL, AGENT_IMPL
 from phone_agent.graph import build_graph
 from phone_agent.vector_db import check_policy, count_documents, get_vector_store
 
@@ -52,15 +50,20 @@ TOOL_STATUS = {
     'get_promotions': 'Đang xem khuyến mãi…',
 }
 THINKING_STATUS = 'Em đang cân nhắc…'
-# Khách không nhắn 15 phút: xóa cuộc trò chuyện khỏi RAM (giao diện cũng tự mở phiên mới sau 15 phút, index.html)
+# Giới hạn của API chính sách phía agent (hợp đồng với be, xem README): be giữ giới hạn riêng không vượt quá các mức này
+SLUG = r'^[a-z0-9][a-z0-9-]*\.md$'
+MAX_CONTENT = 100_000
+# Khách không nhắn 15 phút: xóa cuộc trò chuyện (giao diện cũng tự mở phiên mới sau 15 phút, index.html)
 SESSION_TTL_S = 15 * 60
+# Không có AGENT_DATABASE_URL (store.pool là None): giữ _last_seen, _busy trong RAM, chỉ đúng khi chạy 1 process
 _last_seen: dict[str, float] = {}  # thread_id -> lúc khách tương tác gần nhất (time.monotonic)
 # Ghi lịch sử như lượt trả lời của agent; agent.py (create_agent) không có node track_reply
 AS_NODE = 'track_reply' if AGENT_IMPL == 'graph' else None
 
 
 # Mỗi thread chỉ chạy 1 lượt một lúc: 2 lượt song song cùng đọc rồi cùng ghi state làm lệch giỏ hàng, lịch sử
-# (khách bấm gửi liên tục, script gọi thẳng API). Endpoint sync chạy trong threadpool nên cần Lock.
+# (khách bấm gửi liên tục, script gọi thẳng API). Có database thì giữ bằng 1 câu SQL atomic (đúng cả khi nhiều replica);
+# không có thì Lock trong process (endpoint sync chạy trong threadpool).
 # Quá TURN_TIMEOUT_S coi như lượt cũ đã chết (lỡ không nhả được) để thread không bị khóa mãi.
 TURN_TIMEOUT_S = 300
 BUSY_DETAIL = 'Dạ, em đang trả lời tin trước, anh/chị chờ em xíu rồi nhắn tiếp nha.'
@@ -69,6 +72,10 @@ _busy_lock = threading.Lock()
 
 
 def _claim(thread_id: str) -> None:
+    if store.pool is not None:
+        if not store.claim(thread_id, TURN_TIMEOUT_S):
+            raise HTTPException(409, BUSY_DETAIL)
+        return
     now = time.monotonic()
     with _busy_lock:
         if now - _busy.get(thread_id, -TURN_TIMEOUT_S) < TURN_TIMEOUT_S:
@@ -77,27 +84,43 @@ def _claim(thread_id: str) -> None:
 
 
 def _release(thread_id: str) -> None:
+    if store.pool is not None:
+        store.release(thread_id)
+        return
     with _busy_lock:
         _busy.pop(thread_id, None)
 
 
 def _touch(thread_id: str) -> None:
-    _last_seen[thread_id] = time.monotonic()
+    if store.pool is not None:
+        store.touch(thread_id)
+    else:
+        _last_seen[thread_id] = time.monotonic()
 
 
 def _delete_thread(agent, thread_id: str) -> None:
-    _last_seen.pop(thread_id, None)
+    if store.pool is not None:
+        store.forget(thread_id)
+    else:
+        _last_seen.pop(thread_id, None)
     checkpointer = getattr(agent, 'checkpointer', None)
     if checkpointer is not None:
         checkpointer.delete_thread(thread_id)
 
 
 def expire_threads(agent, now: float | None = None) -> list[str]:
-    """Xóa các cuộc trò chuyện quá SESSION_TTL_S không có tương tác (InMemorySaver không tự xóa)."""
-    cutoff = (time.monotonic() if now is None else now) - SESSION_TTL_S
-    expired = [t for t, seen in list(_last_seen.items()) if seen < cutoff]
-    for thread_id in expired:
-        _delete_thread(agent, thread_id)
+    """Xóa các cuộc trò chuyện quá SESSION_TTL_S không có tương tác (checkpointer không tự xóa)."""
+    if store.pool is not None:
+        expired = store.expired(SESSION_TTL_S, TURN_TIMEOUT_S)
+    else:
+        cutoff = (time.monotonic() if now is None else now) - SESSION_TTL_S
+        expired = [t for t, seen in list(_last_seen.items()) if seen < cutoff]
+        for thread_id in expired:
+            _last_seen.pop(thread_id, None)
+    checkpointer = getattr(agent, 'checkpointer', None)
+    if checkpointer is not None:
+        for thread_id in expired:
+            checkpointer.delete_thread(thread_id)
     return expired
 
 
@@ -141,10 +164,14 @@ async def lifespan(app: FastAPI):
         log.warning('Chưa đặt AGENT_API_KEY: ai gọi tới được cổng agent đều dùng được, chỉ để agent trong mạng nội bộ')
     n = await asyncio.to_thread(prepare_vector_db)
     log.info('Qdrant sẵn sàng: %d tài liệu', n)
-    # InMemorySaver: lịch sử hội thoại nằm trong RAM của process -> mất khi restart, chỉ chạy 1 worker
+    # Có AGENT_DATABASE_URL: lịch sử + giỏ hàng trong Postgres riêng của agent (restart không mất, chạy nhiều replica được).
+    # Không có: InMemorySaver trong RAM -> mất khi restart, chỉ chạy 1 worker.
     # graph: có trạng thái hội thoại + giỏ hàng (graph.py); agent: create_agent không có state riêng (agent.py)
+    checkpointer = await asyncio.to_thread(store.open_checkpointer, AGENT_DATABASE_URL)
+    if store.pool is None:
+        log.warning('Chưa đặt AGENT_DATABASE_URL: hội thoại nằm trong RAM, mất khi restart, chỉ chạy được 1 worker')
     build = build_graph if AGENT_IMPL == 'graph' else build_agent
-    app.state.agent = build(checkpointer=InMemorySaver())
+    app.state.agent = build(checkpointer=checkpointer)
     log.info('Dùng agent: %s', AGENT_IMPL)
     expiring = asyncio.create_task(_expire_loop(app))
     reconciling = asyncio.create_task(_reconcile_loop())
@@ -157,6 +184,7 @@ async def lifespan(app: FastAPI):
             await reconciling
         with suppress(asyncio.CancelledError):
             await expiring
+        store.close()
 
 
 def check_api_key(request: Request) -> None:

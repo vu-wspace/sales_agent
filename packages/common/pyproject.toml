@@ -1,7 +1,7 @@
 [project]
 name = "phone-common"
 version = "0.1.0"
-description = "Phần dùng chung của agent và be: config, LLM + fallback, mã hóa PII, khuyến mãi, chuẩn hóa chữ tiếng Việt"
+description = "Tiện ích dùng chung của agent và be: LLM + fallback, che/mã hóa PII, chuẩn hóa chữ tiếng Việt"
 requires-python = ">=3.12.15"
 dependencies = [
     "langchain>=1.4.7",

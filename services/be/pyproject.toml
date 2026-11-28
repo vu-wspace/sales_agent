@@ -12,6 +12,13 @@ dependencies = [
     "httpx>=0.28",
 ]
 
+# Project uv độc lập với uv.lock riêng (services/be/uv.lock): nâng thư viện của be không đổi lock của agent.
+# phone-common chỉ là thư viện tiện ích, cài từ đường dẫn.
+[tool.uv.sources]
+
+phone-common = { path = "../../packages/common", editable = true }
+
+
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"

@@ -20,20 +20,6 @@ resolution-markers = [
     "python_full_version < '3.13' and sys_platform == 'darwin'",
 ]
 
-[manifest]
-members = [
-    "phone-agent",
-    "phone-api",
-    "phone-common",
-]
-
-[manifest.dependency-groups]
-dev = [
-    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4.8" },
-    { name = "pandas", specifier = ">=3.1.0" },
-    { name = "pytest", specifier = ">=8.4.0" },
-]
-
 [[package]]
 name = "aiofile"
 version = "3.12.3"
@@ -1864,6 +1850,21 @@ wheels = [
 ]
 
 [[package]]
+name = "langgraph-checkpoint-postgres"
+version = "3.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langgraph-checkpoint" },
+    { name = "orjson" },
+    { name = "psycopg" },
+    { name = "psycopg-pool" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/16/1ac32b1d315f96db9a8cb93f427fcdbfb48e1d65409c0af8e29fbc0f26b7/langgraph_checkpoint_postgres-3.2.1.tar.gz", hash = "sha256:d1485fd1d6741fa7dde149a3c8e4373b3cb96c8c46f4140fb907ad79ea8130c3", size = 166488, upload-time = "2026-11-14T01:38:53.082Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/60/0ad36f48e12d646731108bd8485f5bd494347738f0b274f0c31a89205cdb/langgraph_checkpoint_postgres-3.2.1-py3-none-any.whl", hash = "sha256:77163c33d76c4f4da0362e544ea19350e1acbfd7f612c4152d207af82501aa91", size = 56300, upload-time = "2026-11-14T01:38:51.893Z" },
+]
+
+[[package]]
 name = "langgraph-cli"
 version = "0.4.40"
 source = { registry = "https://pypi.org/simple" }
@@ -2734,11 +2735,13 @@ name = "phone-agent"
 version = "0.1.0"
 source = { editable = "services/agent" }
 dependencies = [
-    { name = "httpx" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "langchain", extra = ["mcp"] },
     { name = "langchain-qdrant" },
+    { name = "langgraph-checkpoint-postgres" },
     { name = "phone-common" },
+    { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pyvi" },
     { name = "qdrant-client" },
     { name = "sentence-transformers" },
@@ -2750,11 +2753,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.28" },
     { name = "fastapi", specifier = ">=0.120.0" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "langchain", extras = ["mcp"], specifier = ">=1.4.7" },
     { name = "langchain-qdrant", specifier = ">=1.1.0" },
+    { name = "langgraph-checkpoint-postgres", specifier = ">=3.2.1" },
     { name = "phone-common", editable = "packages/common" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pyvi", specifier = ">=0.1.1" },
     { name = "qdrant-client", specifier = ">=1.20.0" },
     { name = "sentence-transformers", specifier = ">=6.2.0" },
@@ -2998,6 +3003,9 @@ wheels = [
 binary = [
     { name = "psycopg-binary", marker = "implementation_name != 'pypy'" },
 ]
+pool = [
+    { name = "psycopg-pool" },
+]
 
 [[package]]
 name = "psycopg-binary"
@@ -3048,6 +3056,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/0f/62113dc6b1df65983a1f2fc816c04b1edfa22f2ae9d4abee74ed267f4a96/psycopg_binary-3.3.6-cp315-cp315-musllinux_1_2_riscv64.whl", hash = "sha256:c7753871eb57e6a5f4646f6168590c6653073dea5e9e720b201c8875332df4c8", size = 4027121, upload-time = "2026-09-18T13:22:38.334Z" },
     { url = "https://files.pythonhosted.org/packages/5d/d5/cf0cbd1ea5a7d8167fe2c6953efde19101f7b193bd61a23e6d622ad6854c/psycopg_binary-3.3.6-cp315-cp315-musllinux_1_2_x86_64.whl", hash = "sha256:303732e798fe6729f8e12021b9c96107df8e95ecec4dd487c67b98ec2a59435e", size = 4336388, upload-time = "2026-09-18T13:22:45.576Z" },
     { url = "https://files.pythonhosted.org/packages/98/33/e2a5b36edf8aa422f6fa4b894756eb33dc93b36df5f65121280bb8b929c4/psycopg_binary-3.3.6-cp315-cp315-win_amd64.whl", hash = "sha256:2f122603f36050937982abf9668d8bc4769a79f7c93a65013b1c49f1cab7b56b", size = 3756154, upload-time = "2026-09-18T13:22:51.283Z" },
+]
+
+[[package]]
+name = "psycopg-pool"
+version = "3.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/5e/c0664b968b102ff68b811d999c728546c48d5c1eec03e3bbaf88c0cb4472/psycopg_pool-3.3.3.tar.gz", hash = "sha256:df87b5d9d0ad7db37f6cdad4fa8ce113d250f5997f6db38e9a99192fb67f9e1d", size = 32006, upload-time = "2026-09-22T15:53:24.947Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/b4/452c6607a0f479465cd8a9b0d9956919fcb150050c1f83f9f11e6b8ee8dc/psycopg_pool-3.3.3-py3-none-any.whl", hash = "sha256:9b9cd6a4fcec47a410f7e82d408540e7f77b478509e91b44c1a5457a13e5ff37", size = 40304, upload-time = "2026-09-22T15:53:23.712Z" },
 ]
 
 [[package]]
@@ -3719,6 +3739,37 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/3f/73ccf82579412b4a71c4ca673f10b5f1f888d7cf5af7fe24f27d30307be4/safetensors-0.8.0-cp310-abi3-win32.whl", hash = "sha256:2ddf52eac562eda224f99acfa7889d02968c1fd59a5b011ae7d8137c37e9c02d", size = 342401, upload-time = "2026-06-09T07:52:28.895Z" },
     { url = "https://files.pythonhosted.org/packages/1b/6d/3fba214c1e5e0f69991677ec3bc17023f0421776975e1de0c682dca475e2/safetensors-0.8.0-cp310-abi3-win_amd64.whl", hash = "sha256:096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f", size = 355540, upload-time = "2026-06-09T07:52:27.832Z" },
     { url = "https://files.pythonhosted.org/packages/8d/fc/7eedc3510d97878876e32774eebbeb61c43f148a96e915c84229a3e967aa/safetensors-0.8.0-cp310-abi3-win_arm64.whl", hash = "sha256:f7838e5135a406ad3e02efdcb8cf2e5397d368b0154537c4fec682dbc544d452", size = 340500, upload-time = "2026-06-09T07:52:26.745Z" },
+]
+
+[[package]]
+name = "sales-agent-dev"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "phone-agent" },
+    { name = "phone-api" },
+    { name = "phone-common" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "langgraph-cli", extra = ["inmem"] },
+    { name = "pandas" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "phone-agent", editable = "services/agent" },
+    { name = "phone-api", editable = "services/be" },
+    { name = "phone-common", editable = "packages/common" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4.8" },
+    { name = "pandas", specifier = ">=3.1.0" },
+    { name = "pytest", specifier = ">=8.4.0" },
 ]
 
 [[package]]

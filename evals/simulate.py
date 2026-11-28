@@ -47,6 +47,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 from phone_common import config, llm, pii  # noqa: E402
 from phone_api import orders  # noqa: E402
 from phone_agent import conversation as conv  # noqa: E402
+from phone_agent.config import POLICY_DIR  # noqa: E402
 from phone_common.fallback import FallbackMiddleware  # noqa: E402
 
 # gemini-3.5-flash-lite bỏ qua temperature và cảnh báo mỗi lần gọi
@@ -157,7 +158,7 @@ def reference_data() -> dict:
             allowed.update((abs(a - b), a + b))
     for p in promos:
         allowed.update(v for v in (p['value'], p['max_discount'], p['min_order']) if v)
-    for f in (config.ROOT / 'data_schema' / 'policies').glob('*.md'):   # phí giao, ví dụ trả góp trong chính sách
+    for f in (POLICY_DIR).glob('*.md'):   # phí giao, ví dụ trả góp trong chính sách
         allowed.update(money(f.read_text(encoding='utf-8')))
     return {'allowed': allowed, 'prices': set(prices), 'codes': {p['code'].upper() for p in promos if p['code']},
             'accessory_kinds': accessory_kinds}

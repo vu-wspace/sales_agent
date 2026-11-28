@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -16,13 +17,12 @@ RUN update-ca-certificates
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
-COPY pyproject.toml uv.lock ./
+# Chỉ dùng services/be/uv.lock (không có torch, LangGraph agent). Code của phone-common cài ở bước sau.
 COPY packages/common/pyproject.toml packages/common/
-COPY services/agent/pyproject.toml services/agent/
-COPY services/be/pyproject.toml services/be/
+COPY services/be/pyproject.toml services/be/uv.lock services/be/
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --package phone-api --no-install-workspace
+    uv sync --locked --no-dev --project services/be --no-install-project --no-install-local
 
 COPY packages/common ./packages/common
 COPY services/be ./services/be
@@ -31,7 +31,7 @@ COPY data_schema/orders.sql data_schema/policies.sql ./data_schema/
 COPY data_schema/policies ./data_schema/policies
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --package phone-api
+    uv sync --locked --no-dev --project services/be
 
 RUN useradd --create-home --uid 1000 app
 USER app

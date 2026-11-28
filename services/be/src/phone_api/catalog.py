@@ -4,10 +4,8 @@ from typing import Annotated, Literal
 
 import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from phone_common import promotions
-from phone_common.config import CATALOG_API_KEY
-
-from phone_api import orders
+from phone_api import orders, promotions
+from phone_api.config import CATALOG_API_KEY
 
 
 async def require_catalog_key(authorization: Annotated[str | None, Header()] = None) -> None:
@@ -92,17 +90,23 @@ async def compatible(phone_ids: Annotated[list[str], Query()], accessory_ids: An
     )
 
 
-def _read_promotions():
+def _read_promotions(product_id: str | None = None):
     try:
         with orders._connect() as conn:
+            rows = promotions.active(conn)
+            if product_id is not None:
+                item = conn.execute('SELECT product_id, brand, category FROM products WHERE product_id = %s',
+                                    (product_id,)).fetchone()
+                rows = [r for r in rows if item and promotions.applies_to(r, item)]
             return [
                 {'scope': row['scope'], 'scope_value': row['scope_value'], 'summary': promotions.describe(row)}
-                for row in promotions.active(conn)
+                for row in rows
             ]
     except psycopg.Error as exc:
         raise HTTPException(status_code=503, detail='Catalog database unavailable') from exc
 
 
 @router.get('/promotions')
-async def active_promotions():
-    return await asyncio.to_thread(_read_promotions)
+async def active_promotions(product_id: str | None = None):
+    """Khuyến mãi đang chạy; có product_id thì chỉ những khuyến mãi áp dụng cho sản phẩm đó."""
+    return await asyncio.to_thread(_read_promotions, product_id)

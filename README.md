@@ -58,7 +58,9 @@ Lần build đầu mất khoảng 8 phút, chủ yếu để tải model embeddi
 
 `be` sở hữu database PostgreSQL `phone`, gồm danh mục, tồn kho, khuyến mãi, khách hàng, đơn hàng và chính sách. Tool của `agent` đọc giá, tồn kho và khuyến mãi theo yêu cầu qua `GET /products`, `GET /products/{id}/variants` và `GET /promotions` của `be`. Các truy vấn tương thích phụ kiện cũng đi qua API của `be`. Backend tính lại giá và cập nhật tồn kho khi tạo đơn. Backend lưu bản gốc chính sách trong PostgreSQL và gửi webhook chứa `slug` khi xuất bản, rollback hoặc gỡ chính sách. Agent gọi lại API của backend để lấy bản hiện tại. Agent chia đoạn, tạo embedding và lưu vào Qdrant để tra cứu chính sách.
 
-Phần dùng chung (config, LLM và chuỗi dự phòng, PII, khuyến mãi, chuẩn hóa chữ) nằm ở `packages/common` (`phone_common`). Ba package Python là một [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/), dùng chung `uv.lock`; mỗi image chỉ cài thư viện của service mình.
+Tiện ích dùng chung (LLM và chuỗi dự phòng, che/mã hóa PII, chuẩn hóa chữ) nằm ở `packages/common` (`phone_common`); logic nghiệp vụ và cấu hình nằm trong service sở hữu nó (khuyến mãi, chính sách ở be). Mỗi service là một project uv riêng với `uv.lock` riêng (`services/agent/uv.lock`, `services/be/uv.lock`), cài `phone-common` từ đường dẫn: nâng thư viện của service này không đổi lock của service kia. `pyproject.toml` và `uv.lock` ở gốc chỉ dùng để chạy test, eval trên máy.
+
+`agent` có database PostgreSQL riêng (`agent-db`, biến `AGENT_DATABASE_URL`) cho lịch sử hội thoại, giỏ hàng (checkpointer LangGraph) và trạng thái lượt chat; `be` không đọc database này. Nhờ vậy agent khởi động lại không mất hội thoại và chạy được nhiều replica.
 
 - **Agent tích hợp được vào hệ thống khác**: web khác, Zalo, Messenger... gọi thẳng HTTP API của agent ([API của agent](#api-của-agent)), mà không cần đi qua giao diện web. Các tool dùng dữ liệu cửa hàng vẫn cần kết nối tới be qua `BE_URL`. Mở agent ra ngoài mạng nội bộ thì đặt `AGENT_API_KEY`.
 - **be chạy được khi agent tắt**: `/health` báo `"agent": "down"`, `/session` vẫn chào khách, `/order/cancel` vẫn trả lời; `/chat`, `/chat/stream`, `/order/quote`, `/order` trả `503` (giỏ hàng nằm ở agent nên không có giỏ để tính giá, tạo đơn). Bật agent lên là be tự dùng lại, không cần khởi động lại.
@@ -68,8 +70,9 @@ Phần dùng chung (config, LLM và chuỗi dự phòng, PII, khuyến mãi, chu
 Postgres, Qdrant, Mailpit chạy bằng Docker, code chạy trên máy:
 
 ```bash
-uv sync --all-packages                                  # cài cả 3 package (common, agent, be) + thư viện dev
-docker compose up -d postgres qdrant mailpit
+uv sync                                                 # cài cả 3 package (common, agent, be) + thư viện dev
+docker compose up -d postgres agent-db qdrant mailpit
+export AGENT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5434/agent   # bỏ qua: hội thoại giữ trong RAM
 uv run uvicorn phone_agent.service:app --port 8001      # agent
 uv run uvicorn phone_api.api:app --port 8002            # be (AGENT_URL mặc định http://localhost:8001)
 BE_URL=http://host.docker.internal:8002 docker compose up -d --no-deps fe   # giao diện tại http://localhost:8000
@@ -133,6 +136,7 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `BE_URL` | `http://localhost:8002` | agent gọi API danh mục của be ở địa chỉ này |
 | `CATALOG_API_KEY` | (trống) | Khóa tùy chọn cho API đọc danh mục và chính sách, đặt cùng giá trị ở be và agent |
 | `AGENT_API_KEY` | (trống: không kiểm tra) | Đặt thì mọi endpoint của agent trừ `/health` đòi header `Authorization: Bearer <key>`; be tự gửi key này. Bắt buộc khi mở agent cho hệ thống khác |
+| `AGENT_DATABASE_URL` | (trống: giữ trong RAM) | Postgres riêng của agent: lịch sử hội thoại, giỏ hàng, lượt đang chạy. docker compose đặt sẵn `agent-db`; mật khẩu đổi bằng `AGENT_DB_PASSWORD` |
 | `ADMIN_API_KEY` | (trống: tắt `/admin`) | Key của be cho `/admin/policies` (header `Authorization: Bearer <key>`) |
 | `CHAT_RATE_PER_MIN` | `20` | be: mỗi IP tối đa ngần này lượt `/chat`, `/chat/stream`, `/session`, `/order*` mỗi phút, quá thì `429` (`0`: tắt) |
 | `PII_KEY` | (bắt buộc để đặt hàng) | Khóa Fernet mã hóa số điện thoại, email của khách trong database, xem [Thông tin cá nhân](#thông-tin-cá-nhân-pii). Tạo: `uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Sao lưu khóa**: mất khóa là không đọc lại được dữ liệu đã mã hóa |
@@ -197,7 +201,7 @@ Không có endpoint ghi state tùy ý: giá trong giỏ được dùng để t�
 - Phiên tự kết thúc (trang chat gọi `/session` với `end_thread_id` của cuộc cũ):
   - đặt hàng xong 30 giây: mở phiên mới, giữ thẻ xác nhận đơn trên màn hình; khách nhắn tiếp trong 30 giây thì tính như hội thoại bình thường;
   - khách không gõ, bấm, gửi tin 15 phút (kể cả khi đang điền form thì gõ cũng tính là còn tương tác). Tab chạy nền làm hẹn giờ trễ thì lúc khách gửi tin, trang chat thấy đã quá hạn và mở phiên mới trước.
-- Server cũng tự dọn: mỗi phút xóa khỏi RAM các cuộc trò chuyện quá 15 phút không có request nào (`SESSION_TTL_S`, `expire_threads` trong `phone_agent/service.py`), kể cả khi khách đóng tab. Gọi API trực tiếp với `thread_id` đã bị xóa thì bắt đầu cuộc mới, lịch sử và giỏ hàng cũ không còn.
+- Server cũng tự dọn: mỗi phút xóa (khỏi `agent-db`, hoặc RAM nếu không đặt `AGENT_DATABASE_URL`) các cuộc trò chuyện quá 15 phút không có request nào (`SESSION_TTL_S`, `expire_threads` trong `phone_agent/service.py`), kể cả khi khách đóng tab. Gọi API trực tiếp với `thread_id` đã bị xóa thì bắt đầu cuộc mới, lịch sử và giỏ hàng cũ không còn.
 - `customer_token` = mã khách + chữ ký HMAC (khóa sinh từ `PII_KEY`), trình duyệt giữ trong `localStorage`. Có chữ ký nên không đổi được sang mã khách khác để xem tên, đơn của người khác. Mã sai hoặc khách không còn đơn thì trả `null`, trang chat xóa mã đã lưu. Database lỗi thì vẫn mở phiên, chào như khách mới, giữ mã.
 - Khách quen: lời chào và hồ sơ (`orders.customer_profile`: tên, số đơn, đơn gần nhất gồm mã, ngày, tên món) được ghi vào thread mới (`customer` trong trạng thái hội thoại). Không có số điện thoại, email, địa chỉ trong hồ sơ vì hồ sơ được gửi cho LLM.
 - `thread_id` của `/chat` vẫn có thể bỏ trống như trước (gọi API trực tiếp không cần `/session`).
@@ -619,8 +623,12 @@ curl -X POST localhost:8002/admin/policies/doi-tra.md/rollback -H "$A" -H "$J" -
 ```
 
 - `content_md` là markdown: `#` tiêu đề, `##`/`###` mục (tách chunk theo heading), tối đa 100.000 ký tự; `prompt` tối đa 4.000 ký tự, nói phạm vi, ý bắt buộc, điều không được nói, khi nào chuyển nhân viên.
-- Webhook chỉ gửi `slug`. Agent tải bản đã xuất bản từ `GET /policies/{slug}`; nếu BE trả `404`, Agent xóa các chunk của tài liệu. Khi khởi động và mỗi giờ, Agent gọi `GET /policies` để đối chiếu hash nội dung và prompt. Chỉ tài liệu thay đổi mới được embed lại; nếu bỏ lỡ webhook hoặc Qdrant bị xóa, lần đối soát sẽ tải bù.
+- Webhook chỉ gửi `slug`. Agent tải bản đã xuất bản từ `GET /policies/{slug}`; nếu BE trả `404`, Agent xóa các chunk của tài liệu. Khi khởi động và mỗi giờ, Agent gọi `GET /policies` để đối chiếu hash. Chỉ tài liệu thay đổi mới được embed lại; nếu bỏ lỡ webhook hoặc Qdrant bị xóa, lần đối soát sẽ tải bù.
 - Dữ liệu mẫu hiện có 2 câu kiểm tra **không đạt** ngay với nội dung đang dùng, vì đoạn `search_policy` lấy ra không chứa ý cần có (bot đang trả lời đúng nhờ prompt nhắc): "root máy còn bảo hành không" (`bao-hanh-samsung.md`, thiếu "Knox") và "đặt online có tốn tiền ship không" (`giao-hang.md`, thiếu "miễn phí"). Muốn xuất bản 2 tài liệu này thì thêm mục hỏi/đáp trả lời thẳng 2 câu đó vào nội dung (khuyến nghị), hoặc sửa `must_contain` của 2 câu.
+- **API chính sách giữa be và agent** (hợp đồng, sửa 1 bên không bắt bên kia deploy theo):
+  - `GET /policies` trả `{slug: hash}`; `GET /policies/{slug}` trả `{slug, content_md, prompt, version, updated_at, hash}`. `hash` là phiên bản tài liệu do be tính (`phone_api/policies.py: policy_hash`); agent lưu nguyên văn vào Qdrant và chỉ so sánh bằng nhau, không tự tính. Đổi cách tính hash thì lần đối soát sau agent embed lại mọi tài liệu một lần, không cần sửa agent.
+  - `slug` khớp `^[a-z0-9][a-z0-9-]*\.md$`; agent nhận `content_md` tối đa 100.000 ký tự (`POST /policies/{slug}/check`). be giữ giới hạn riêng của mình (`MAX_CONTENT`, `MAX_PROMPT`) không vượt các mức này.
+  - Thêm trường mới vào response là tương thích; đổi tên, bỏ trường hay đổi ý nghĩa `hash` thì phải làm theo 2 bước (agent đọc được cả 2 dạng trước, rồi mới đổi be).
 - Chưa có tài khoản quản trị riêng: 1 `ADMIN_API_KEY` chung, người sửa tự ghi `by`. Chưa có giao diện quản trị, mới có API.
 - Trên BE, `GET /policies/{slug}` trả bản đã xuất bản. `PUT /policies/{slug}` yêu cầu `ADMIN_API_KEY` và lưu bản nháp như `PUT /admin/policies/{slug}/draft`. Kiểm tra và xuất bản qua API quản trị để áp dụng cho khách.
 
@@ -694,18 +702,19 @@ sales_agent/
 │   ├── output/                 # Dữ liệu đã cào và file seed
 │   ├── policies.sql            # Bảng chính sách: bản đang dùng, nháp, lịch sử, câu hỏi kiểm tra (be quản lý)
 │   └── policies/               # Dữ liệu mẫu: chính sách (.md), prompt (prompts.json), câu hỏi kiểm tra (checks.json)
-├── packages/common/src/phone_common/   # Dùng chung cho agent và be
+├── packages/common/src/phone_common/   # Tiện ích dùng chung cho agent và be (không có logic nghiệp vụ)
 │   ├── __init__.py             # Nạp .env, kho chứng chỉ hệ điều hành, sửa lỗi DLL torch trên Windows
-│   ├── config.py               # Cấu hình, ngưỡng RAG
+│   ├── config.py               # Cấu hình của LLM (9Router) và PII_KEY
 │   ├── llm.py, fallback.py     # LLM và chuỗi dự phòng
 │   ├── textnorm.py             # Chuẩn hóa tin nhắn của khách, dọn câu trả lời
-│   ├── pii.py                  # Che, mã hóa số điện thoại, email của khách
-│   ├── policies.py             # Hash tài liệu chính sách, dữ liệu mẫu
-│   └── promotions.py           # Khuyến mãi: kiểm tra mã, tính giảm giá
+│   └── pii.py                  # Che, mã hóa số điện thoại, email của khách
 ├── services/
-│   ├── agent/                  # Agent service (cổng 8001), Dockerfile riêng
+│   ├── agent/                  # Agent service (cổng 8001), Dockerfile, pyproject.toml, uv.lock riêng
 │   │   └── src/phone_agent/
+│   │       ├── config.py       # Cấu hình của agent, ngưỡng RAG
 │   │       ├── service.py      # HTTP API: chat, stream, state theo thread
+│   │       ├── store.py        # Postgres riêng của agent: checkpointer, giữ lượt, hết hạn thread
+│   │       ├── backend.py, policy_sync.py  # Gọi API của be; đồng bộ chính sách (webhook, đối soát mỗi giờ)
 │   │       ├── prompts.py      # System prompt, hướng dẫn trả lời chính sách
 │   │       ├── tools.py        # Các tool
 │   │       ├── conversation.py # Trạng thái hội thoại và luật cập nhật
@@ -715,12 +724,15 @@ sales_agent/
 │   │       ├── grounding.py    # Kiểm tra số liệu trong câu trả lời có nguồn
 │   │       ├── data_prep.py    # Tách chính sách thành đoạn
 │   │       └── vector_db.py    # Embedding và Qdrant
-│   ├── be/                     # Backend (cổng 8002), Dockerfile riêng, không có torch
+│   ├── be/                     # Backend (cổng 8002), Dockerfile, pyproject.toml, uv.lock riêng, không có torch
 │   │   └── src/phone_api/
+│   │       ├── config.py       # Cấu hình của be (database, SMTP, key)
 │   │       ├── api.py          # FastAPI: phiên, chat (chuyển sang agent), đặt hàng
+│   │       ├── catalog.py      # API catalog, khuyến mãi cho agent
+│   │       ├── promotions.py   # Khuyến mãi: kiểm tra mã, tính giảm giá, phạm vi áp dụng
 │   │       ├── orders.py       # Lưu đơn đặt hàng, tóm tắt đơn
 │   │       ├── mailer.py       # Email xác nhận đơn hàng
-│   │       ├── policies.py     # Nháp, kiểm tra, xuất bản, lịch sử; đẩy/đồng bộ sang agent
+│   │       ├── policies.py     # Nháp, kiểm tra, xuất bản, lịch sử, hash gửi agent, dữ liệu mẫu
 │   │       └── templates/      # Template email (order_confirmation.html)
 │   └── fe/                     # nginx (cổng 8000): static/index.html, order_form.html, nginx.conf.template
 ├── tests/                      # Unit test
@@ -729,7 +741,7 @@ sales_agent/
 ├── video/demo.gif            # Ảnh động demo ở đầu README
 ├── docker-compose.yml
 ├── langgraph.json
-└── pyproject.toml (uv workspace), uv.lock, requirements.txt
+└── pyproject.toml, uv.lock (môi trường dev: test, eval), requirements.txt
 ```
 
 ## Kiểm thử và đánh giá
@@ -1018,7 +1030,7 @@ Chỉ số là tỷ lệ đòn thành công theo nhóm, xếp theo mức nghiêm
 
 **Kiến trúc và vận hành**
 
-- Lịch sử hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker. Cuộc trò chuyện quá 15 phút không hoạt động bị xóa, nên khách quay lại sau đó phải chat lại từ đầu (giỏ hàng chưa đặt cũng mất).
+- Không đặt `AGENT_DATABASE_URL` thì lịch sử hội thoại nằm trong RAM (`InMemorySaver`): mất khi restart, chỉ chạy được 1 worker (docker compose đã đặt sẵn). Cuộc trò chuyện quá 15 phút không hoạt động bị xóa, nên khách quay lại sau đó phải chat lại từ đầu (giỏ hàng chưa đặt cũng mất).
 - API bán hàng công khai chưa có xác thực người dùng hoặc giới hạn request. API quản lý chính sách yêu cầu `ADMIN_API_KEY`.
 - Hai request `/order` của cùng một cuộc chat gửi gần như cùng lúc (bấm gửi 2 lần) có thể tạo 2 đơn, vì cả hai đọc giỏ hàng trước khi giỏ được làm trống.
 - Email xác nhận gửi bằng `BackgroundTasks` trong tiến trình API: server khởi động lại đúng lúc đang gửi thì mất email, đơn kẹt ở `email_status = 'pending'`, không tự gửi lại. Làm thật nên dùng outbox (ghi yêu cầu gửi trong cùng transaction tạo đơn, worker riêng gửi và thử lại) hoặc hàng đợi (Celery, ARQ).

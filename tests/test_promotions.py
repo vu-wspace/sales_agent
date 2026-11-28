@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from phone_api import orders
-from phone_common import promotions
+from phone_api import promotions
 from test_orders import ADDRESS, CART, FakeConn
 
 NOW = datetime.now(timezone.utc)
@@ -117,3 +117,39 @@ def test_describe_prints_end_date_in_vietnam_time():
     # Hết hạn 00:00 ngày 01/12 giờ VN = 17:00 ngày 30/11 UTC: phải in 01/12 dù máy chủ chạy UTC
     ends = datetime(2026, 11, 30, 17, 0, tzinfo=timezone.utc)
     assert 'đến hết 01/12/2026' in promotions.describe(promo(ends_at=ends))
+
+def test_be_filters_promotions_by_product(monkeypatch):
+    from phone_api import catalog
+
+    class Conn:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def execute(self, sql, params):
+            products = {'s26': {'product_id': 's26', 'brand': 'Samsung', 'category': 'phone'}}
+            return type('R', (), {'fetchone': lambda _: products.get(params[0])})()
+
+    rows = [promo(promo_id='all'), promo(promo_id='ss', scope='brand', scope_value='samsung'),
+            promo(promo_id='acc', scope='category', scope_value='accessory')]
+    monkeypatch.setattr(orders, '_connect', Conn)
+    monkeypatch.setattr(promotions, 'active', lambda conn: rows)
+    assert [p['scope'] for p in catalog._read_promotions()] == ['all', 'brand', 'category']
+    assert [p['scope'] for p in catalog._read_promotions('s26')] == ['all', 'brand']
+    assert catalog._read_promotions('khong-co') == []
+
+
+def test_agent_asks_be_for_promotions_of_one_product(monkeypatch):
+    from phone_agent import tools
+
+    calls = []
+
+    def catalog(path, **params):
+        calls.append((path, params))
+        if path == '/products':
+            return [{'product_id': 's26', 'name': 'Samsung Galaxy S26', 'brand': 'Samsung'}]
+        return [{'scope': 'brand', 'scope_value': 'samsung', 'summary': 'Giảm 10% hãng Samsung'}]
+
+    monkeypatch.setattr(tools, '_catalog', catalog)
+    assert 'Giảm 10%' in tools.get_promotions.invoke({'product': 'Galaxy S26'})
+    assert calls[-1] == ('/promotions', {'product_id': 's26'})
+    tools.get_promotions.invoke({})
+    assert calls[-1] == ('/promotions', {'product_id': None})

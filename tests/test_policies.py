@@ -11,11 +11,11 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.embeddings import Embeddings
 from phone_agent import policy_sync, vector_db
+from phone_agent.config import VECTOR_SIZE
 from phone_agent import service as svc
 from phone_api import api as be
 from phone_api.config import DATABASE_URL
-from phone_common.config import VECTOR_SIZE
-from phone_common.policies import load_seed, policy_hash
+from phone_api.policies import load_seed, policy_hash
 from qdrant_client import QdrantClient
 
 DOC = '# Đổi trả\n\n## Lỗi nhà sản xuất\nĐổi mới trong 30 ngày.\n\n## Đổi ý\nCòn seal trong 7 ngày, phí 10%.\n'
@@ -47,25 +47,27 @@ def qdrant(monkeypatch):
 # ---------------------------------------------------------------- agent: Qdrant theo từng tài liệu
 
 def test_upsert_replaces_only_that_document(qdrant):
-    assert vector_db.upsert_policy('doi-tra.md', DOC, 'Hỏi rõ trường hợp') == 2
-    assert vector_db.upsert_policy('giao-hang.md', SHIP, None) == 1
+    assert vector_db.upsert_policy('doi-tra.md', DOC, 'Hỏi rõ trường hợp', 'v1') == 2
+    assert vector_db.upsert_policy('giao-hang.md', SHIP, None, 'g1') == 1
     # Sửa tài liệu ít mục hơn: chunk cũ của nó bị thay hết, tài liệu khác giữ nguyên
-    assert vector_db.upsert_policy('doi-tra.md', SHORT, 'Prompt mới') == 1
+    assert vector_db.upsert_policy('doi-tra.md', SHORT, 'Prompt mới', 'v2') == 1
     assert vector_db.count_documents() == 2
-    assert vector_db.policy_hashes() == {'doi-tra.md': policy_hash(SHORT, 'Prompt mới'),
-                                         'giao-hang.md': policy_hash(SHIP, None)}
+    # agent lưu nguyên hash be gửi, không tự tính
+    assert vector_db.policy_hashes() == {'doi-tra.md': 'v2', 'giao-hang.md': 'g1'}
     # search_policy đọc được prompt riêng từ payload
     hits = vector_db.get_vector_store().similarity_search('đổi máy lỗi', k=5)
     assert {h.metadata['source']: h.metadata['prompt'] for h in hits} == {'doi-tra.md': 'Prompt mới',
                                                                           'giao-hang.md': None}
     vector_db.delete_policy('doi-tra.md')
     assert set(vector_db.policy_hashes()) == {'giao-hang.md'}
+    assert vector_db.policy_hashes('giao-hang.md') == vector_db.policy_hashes()
+    assert vector_db.policy_hashes('doi-tra.md') == {}
 
 
 def test_upsert_empty_document_keeps_old_chunks(qdrant):
-    vector_db.upsert_policy('doi-tra.md', DOC)
+    vector_db.upsert_policy('doi-tra.md', DOC, None, 'v1')
     with pytest.raises(ValueError):
-        vector_db.upsert_policy('doi-tra.md', '   ')
+        vector_db.upsert_policy('doi-tra.md', '   ', None, 'v2')
     assert vector_db.count_documents() == 2
 
 
@@ -78,20 +80,20 @@ def test_reconcile_loads_new_documents_and_removes_deleted(qdrant, monkeypatch):
             return manifest
         slug = path.removeprefix('/policies/')
         if slug in docs:
-            return docs[slug]
+            return {**docs[slug], 'hash': manifest[slug]}
         response = httpx.Response(404, request=httpx.Request('GET', f'http://be{path}'))
         response.raise_for_status()
 
     monkeypatch.setattr(policy_sync.backend, 'get', get)
-    vector_db.upsert_policy('cu.md', DOC)
+    vector_db.upsert_policy('cu.md', DOC, None, 'c1')
     assert policy_sync.reconcile() == {'pushed': list(docs), 'removed': ['cu.md']}
     assert vector_db.policy_hashes() == manifest
     assert policy_sync.reconcile() == {'pushed': [], 'removed': []}
 
 
 def test_check_policy_tries_draft_without_writing(qdrant):
-    vector_db.upsert_policy('doi-tra.md', DOC)
-    vector_db.upsert_policy('giao-hang.md', SHIP)
+    vector_db.upsert_policy('doi-tra.md', DOC, None, 'v1')
+    vector_db.upsert_policy('giao-hang.md', SHIP, None, 'g1')
     before = vector_db.policy_hashes()
     result = vector_db.check_policy('doi-tra.md', SHORT, [
         {'question': 'lỗi nhà sản xuất đổi mới trong bao nhiêu ngày', 'must_contain': [['15 ngày']]},
@@ -134,15 +136,17 @@ class FakeStore:
 
     def __init__(self):
         self.docs = {}
+        self.versions = {}   # hash be gửi kèm mỗi tài liệu
 
-    def upsert(self, slug, content_md, prompt=None):
+    def upsert(self, slug, content_md, prompt, doc_hash):
         if not content_md.strip():
             raise ValueError('trống')
         self.docs[slug] = (content_md, prompt)
+        self.versions[slug] = doc_hash
         return 1
 
-    def hashes(self):
-        return {s: policy_hash(c, p) for s, (c, p) in self.docs.items()}
+    def hashes(self, slug=None):
+        return {s: self.versions.get(s) for s in self.docs if slug is None or s == slug}
 
     def check(self, slug, content_md, questions):
         results = [{'question': q['question'], 'retrieved': [slug],
@@ -330,14 +334,14 @@ def test_agent_policy_endpoints_need_agent_key(monkeypatch):
     key = {'Authorization': 'Bearer agent-key'}
     def get(path):
         assert path == '/policies/doi-tra.md'
-        return {'content_md': DOC, 'prompt': None}
+        return {'content_md': DOC, 'prompt': None, 'hash': 'be-v7'}
 
     monkeypatch.setattr(policy_sync.backend, 'get', get)
     monkeypatch.setattr(vector_db, 'policy_hashes', store.hashes)
     event = {'slug': 'doi-tra.md'}
     assert agent.post('/webhooks/policy-updated', json=event).status_code == 401
     assert agent.post('/webhooks/policy-updated', json=event, headers=key).status_code == 204
-    assert store.docs['doi-tra.md'] == (DOC, None)
+    assert store.docs['doi-tra.md'] == (DOC, None) and store.versions['doi-tra.md'] == 'be-v7'
     assert agent.post('/webhooks/policy-updated', json={'slug': '../bad'}, headers=key).status_code == 422
     r = agent.post('/policies/doi-tra.md/check', headers=key,
                    json={'content_md': DOC, 'questions': [{'question': 'bao lâu', 'must_contain': [['30 ngày']]}]})

@@ -18,19 +18,13 @@ import httpx
 import psycopg
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
-from phone_common import pii, promotions
-from phone_common.config import (
-    ADMIN_API_KEY,
-    AGENT_API_KEY,
-    AGENT_URL,
-    CHAT_RATE_PER_MIN,
-    PII_KEY,
-    SMTP_HOST,
-)
-from phone_common.policies import MAX_CONTENT, MAX_PROMPT, SLUG, policy_hash
+from phone_common import pii
+from phone_common.config import PII_KEY
 from pydantic import BaseModel, Field, field_validator
 
-from phone_api import catalog, mailer, orders, policies
+from phone_api import catalog, mailer, orders, policies, promotions
+from phone_api.config import ADMIN_API_KEY, AGENT_API_KEY, AGENT_URL, CHAT_RATE_PER_MIN, SMTP_HOST
+from phone_api.policies import MAX_CONTENT, MAX_PROMPT, SLUG, policy_hash
 
 log = logging.getLogger('uvicorn.error')
 
@@ -153,6 +147,7 @@ class PolicyOut(BaseModel):
     version: int | None = None
     updated_at: datetime | None = None
     synced: bool | None = None   # xuất bản/xóa: đã cập nhật sang agent chưa (False: agent tắt, sync sau sẽ đẩy bù)
+    hash: str | None = None      # GET /policies/{slug} (cho agent): phiên bản tài liệu, agent lưu và so sánh nguyên văn
 
 
 class DraftOut(BaseModel):
@@ -435,7 +430,8 @@ async def policy_manifest() -> dict[str, str]:
 
 @app.get('/policies/{slug}', response_model=PolicyOut, dependencies=[Depends(catalog.require_catalog_key)])
 async def published_policy(slug: str = SlugPath):
-    return _found(await asyncio.to_thread(_db, policies.get, slug), f'chính sách {slug}')
+    doc = _found(await asyncio.to_thread(_db, policies.get, slug), f'chính sách {slug}')
+    return {**doc, 'hash': policy_hash(doc['content_md'], doc['prompt'])}
 
 
 def _notify(request: Request, doc: dict) -> dict:
