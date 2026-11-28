@@ -12,6 +12,11 @@ THREADS_TABLE = """CREATE TABLE IF NOT EXISTS agent_threads (
     thread_id  text PRIMARY KEY,
     last_seen  timestamptz NOT NULL DEFAULT now(),
     busy_since timestamptz)"""
+RATE_TABLE = """CREATE TABLE IF NOT EXISTS agent_rate (
+    client text NOT NULL,
+    minute timestamptz NOT NULL,
+    hits   integer NOT NULL,
+    PRIMARY KEY (client, minute))"""
 
 
 def open_checkpointer(url: str):
@@ -27,6 +32,7 @@ def open_checkpointer(url: str):
     saver.setup()
     with pool.connection() as conn:
         conn.execute(THREADS_TABLE)
+        conn.execute(RATE_TABLE)
     return saver
 
 
@@ -72,3 +78,24 @@ def expired(ttl_s: int, turn_timeout_s: int) -> list[str]:
                  AND (busy_since IS NULL OR busy_since < now() - make_interval(secs => %s))
                RETURNING thread_id""", (ttl_s, turn_timeout_s)).fetchall()
     return [r['thread_id'] for r in rows]
+
+
+def threads_with_prefix(prefix: str) -> list[str]:
+    with pool.connection() as conn:
+        rows = conn.execute('SELECT thread_id FROM agent_threads WHERE left(thread_id, length(%s)) = %s',
+                            (prefix, prefix)).fetchall()
+    return [r['thread_id'] for r in rows]
+
+
+def hit(client: str) -> int:
+    """Đếm 1 request của client trong phút hiện tại (dùng chung giữa các replica), trả số request trong phút đó."""
+    with pool.connection() as conn:
+        return conn.execute(
+            """INSERT INTO agent_rate VALUES (%s, date_trunc('minute', now()), 1)
+               ON CONFLICT (client, minute) DO UPDATE SET hits = agent_rate.hits + 1 RETURNING hits""",
+            (client,)).fetchone()['hits']
+
+
+def prune_rate() -> None:
+    with pool.connection() as conn:
+        conn.execute("DELETE FROM agent_rate WHERE minute < now() - interval '5 minutes'")

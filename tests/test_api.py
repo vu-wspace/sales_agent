@@ -543,6 +543,63 @@ def test_agent_api_key(monkeypatch):
     assert agent.get('/health').status_code == 200                        # health không cần key
 
 
+class StateAgent:
+    """Agent chỉ lưu state theo thread_id nhận được (để xem agent lưu dưới id nào)."""
+
+    def __init__(self):
+        self.states = {}
+        self.checkpointer = SimpleNamespace(delete_thread=lambda t: self.states.pop(t, None))
+
+    def get_state(self, config):
+        return SimpleNamespace(values=self.states.get(config['configurable']['thread_id'], {}))
+
+    def update_state(self, config, values, as_node=None):
+        self.states.setdefault(config['configurable']['thread_id'], {}).update(values)
+
+
+def test_integrators_have_own_keys_threads_and_limits(monkeypatch):
+    monkeypatch.setattr(svc, 'AGENT_API_KEY', 'be-key')
+    monkeypatch.setattr(svc, 'AGENT_CLIENT_KEYS', 'zalo:z-key:2,crm:c-key')
+    monkeypatch.setattr(svc, '_last_seen', {})
+    svc._hits.clear()
+    agent = svc.app.state.agent = StateAgent()
+    api = TestClient(svc.app)
+    zalo, crm, be_key = ({'Authorization': f'Bearer {k}'} for k in ('z-key', 'c-key', 'be-key'))
+
+    # Mỗi nguồn 1 không gian thread: cùng id 'u1' nhưng không thấy, không đè hội thoại của nhau
+    r = api.post('/v1/threads', json={'thread_id': 'u1', 'greeting': 'Chào từ Zalo'}, headers=zalo)
+    assert r.json()['thread_id'] == 'u1' and set(agent.states) == {'zalo:u1'}
+    api.post('/v1/threads', json={'thread_id': 'u1', 'greeting': 'Chào từ CRM'}, headers=crm)
+    assert agent.states['zalo:u1']['messages'][0].text == 'Chào từ Zalo'
+    assert agent.states['crm:u1']['messages'][0].text == 'Chào từ CRM'
+
+    # Giới hạn theo key: zalo 2 request/phút, các key khác không bị ảnh hưởng; be không giới hạn
+    assert api.get('/v1/threads/u1', headers=zalo).status_code == 200
+    r = api.get('/v1/threads/u1', headers=zalo)
+    assert r.status_code == 429 and r.headers['retry-after'] == '60'
+    assert api.get('/v1/threads/u1', headers=crm).status_code == 200
+    assert all(api.get('/threads/x', headers=be_key).status_code == 200 for _ in range(5))   # đường dẫn cũ vẫn chạy
+
+    # Xóa toàn bộ dữ liệu của 1 nguồn; nguồn khác giữ nguyên
+    assert api.delete('/v1/threads', headers=crm).json() == {'deleted': 1}
+    assert 'crm:u1' not in agent.states and 'zalo:u1' in agent.states
+    # Đồng bộ chính sách chỉ be gọi được
+    assert api.post('/v1/webhooks/policy-reconcile', headers=crm).status_code == 403
+    assert api.post('/v1/chat', json={'message': 'hi'}, headers={'Authorization': 'Bearer sai'}).status_code == 401
+
+
+@pytest.mark.parametrize('spec', ['Zalo:k', 'zalo:', 'zalo:k:nhieu', 'zalo:k,crm:k', 'zalo:a,zalo:b', 'zalo:k:1:2'])
+def test_bad_client_keys_are_rejected(spec):
+    with pytest.raises(ValueError):
+        svc.parse_clients('', spec, 60)
+
+
+def test_be_calls_versioned_agent_api():
+    be.app.state.agent_http = TestClient(svc.app, base_url='http://testserver/v1')
+    r = TestClient(be.app).post('/chat', json={'message': 'xin chào'})
+    assert r.status_code == 200 and r.json()['answer']
+
+
 def test_agent_thread_state_for_integrators():
     # Hệ thống khác đọc giỏ hàng / bước bán hàng của 1 cuộc trò chuyện
     svc.app.state.agent = CartAgent(CART)
@@ -620,7 +677,7 @@ def test_lock_released_when_reading_state_fails(client):
 
 def test_stream_dropped_before_start_does_not_lock(client):
     # Khách ngắt kết nối trước khi stream chạy: generator bị close khi chưa chạy -> không được giữ thread
-    gen = svc._stream_events(svc.app.state.agent, 'hi', 't1', svc._config('t1'))
+    gen = svc._stream_events(svc.app.state.agent, 'hi', 't1', 't1', svc._config('t1'))
     gen.close()
     assert svc._busy == {}
     assert client.post('/chat', json={'message': 'hi', 'thread_id': 't1'}).status_code == 200

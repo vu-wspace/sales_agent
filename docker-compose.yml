@@ -88,6 +88,9 @@ services:
       AGENT_DATABASE_URL: postgresql://postgres:${AGENT_DB_PASSWORD:-postgres}@agent-db:5432/agent
       BE_URL: http://be:8002
       AGENT_API_KEY: "${AGENT_API_KEY:-}"
+      # Key riêng cho từng hệ thống tích hợp, vd "zalo:k3y-zalo:120,crm:k3y-crm" (xem README, API của agent)
+      AGENT_CLIENT_KEYS: "${AGENT_CLIENT_KEYS:-}"
+      AGENT_CLIENT_RATE_PER_MIN: "${AGENT_CLIENT_RATE_PER_MIN:-60}"
       CATALOG_API_KEY: "${CATALOG_API_KEY:-}"
       AGENT_IMPL: "${AGENT_IMPL:-graph}"
       ROUTER9_API_KEY: "${ROUTER9_API_KEY:-}"

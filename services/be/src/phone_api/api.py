@@ -195,7 +195,9 @@ async def lifespan(app: FastAPI):
         log.warning('Chưa đặt ADMIN_API_KEY: /admin/policies bị tắt')
     headers = {'Authorization': f'Bearer {AGENT_API_KEY}'} if AGENT_API_KEY else {}
     # read 180s: 1 lượt chat có thể chạy vài tool + model dự phòng; connect 5s: agent tắt thì báo lỗi ngay
-    app.state.agent_http = httpx.Client(base_url=AGENT_URL, headers=headers, timeout=httpx.Timeout(180, connect=5))
+    # API có phiên bản của agent: mọi đường dẫn be gọi ('/chat', '/threads/...') thành '/v1/chat', '/v1/threads/...'
+    app.state.agent_http = httpx.Client(base_url=AGENT_URL.rstrip('/') + '/v1', headers=headers,
+                                        timeout=httpx.Timeout(180, connect=5))
     log.info('Agent: %s', AGENT_URL)
     yield
     app.state.agent_http.close()

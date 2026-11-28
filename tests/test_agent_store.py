@@ -80,6 +80,21 @@ def test_claim_release_and_expire_are_shared(agent_db):
     assert svc.expire_threads(Agent) == []          # replica khác không nhận lại thread đã xóa
 
 
+def test_rate_count_and_threads_by_source_are_shared(agent_db):
+    store.open_checkpointer(agent_db)
+    assert [store.hit('zalo') for _ in range(3)] == [1, 2, 3]   # mọi replica cộng vào cùng 1 bộ đếm
+    assert store.hit('crm') == 1
+    with store.pool.connection() as conn:
+        conn.execute("UPDATE agent_rate SET minute = minute - interval '10 minutes' WHERE client = 'crm'")
+    store.prune_rate()
+    with store.pool.connection() as conn:
+        assert [r['client'] for r in conn.execute('SELECT client FROM agent_rate').fetchall()] == ['zalo']
+
+    for t in ('zalo:a', 'zalo:b', 'zalo_x:c', 'crm:a'):
+        store.touch(t)
+    assert sorted(store.threads_with_prefix('zalo:')) == ['zalo:a', 'zalo:b']   # '_' không phải ký tự đại diện
+
+
 def test_policy_sync_lock_is_reentrant_per_call(agent_db):
     store.open_checkpointer(agent_db)
     for _ in range(2):                              # khóa được nhả sau mỗi lần

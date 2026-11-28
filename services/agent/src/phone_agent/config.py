@@ -26,9 +26,14 @@ AGENT_IMPL = os.getenv('AGENT_IMPL', 'graph').lower()
 # be: agent đọc catalog, khuyến mãi, chính sách đã xuất bản qua HTTP (backend.py), gửi CATALOG_API_KEY.
 BE_URL = os.getenv('BE_URL', 'http://localhost:8002')
 CATALOG_API_KEY = os.getenv('CATALOG_API_KEY', '')
-# AGENT_API_KEY: đặt thì mọi endpoint của agent (trừ /health) đòi header "Authorization: Bearer <key>" -
-# bắt buộc khi mở agent cho hệ thống khác tích hợp; để trống chỉ dùng trong mạng nội bộ (docker compose).
+# Key gọi agent (header "Authorization: Bearer <key>", mọi endpoint trừ /health). Mỗi bên gọi 1 key riêng:
+#   AGENT_API_KEY: key của be (tên nguồn 'be', không giới hạn tốc độ: be đã giới hạn theo IP của khách).
+#   AGENT_CLIENT_KEYS: hệ thống tích hợp khác, "tên:key[:giới hạn/phút]" cách nhau bởi dấu phẩy,
+#     vd "zalo:k3y-zalo:120,crm:k3y-crm". Thu hồi 1 bên: xóa mục của bên đó rồi khởi động lại agent.
+# Không đặt key nào: ai gọi tới cổng agent cũng dùng được, chỉ để agent trong mạng nội bộ.
 AGENT_API_KEY = os.getenv('AGENT_API_KEY', '')
+AGENT_CLIENT_KEYS = os.getenv('AGENT_CLIENT_KEYS', '')
+CLIENT_RATE_PER_MIN = int(os.getenv('AGENT_CLIENT_RATE_PER_MIN', '60'))  # mặc định cho bên không ghi giới hạn
 
 # Postgres riêng của agent (không dùng chung database của be): lịch sử hội thoại + giỏ hàng (checkpointer LangGraph),
 # lượt đang chạy, lần tương tác cuối của từng thread. Có thì chạy được nhiều worker/replica, restart không mất hội thoại.

@@ -135,7 +135,9 @@ Biến môi trường đặt trong `.env` (mẫu ở `.env.example`):
 | `AGENT_URL` | `http://localhost:8001` | be gọi agent ở địa chỉ này |
 | `BE_URL` | `http://localhost:8002` | agent gọi API danh mục của be ở địa chỉ này |
 | `CATALOG_API_KEY` | (trống) | Khóa tùy chọn cho API đọc danh mục và chính sách, đặt cùng giá trị ở be và agent |
-| `AGENT_API_KEY` | (trống: không kiểm tra) | Đặt thì mọi endpoint của agent trừ `/health` đòi header `Authorization: Bearer <key>`; be tự gửi key này. Bắt buộc khi mở agent cho hệ thống khác |
+| `AGENT_API_KEY` | (trống: không kiểm tra) | Key của be khi gọi agent (be tự gửi). Đặt key nào (cái này hoặc `AGENT_CLIENT_KEYS`) thì mọi endpoint của agent trừ `/health` đòi header `Authorization: Bearer <key>` |
+| `AGENT_CLIENT_KEYS` | (trống) | Key riêng cho từng hệ thống tích hợp: `tên:key[:giới hạn/phút]`, cách nhau bởi dấu phẩy, xem [API của agent](#api-của-agent) |
+| `AGENT_CLIENT_RATE_PER_MIN` | `60` | Giới hạn request/phút mặc định cho mỗi key trong `AGENT_CLIENT_KEYS` |
 | `AGENT_DATABASE_URL` | (trống: giữ trong RAM) | Postgres riêng của agent: lịch sử hội thoại, giỏ hàng, lượt đang chạy. docker compose đặt sẵn `agent-db`; mật khẩu đổi bằng `AGENT_DB_PASSWORD` |
 | `ADMIN_API_KEY` | (trống: tắt `/admin`) | Key của be cho `/admin/policies` (header `Authorization: Bearer <key>`) |
 | `CHAT_RATE_PER_MIN` | `20` | be: mỗi IP tối đa ngần này lượt `/chat`, `/chat/stream`, `/session`, `/order*` mỗi phút, quá thì `429` (`0`: tắt) |
@@ -167,22 +169,56 @@ API của be (cổng 8002; trang chat gọi qua fe ở cổng 8000 với cùng �
 
 ### API của agent
 
-Cổng 8001. be là một client của API này; hệ thống khác tích hợp cũng gọi các endpoint này. Đặt `AGENT_API_KEY` thì gửi kèm `Authorization: Bearer <key>`.
+Cổng 8001, mọi endpoint dưới `/v1` (OpenAPI tại `/docs`). be là một client của API này; hệ thống khác (Zalo, Messenger, CRM...) cũng gọi các endpoint này. Đường dẫn cũ không có `/v1` vẫn chạy để tương thích, sẽ bỏ ở bản sau.
 
 | Method | Đường dẫn | Mô tả |
 |---|---|---|
-| `POST` | `/chat`, `/chat/stream` | Như của be (định dạng ở dưới) |
-| `POST` | `/threads` | Mở cuộc trò chuyện: `{thread_id?, end_thread_id?, greeting?, customer?}`; `greeting`, `customer` ghi sẵn lời chào và hồ sơ khách quen vào state |
-| `GET` | `/threads/{id}` | `{thread_id, stage, cart, order_form, orders}`: be đọc giỏ ở đây để tính giá, tạo đơn |
-| `DELETE` | `/threads/{id}` | Xóa lịch sử, giỏ hàng |
-| `POST` | `/threads/{id}/order-placed` | `{order_id, answer}`: ghi đơn đã đặt vào lịch sử, làm trống giỏ |
-| `POST` | `/threads/{id}/order-cancelled` | `{answer}`: ghi việc hủy form vào lịch sử, làm trống giỏ |
-| `POST` | `/webhooks/policy-updated` | BE gửi `{slug}`; Agent tải bản hiện tại từ BE và cập nhật Qdrant |
-| `POST` | `/webhooks/policy-reconcile` | Yêu cầu Agent đối soát toàn bộ chính sách ngay |
-| `POST` | `/policies/{slug}/check` | `{content_md, questions}`: thử bản nháp với câu hỏi mẫu, không ghi Qdrant |
-| `GET` | `/health` | Trạng thái Qdrant và số đoạn chính sách (không cần key) |
+| `POST` | `/v1/chat`, `/v1/chat/stream` | Như của be (định dạng ở dưới) |
+| `POST` | `/v1/threads` | Mở cuộc trò chuyện: `{thread_id?, end_thread_id?, greeting?, customer?}`; `greeting`, `customer` ghi sẵn lời chào và hồ sơ khách quen vào state |
+| `GET` | `/v1/threads/{id}` | `{thread_id, stage, cart, order_form, orders}`: be đọc giỏ ở đây để tính giá, tạo đơn |
+| `DELETE` | `/v1/threads/{id}` | Xóa lịch sử, giỏ hàng |
+| `DELETE` | `/v1/threads` | Xóa **mọi** cuộc trò chuyện của nguồn đang gọi (theo key): ngừng tích hợp, xóa dữ liệu theo yêu cầu. `{deleted}` |
+| `POST` | `/v1/threads/{id}/order-placed` | `{order_id, answer}`: ghi đơn đã đặt vào lịch sử, làm trống giỏ |
+| `POST` | `/v1/threads/{id}/order-cancelled` | `{answer}`: ghi việc hủy form vào lịch sử, làm trống giỏ |
+| `POST` | `/v1/webhooks/policy-updated` | Chỉ be: gửi `{slug}`; Agent tải bản hiện tại từ BE và cập nhật Qdrant |
+| `POST` | `/v1/webhooks/policy-reconcile` | Chỉ be: yêu cầu Agent đối soát toàn bộ chính sách ngay |
+| `POST` | `/v1/policies/{slug}/check` | Chỉ be: `{content_md, questions}`: thử bản nháp với câu hỏi mẫu, không ghi Qdrant |
+| `GET` | `/health`, `/v1/health` | Trạng thái Qdrant và số đoạn chính sách (không cần key) |
 
 Không có endpoint ghi state tùy ý: giá trong giỏ được dùng để tạo đơn, nên giỏ chỉ đổi qua tool của agent (`add_to_cart`, `remove_from_cart`) và các sự kiện cố định ở trên.
+
+**Key và nguồn gọi.** Mỗi hệ thống gọi agent có 1 key riêng, gửi kèm `Authorization: Bearer <key>`:
+
+- `AGENT_API_KEY`: key của be (nguồn `be`, không giới hạn tốc độ vì be đã giới hạn theo IP của khách).
+- `AGENT_CLIENT_KEYS`: các hệ thống tích hợp khác, dạng `tên:key[:giới hạn/phút]` cách nhau bởi dấu phẩy, vd `zalo:k3y-zalo:120,crm:k3y-crm`. Không ghi giới hạn thì dùng `AGENT_CLIENT_RATE_PER_MIN` (mặc định 60). Tên chữ thường; key không chứa `:` hoặc `,`. Sai cú pháp thì agent không khởi động.
+- Thu hồi 1 bên: xóa mục của bên đó rồi khởi động lại agent; các bên khác không bị ảnh hưởng.
+- Log ghi nguồn của mỗi request (`client=zalo`). Quá giới hạn thì trả `429` kèm `Retry-After: 60`; bộ đếm theo phút nằm trong `agent-db` nên đúng cả khi chạy nhiều replica.
+- Webhook và kiểm tra chính sách chỉ nhận key của be (`403` với key khác).
+- **Hội thoại tách theo nguồn**: agent lưu thread dưới id `<nguồn>:<thread_id>`. Bên gọi vẫn dùng `thread_id` của mình (vd id người dùng Zalo), nhưng 2 hệ thống dùng trùng id cũng không thấy, không ghi đè hội thoại của nhau. Không đặt key nào (chỉ chạy trong mạng nội bộ) thì không có tiền tố.
+
+**Quy tắc thay đổi API `/v1`** (đã có bên thứ ba dùng thì không sửa response tùy ý):
+
+- Được làm trong `/v1`: thêm endpoint, thêm trường **không bắt buộc** vào request, thêm trường vào response, thêm loại sự kiện SSE mới. Bên tích hợp phải bỏ qua trường và loại sự kiện không biết.
+- Phải ra `/v2` (chạy song song `/v1` cho tới khi các bên chuyển xong): đổi tên hoặc bỏ trường, đổi kiểu hay ý nghĩa của trường, thêm trường bắt buộc vào request, đổi mã lỗi của một tình huống đã có.
+
+### API catalog cho agent (hợp đồng be → agent)
+
+Tool của agent đọc dữ liệu cửa hàng qua các endpoint dưới đây của `BE_URL` (`phone_agent/backend.py`), gửi `Authorization: Bearer <CATALOG_API_KEY>`. Muốn agent tư vấn trên catalog của hệ thống khác thì trỏ `BE_URL` tới một service trả đúng các endpoint, tham số và trường này. Giá là số nguyên (đồng), `stock` là số nguyên; agent không đọc trường nào ngoài bảng.
+
+| Endpoint | Tham số | Mỗi phần tử trong mảng trả về | Tool dùng |
+|---|---|---|---|
+| `GET /products?view=summary` | `category` (`phone`, `accessory`), `brand` (rỗng = mọi hãng, không phân biệt hoa thường) | `product_id, name, brand, min_price, max_price, stock` (tổng các phiên bản), `storages` (mảng, có thể chứa `null`) | `search_products` |
+| `GET /products` | `category` (bỏ trống = mọi loại) | `product_id, name, brand, category, description, attributes` (object: `specs`, `ram_by_storage`, `estimated_price_skus`, `accessory_type`; đều không bắt buộc) | `get_product_details`, `find_accessories`, `get_promotions`, `add_to_cart` |
+| `GET /products?view=phone-variants` | | `product_id, name, brand, storage, color, price, stock` (mọi phiên bản điện thoại) | `find_cheaper_alternatives` |
+| `GET /products/{product_id}/variants` | | `variant_id, color, storage, price, stock` | `get_product_details`, `add_to_cart` |
+| `GET /internal/catalog/accessories` | `phone_id`, `kinds` (lặp lại, không bắt buộc: `case`, `charger`, `cable`...) | `name, brand, kind, price, stock`, xếp còn hàng trước, rẻ trước | `find_accessories` |
+| `GET /internal/catalog/compatible` | `phone_ids`, `accessory_ids` (lặp lại) | `accessory_id` của phụ kiện hợp với ít nhất 1 máy | `add_to_cart` |
+| `GET /promotions` | `product_id` (không bắt buộc: chỉ khuyến mãi áp dụng cho sản phẩm đó; không có sản phẩm thì mảng rỗng) | `scope, scope_value, summary` (câu mô tả đọc cho khách) | `get_promotions` |
+| `GET /policies`, `GET /policies/{slug}` | | xem [API chính sách giữa be và agent](#quản-lý-chính-sách) | đồng bộ Qdrant |
+
+- Lỗi: `401` sai key; `503` database không sẵn sàng. Agent coi mọi lỗi (kể cả hết 5 giây chờ) là "chưa tra được dữ liệu" và báo khách thử lại, không đoán giá.
+- Quy tắc thay đổi giống API của agent: thêm trường, thêm endpoint thì được; đổi tên, bỏ, đổi ý nghĩa trường đang có trong bảng thì làm 2 bước (agent đọc được cả 2 dạng, rồi mới đổi be).
+- Test `test_agent_catalog_requests_reach_backend` (tests/test_tools.py) chạy tool của agent qua API thật của be để bắt lỗi lệch hợp đồng.
 
 ### `POST /session`
 

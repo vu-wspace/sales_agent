@@ -10,9 +10,10 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
 
 import groq
-from fastapi import Depends, FastAPI, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.exceptions import ModelError
 from langchain_core.messages import AIMessage, HumanMessage
@@ -25,7 +26,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from phone_agent import policy_sync, store
 from phone_agent.agent import build_agent
-from phone_agent.config import AGENT_API_KEY, AGENT_DATABASE_URL, AGENT_IMPL
+from phone_agent.config import (
+    AGENT_API_KEY,
+    AGENT_CLIENT_KEYS,
+    AGENT_DATABASE_URL,
+    AGENT_IMPL,
+    CLIENT_RATE_PER_MIN,
+)
 from phone_agent.graph import build_graph
 from phone_agent.vector_db import check_policy, count_documents, get_vector_store
 
@@ -130,6 +137,7 @@ async def _expire_loop(app: FastAPI):
         try:
             if n := len(expire_threads(app.state.agent)):
                 log.info('Đã xóa %d cuộc trò chuyện quá %d phút không hoạt động', n, SESSION_TTL_S // 60)
+            _prune_rate()
         except Exception as e:
             log.error('Lỗi khi xóa cuộc trò chuyện quá hạn', exc_info=e)
 
@@ -160,8 +168,13 @@ async def _reconcile_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pii.install_log_filter()  # che số điện thoại, email trong log (handler của uvicorn đã có lúc này)
-    if not AGENT_API_KEY:
-        log.warning('Chưa đặt AGENT_API_KEY: ai gọi tới được cổng agent đều dùng được, chỉ để agent trong mạng nội bộ')
+    clients = _clients()   # sai cú pháp AGENT_CLIENT_KEYS thì dừng ngay lúc khởi động
+    if clients:
+        log.info('Nguồn được gọi agent: %s', ', '.join(f'{c.name} ({c.rate_per_min or "không giới hạn"}/phút)'
+                                                       for c in clients))
+    else:
+        log.warning('Chưa đặt AGENT_API_KEY / AGENT_CLIENT_KEYS: ai gọi tới được cổng agent đều dùng được, '
+                    'chỉ để agent trong mạng nội bộ')
     n = await asyncio.to_thread(prepare_vector_db)
     log.info('Qdrant sẵn sàng: %d tài liệu', n)
     # Có AGENT_DATABASE_URL: lịch sử + giỏ hàng trong Postgres riêng của agent (restart không mất, chạy nhiều replica được).
@@ -187,15 +200,95 @@ async def lifespan(app: FastAPI):
         store.close()
 
 
+@dataclass(frozen=True)
+class Client:
+    name: str          # nguồn gọi: tiền tố thread_id, ghi trong log
+    key: str
+    rate_per_min: int  # 0: không giới hạn
+
+
+def parse_clients(be_key: str, spec: str, default_rate: int) -> list[Client]:
+    """be (AGENT_API_KEY, không giới hạn) + các hệ thống tích hợp (AGENT_CLIENT_KEYS: "tên:key[:giới hạn/phút]", ...)."""
+    clients = [Client('be', be_key, 0)] if be_key else []
+    for item in filter(None, (s.strip() for s in spec.split(','))):
+        name, key, *rate = item.split(':')
+        if (not re.fullmatch(r'[a-z0-9_-]{1,30}', name) or not key or len(rate) > 1
+                or (rate and not rate[0].isdigit()) or any(c.name == name or c.key == key for c in clients)):
+            raise ValueError(f'AGENT_CLIENT_KEYS sai ở mục "{name}": cần "tên:key[:giới hạn/phút]", '
+                             'tên chữ thường, không trùng tên hoặc key với bên khác')
+        clients.append(Client(name, key, int(rate[0]) if rate else default_rate))
+    return clients
+
+
+def _clients() -> list[Client]:
+    return parse_clients(AGENT_API_KEY, AGENT_CLIENT_KEYS, CLIENT_RATE_PER_MIN)
+
+
+# Không có database: đếm request trong RAM (chỉ đúng khi 1 process). (client, phút) -> số request
+_hits: dict[tuple[str, int], int] = {}
+_hits_lock = threading.Lock()
+
+
+def _over_limit(client: Client) -> bool:
+    if not client.rate_per_min:
+        return False
+    if store.pool is not None:
+        n = store.hit(client.name)
+    else:
+        key = (client.name, int(time.time() // 60))
+        with _hits_lock:
+            n = _hits[key] = _hits.get(key, 0) + 1
+    return n > client.rate_per_min
+
+
+def _prune_rate() -> None:
+    if store.pool is not None:
+        store.prune_rate()
+        return
+    minute = int(time.time() // 60)
+    with _hits_lock:
+        for key in [k for k in _hits if k[1] < minute - 1]:
+            del _hits[key]
+
+
+HEALTH_PATHS = ('/health', '/v1/health')
+
+
 def check_api_key(request: Request) -> None:
-    if not AGENT_API_KEY or request.url.path == '/health':
+    """Xác định nguồn gọi theo key (request.state.client), ghi log, giới hạn tốc độ theo key.
+    Chưa đặt key nào: client None (chỉ dùng trong mạng nội bộ)."""
+    request.state.client = None
+    clients = _clients()
+    if not clients or request.url.path in HEALTH_PATHS:
         return
     given = request.headers.get('authorization', '').removeprefix('Bearer ')
-    if not secrets.compare_digest(given.encode(), AGENT_API_KEY.encode()):
-        raise HTTPException(401, 'Sai hoặc thiếu AGENT_API_KEY')
+    client = next((c for c in clients if secrets.compare_digest(given.encode(), c.key.encode())), None)
+    if client is None:
+        raise HTTPException(401, 'Sai hoặc thiếu API key của agent')
+    request.state.client = client
+    log.info('%s %s client=%s', request.method, request.url.path, client.name)
+    if _over_limit(client):
+        raise HTTPException(429, f'Quá {client.rate_per_min} request/phút cho key "{client.name}"',
+                            headers={'Retry-After': '60'})
 
 
-app = FastAPI(title='Phone Sales Agent', version='0.1.0', lifespan=lifespan, dependencies=[Depends(check_api_key)])
+def be_only(request: Request) -> None:
+    # Đồng bộ, kiểm tra chính sách: chỉ be gọi (hệ thống tích hợp khác không được kích hoạt embed lại)
+    client = request.state.client
+    if client is not None and client.name != 'be':
+        raise HTTPException(403, 'Endpoint này chỉ dành cho be')
+
+
+def _tid(request: Request, thread_id: str) -> str:
+    """thread_id lưu trong agent = '<nguồn>:<thread_id>' khi có key: mỗi hệ thống chỉ thấy, ghi, xóa hội thoại của
+    mình, và xóa được toàn bộ dữ liệu theo nguồn. Không có key (mạng nội bộ): giữ nguyên."""
+    client = request.state.client
+    return f'{client.name}:{thread_id}' if client else thread_id
+
+
+app = FastAPI(title='Phone Sales Agent', version='1.0.0', lifespan=lifespan, dependencies=[Depends(check_api_key)])
+# Mọi endpoint khai báo trên router, gắn ở cuối file dưới /v1 (và đường dẫn cũ không có /v1 để tương thích)
+router = APIRouter()
 
 
 class ChatRequest(BaseModel):
@@ -267,7 +360,7 @@ def _config(thread_id: str) -> dict:
     return {'configurable': {'thread_id': thread_id}}
 
 
-@app.get('/health')
+@router.get('/health')
 def health():
     try:
         return {'status': 'ok', 'documents': count_documents()}
@@ -332,10 +425,12 @@ def _answer_spam(agent, config: dict, message: str) -> dict | None:
 
 
 def _start_turn(req: ChatRequest, request: Request):
+    # thread_id: id bên gọi thấy; key: id lưu trong agent (có tiền tố nguồn)
     agent = request.app.state.agent
     thread_id = req.thread_id or str(uuid.uuid4())
-    _touch(thread_id)
-    return agent, thread_id, _config(thread_id)
+    key = _tid(request, thread_id)
+    _touch(key)
+    return agent, thread_id, key, _config(key)
 
 
 def _n_messages(agent, config: dict) -> int:
@@ -351,10 +446,10 @@ def _response(thread_id: str, values: dict, n_before: int) -> ChatResponse:
                         order_form=bool(values.get('order_form')))
 
 
-@app.post('/chat', response_model=ChatResponse)
+@router.post('/chat', response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
-    agent, thread_id, config = _start_turn(req, request)
-    _claim(thread_id)
+    agent, thread_id, key, config = _start_turn(req, request)
+    _claim(key)
     try:  # mọi bước sau khi giữ thread nằm trong try: lỗi gì cũng nhả
         n_before = _n_messages(agent, config)
         res = _answer_spam(agent, config, req.message) or \
@@ -362,7 +457,7 @@ def chat(req: ChatRequest, request: Request):
     except LLM_ERRORS as e:
         raise HTTPException(*_llm_failure(e))
     finally:
-        _release(thread_id)
+        _release(key)
     return _response(thread_id, res, n_before)
 
 
@@ -370,18 +465,18 @@ def _sse(event: dict) -> str:
     return f'data: {json.dumps(event, ensure_ascii=False)}\n\n'
 
 
-def _stream_events(agent, message: str, thread_id: str, config: dict):
+def _stream_events(agent, message: str, thread_id: str, key: str, config: dict):
     # Giữ thread ngay trong generator: generator bị bỏ trước khi chạy (khách ngắt kết nối sớm) thì cũng chưa giữ gì,
     # không bị khóa 5 phút. Đang có lượt khác -> sự kiện error status 409 (giao diện hiện detail)
     try:
-        _claim(thread_id)
+        _claim(key)
     except HTTPException as e:
         yield _sse({'type': 'error', 'status': e.status_code, 'detail': e.detail})
         return
     try:
         yield from _turn_events(agent, message, thread_id, config)
     finally:
-        _release(thread_id)  # cả khi khách đóng tab giữa chừng (generator bị close)
+        _release(key)  # cả khi khách đóng tab giữa chừng (generator bị close)
 
 
 def _turn_events(agent, message: str, thread_id: str, config: dict):
@@ -428,72 +523,89 @@ def _turn_events(agent, message: str, thread_id: str, config: dict):
     yield _sse({'type': 'done', **_response(thread_id, values, n_before).model_dump()})
 
 
-@app.post('/chat/stream')
+@router.post('/chat/stream')
 def chat_stream(req: ChatRequest, request: Request):
     """Như /chat nhưng trả Server-Sent Events để giao diện hiện chữ ngay khi LLM sinh ra.
     Mỗi sự kiện là 1 dòng `data: {json}`: start {thread_id}; status {text} khi chạy tool; token {text};
     reset (bỏ phần chữ model viết trước khi gọi tool); done {giống response của /chat}; error {status, detail}."""
-    agent, thread_id, config = _start_turn(req, request)
+    agent, thread_id, key, config = _start_turn(req, request)
     # X-Accel-Buffering: tắt buffer nếu đặt sau nginx, để chữ tới trình duyệt ngay
-    return StreamingResponse(_stream_events(agent, req.message, thread_id, config),
+    return StreamingResponse(_stream_events(agent, req.message, thread_id, key, config),
                              media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
-@app.post('/threads', response_model=ThreadState)
+@router.post('/threads', response_model=ThreadState)
 def new_thread(req: NewThread, request: Request):
     """Mở cuộc trò chuyện mới (xóa cuộc cũ nếu có end_thread_id). greeting/customer: ghi sẵn lời chào và hồ sơ
     khách quen vào state để agent biết khách đã mua gì."""
     agent = request.app.state.agent
     if req.end_thread_id:
-        _delete_thread(agent, req.end_thread_id)
+        _delete_thread(agent, _tid(request, req.end_thread_id))
     thread_id = req.thread_id or str(uuid.uuid4())
-    _touch(thread_id)
+    key = _tid(request, thread_id)
+    _touch(key)
     values = {'messages': [AIMessage(req.greeting)]} if req.greeting else {}
     if req.customer and AGENT_IMPL == 'graph':
         values['customer'] = req.customer
     if values:
-        agent.update_state(_config(thread_id), values, as_node=AS_NODE)
+        agent.update_state(_config(key), values, as_node=AS_NODE)
     return ThreadState(thread_id=thread_id)
 
 
-@app.get('/threads/{thread_id}', response_model=ThreadState)
+@router.get('/threads/{thread_id}', response_model=ThreadState)
 def get_thread(thread_id: str, request: Request):
     """Giỏ hàng, bước bán hàng của cuộc trò chuyện (be đọc giỏ ở đây để tính giá, tạo đơn)."""
-    _touch(thread_id)
-    values = request.app.state.agent.get_state(_config(thread_id)).values
+    key = _tid(request, thread_id)
+    _touch(key)
+    values = request.app.state.agent.get_state(_config(key)).values
     return ThreadState(thread_id=thread_id, stage=values.get('stage'), cart=values.get('cart') or [],
                        order_form=bool(values.get('order_form')), orders=values.get('orders') or [])
 
 
-@app.delete('/threads/{thread_id}', status_code=204)
+@router.delete('/threads/{thread_id}', status_code=204)
 def delete_thread(thread_id: str, request: Request):
-    _delete_thread(request.app.state.agent, thread_id)
+    _delete_thread(request.app.state.agent, _tid(request, thread_id))
 
 
-@app.post('/threads/{thread_id}/order-placed', status_code=204)
+@router.delete('/threads')
+def delete_source_threads(request: Request):
+    """Xóa mọi hội thoại của nguồn đang gọi (theo key): ngừng tích hợp, hoặc xóa dữ liệu theo yêu cầu. {deleted: số thread}"""
+    prefix = _tid(request, '')
+    if not prefix:
+        raise HTTPException(400, 'Chỉ dùng được khi agent bật API key (mỗi nguồn 1 key)')
+    ids = store.threads_with_prefix(prefix) if store.pool is not None else \
+        [t for t in list(_last_seen) if t.startswith(prefix)]
+    for thread_id in ids:
+        _delete_thread(request.app.state.agent, thread_id)
+    return {'deleted': len(ids)}
+
+
+@router.post('/threads/{thread_id}/order-placed', status_code=204)
 def order_placed(thread_id: str, req: OrderPlaced, request: Request):
     """Đơn đã lưu: ghi vào lịch sử để lượt sau agent biết, làm trống giỏ để khách mua tiếp không bị cộng dồn."""
-    _touch(thread_id)
+    key = _tid(request, thread_id)
+    _touch(key)
     request.app.state.agent.update_state(
-        _config(thread_id),
+        _config(key),
         {'messages': [HumanMessage('Đã gửi thông tin đặt hàng'), AIMessage(req.answer)],
          'cart': [], 'order_form': False, 'orders': [req.order_id], 'cross_sell': None, 'wanted': None},
         as_node=AS_NODE)
 
 
-@app.post('/threads/{thread_id}/order-cancelled', status_code=204)
+@router.post('/threads/{thread_id}/order-cancelled', status_code=204)
 def order_cancelled(thread_id: str, req: OrderCancelled, request: Request):
     """Khách hủy form đặt hàng: ghi câu trả lời cố định, làm trống giỏ để agent không mời chốt đơn / bán kèm tiếp."""
-    _touch(thread_id)
+    key = _tid(request, thread_id)
+    _touch(key)
     request.app.state.agent.update_state(
-        _config(thread_id),
+        _config(key),
         {'messages': [HumanMessage('Hủy đặt hàng'), AIMessage(req.answer)],
          'cart': [], 'order_form': False, 'cross_sell': None, 'wanted': None},
         as_node=AS_NODE)
 
 
-@app.post('/webhooks/policy-updated', status_code=204)
+@router.post('/webhooks/policy-updated', status_code=204, dependencies=[Depends(be_only)])
 async def policy_updated(event: PolicyUpdated):
     try:
         await asyncio.to_thread(policy_sync.refresh, event.slug)
@@ -502,7 +614,7 @@ async def policy_updated(event: PolicyUpdated):
         raise HTTPException(503, 'Policy refresh failed') from exc
 
 
-@app.post('/webhooks/policy-reconcile')
+@router.post('/webhooks/policy-reconcile', dependencies=[Depends(be_only)])
 async def reconcile_policies():
     try:
         return await asyncio.to_thread(policy_sync.reconcile)
@@ -511,10 +623,16 @@ async def reconcile_policies():
         raise HTTPException(503, 'Policy reconciliation failed') from exc
 
 
-@app.post('/policies/{slug}/check')
+@router.post('/policies/{slug}/check', dependencies=[Depends(be_only)])
 def check_policy_draft(req: PolicyCheck, slug: str = Path(pattern=SLUG)):
     """Thử bản nháp với các câu hỏi mẫu, không ghi vào Qdrant: {passed, results: [{question, retrieved, missing, passed}]}."""
     try:
         return check_policy(slug, req.content_md, [q.model_dump() for q in req.questions])
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+# /v1: API có phiên bản cho hệ thống tích hợp (quy tắc thay đổi: README, mục "API của agent").
+# Đường dẫn cũ không có /v1 vẫn chạy (không hiện trong /docs) để bên đang dùng chuyển dần, sẽ bỏ ở bản sau.
+app.include_router(router, prefix='/v1')
+app.include_router(router, include_in_schema=False)
